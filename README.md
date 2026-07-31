@@ -46,6 +46,19 @@ npx doc2skill ./api.md --stdout >> ./SKILL.md
 npx doc2skill
 ```
 
+### 🚀 进阶用法
+
+```bash
+# 爬取整个文档站点（自动发现子页面）
+npx doc2skill https://docs.example.com --crawl --crawl-depth 2
+
+# 监控模式：文档变更后自动刷新技能包
+npx doc2skill ./api.md --watch
+
+# 预览模式：只看结果不写文件
+npx doc2skill ./api.md --dry-run
+```
+
 ### 输出示例
 
 ```
@@ -115,6 +128,10 @@ Options:
   --stdout             输出到标准输出而不写文件（便于管道集成）
   --dry-run            预览生成结果，不写入文件
   --force              强制覆盖已存在的输出文件
+  --crawl              爬取模式：自动发现并抓取文档站点子页面
+  --crawl-depth <n>    爬取最大深度（默认 2）
+  --crawl-pages <n>    爬取最大页面数（默认 10）
+  -w, --watch          监控模式：文档变更后自动重新生成
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   -v, --verbose        显示详细日志
@@ -246,6 +263,9 @@ npm test
 - [x] 覆盖保护（--force）
 - [x] 配置文件（.doc2skill.json 项目级默认值）
 - [x] 本地 HTML 文件支持
+- [x] 文档站点爬取（--crawl 自动发现子页面）
+- [x] Token 预估与费用提示
+- [x] watch 模式（文档变更自动刷新）
 - [ ] 技能包模板市场
 - [ ] 增量更新（检测文档变更后刷新技能）
 

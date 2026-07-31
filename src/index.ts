@@ -3,6 +3,7 @@ import { runPipeline } from './pipeline.js';
 import { isValidAgentType } from './format/index.js';
 import { runWizard } from './wizard.js';
 import { loadConfig } from './config.js';
+import { startWatch } from './watcher.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import type { AgentType, LLMConfig } from './types/index.js';
 
@@ -45,7 +46,7 @@ program
   .description(
     '📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）',
   )
-  .version('0.3.0');
+  .version('0.4.0');
 
 program
   .argument(
@@ -62,6 +63,9 @@ program
   .option('--stdout', '输出到标准输出而不写文件（便于管道集成）')
   .option('--dry-run', '预览生成结果，不写入文件')
   .option('--force', '强制覆盖已存在的输出文件')
+  .option('--crawl', '爬取模式：自动发现并抓取文档站点子页面')
+  .option('--crawl-depth <n>', '爬取最大深度（默认 2）')
+  .option('--crawl-pages <n>', '爬取最大页面数（默认 10）')
   .option('--base-url <url>', 'LLM API Base URL（覆盖预设）')
   .option('--api-key <key>', 'API Key（不安全，建议用环境变量）')
   .option('-v, --verbose', '显示详细日志')
@@ -134,6 +138,33 @@ program
       process.exit(1);
     }
 
+    // ─── watch 模式 ───
+    if (options.watch) {
+      try {
+        startWatch(sources, {
+          agentType,
+          outputPath,
+          llm: llmConfig,
+          verbose,
+          name: skillName,
+          stdout: false,
+          dryRun: false,
+          force: true, // watch 模式下总是覆盖
+          crawl: options.crawl || false,
+          crawlDepth: options.crawlDepth
+            ? parseInt(options.crawlDepth, 10)
+            : undefined,
+          crawlPages: options.crawlPages
+            ? parseInt(options.crawlPages, 10)
+            : undefined,
+        });
+      } catch (err: any) {
+        error(`\n❌ watch 模式启动失败: ${err.message}`);
+        process.exit(1);
+      }
+      return; // watch 模式不退出进程，持续监控
+    }
+
     if (!options.stdout && !options.dryRun) {
       info('╔══════════════════════════════════════╗');
       info('║   🚀 doc2skill — 文档转技能包        ║');
@@ -151,6 +182,13 @@ program
         stdout: options.stdout || false,
         dryRun: options.dryRun || false,
         force: options.force || false,
+        crawl: options.crawl || false,
+        crawlDepth: options.crawlDepth
+          ? parseInt(options.crawlDepth, 10)
+          : undefined,
+        crawlPages: options.crawlPages
+          ? parseInt(options.crawlPages, 10)
+          : undefined,
       });
     } catch (err: any) {
       error(`\n❌ 执行失败: ${err.message}`);

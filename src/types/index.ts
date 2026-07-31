@@ -41,4 +41,12 @@ export interface PipelineOptions {
   dryRun?: boolean;
   /** 强制覆盖（已存在文件时不报错） */
   force?: boolean;
+  /** 爬取模式：自动发现并抓取子页面 */
+  crawl?: boolean;
+  /** 爬取最大深度 */
+  crawlDepth?: number;
+  /** 爬取最大页面数 */
+  crawlPages?: number;
+  /** watch 模式（文档变更后自动重新生成） */
+  watch?: boolean;
 }

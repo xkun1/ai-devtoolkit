@@ -2,6 +2,20 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.4.0] — 2026-07-31
+
+### 新功能
+
+- **文档站点爬取**：`--crawl` 自动发现并抓取子页面，BFS 遍历合并为完整技能包
+- **Token 预估**：LLM 调用前显示输入 token 数和预计费用
+- **watch 模式**：`-w / --watch` 监控源文档变更，自动重新生成技能包
+- **爬取控制**：`--crawl-depth` / `--crawl-pages` 控制深度和数量
+
+### 改进
+
+- 测试增强至 75 个用例（新增 crawler / token estimate 测试）
+- crawler 每页只 fetch 一次（同时提取正文和链接）
+
 ## [0.3.0] — 2026-07-31
 
 ### 新功能

@@ -22,6 +22,7 @@ export type {
 } from './types/index.js';
 
 export {
+  crawlSite,
   detectSourceType,
   loadDocument,
   loadDocuments,

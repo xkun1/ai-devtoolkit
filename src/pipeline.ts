@@ -2,6 +2,7 @@ import { writeFile, mkdir, access } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { PipelineOptions, SkillResult } from './types/index.js';
 import { loadDocuments, mergeDocuments } from './loader/index.js';
+import { crawlSite } from './loader/crawler.js';
 import { transformToSkill } from './transform/index.js';
 import { formatResult } from './format/index.js';
 import { injectSkillFrontmatter } from './format/frontmatter.js';
@@ -13,6 +14,7 @@ import {
   success,
   info,
 } from './utils/logger.js';
+import { estimateTokens, estimateCost, formatCost } from './utils/token.js';
 
 /** 核心管线：sources → load → merge → transform → format → output */
 export async function runPipeline(
@@ -21,24 +23,51 @@ export async function runPipeline(
 ): Promise<SkillResult> {
   const sourceList = Array.isArray(sources) ? sources : [sources];
 
-  // Step 1: 并发加载所有来源
-  startSpinner(
-    sourceList.length > 1
-      ? `正在并发加载 ${sourceList.length} 个文档...`
-      : '正在加载文档...',
-  );
+  // Step 1: 加载（crawl 模式或常规加载）
   let doc;
-  try {
-    const docs = await loadDocuments(sourceList);
-    doc = mergeDocuments(docs);
-    debug(`文档类型: ${doc.type}, 长度: ${doc.content.length} 字符`);
-  } catch (err: any) {
-    failSpinner(`加载失败: ${err.message}`);
-    throw err;
+  if (
+    options.crawl &&
+    sourceList.length === 1 &&
+    /^https?:\/\//i.test(sourceList[0])
+  ) {
+    // ── 爬取模式 ──
+    startSpinner(
+      `正在爬取文档站点（深度 ${options.crawlDepth ?? 2}，最多 ${options.crawlPages ?? 10} 页）...`,
+    );
+    try {
+      doc = await crawlSite(sourceList[0], {
+        maxDepth: options.crawlDepth,
+        maxPages: options.crawlPages,
+      });
+      debug(
+        `爬取完成: ${doc.meta?.crawledPages} 页, ${doc.content.length} 字符`,
+      );
+    } catch (err: any) {
+      failSpinner(`爬取失败: ${err.message}`);
+      throw err;
+    }
+    succeedSpinner(
+      `爬取完成: ${doc.meta?.crawledPages} 页 (${doc.content.length} 字符)`,
+    );
+  } else {
+    // ── 常规加载 ──
+    startSpinner(
+      sourceList.length > 1
+        ? `正在并发加载 ${sourceList.length} 个文档...`
+        : '正在加载文档...',
+    );
+    try {
+      const docs = await loadDocuments(sourceList);
+      doc = mergeDocuments(docs);
+      debug(`文档类型: ${doc.type}, 长度: ${doc.content.length} 字符`);
+    } catch (err: any) {
+      failSpinner(`加载失败: ${err.message}`);
+      throw err;
+    }
+    succeedSpinner(
+      `加载完成: ${doc.title || doc.source} (${doc.content.length} 字符)`,
+    );
   }
-  succeedSpinner(
-    `加载完成: ${doc.title || doc.source} (${doc.content.length} 字符)`,
-  );
 
   if (doc.content.trim().length < 50) {
     throw new Error('文档内容过短（<50字符），可能加载失败或页面无正文内容');
@@ -46,6 +75,20 @@ export async function runPipeline(
 
   // Step 2: LLM 提炼
   startSpinner(`正在用 ${options.llm.model} 提炼技能知识...`);
+
+  // Token 预估（让用户了解成本）
+  const promptText = `${doc.title}\n${doc.content}`;
+  const inputTokens = estimateTokens(promptText);
+  const estOutputTokens = Math.min(inputTokens, 2000); // 技能包通常比原文短
+  const cost = estimateCost(inputTokens, estOutputTokens, options.llm.model);
+  if (cost) {
+    info(
+      `  💰 预估: ~${inputTokens} 输入 tokens, 费用 ~${formatCost(cost.total)}`,
+    );
+  } else {
+    info(`  📊 预估: ~${inputTokens} 输入 tokens`);
+  }
+
   let skillContent;
   try {
     skillContent = await transformToSkill(
