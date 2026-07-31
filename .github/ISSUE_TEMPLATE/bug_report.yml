@@ -1,0 +1,50 @@
+name: Bug 报告
+description: 提交一个 Bug 报告
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢提交 Bug 报告！请尽量填写完整信息以帮助我们快速定位。
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug 描述
+      description: 清晰描述遇到的问题
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 如何复现这个问题
+      placeholder: |
+        1. 运行 npx doc2skill ...
+        2. 看到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 错误日志
+      description: 使用 --verbose 获取完整日志
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js 版本
+      placeholder: 'e.g. 20.10.0'
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: 'e.g. macOS 14.0 / Ubuntu 24.04 / Windows 11'
+    validations:
+      required: true
