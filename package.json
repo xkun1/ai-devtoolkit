@@ -21,7 +21,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "doc2skill": "./bin/cli.js"
+    "doc2skill": "bin/cli.js"
   },
   "files": [
     "dist",
