@@ -22,6 +22,8 @@ export interface ServerOptions {
   model?: string;
 }
 
+import { MODEL_DISPLAY, resolveModel } from './models.js';
+
 /** 启动 Web UI 服务器 */
 export function startServer(options: ServerOptions = {}): void {
   const port = options.port ?? 3456;
@@ -59,29 +61,7 @@ export function startServer(options: ServerOptions = {}): void {
 
       if (url.pathname === '/api/models' && req.method === 'GET') {
         serveJSON(res, 200, {
-          models: [
-            {
-              id: 'deepseek-chat',
-              name: 'DeepSeek Chat',
-              envVar: 'DEEPSEEK_API_KEY',
-            },
-            {
-              id: 'deepseek-reasoner',
-              name: 'DeepSeek Reasoner (R1)',
-              envVar: 'DEEPSEEK_API_KEY',
-            },
-            { id: 'gpt-4o', name: 'GPT-4o', envVar: 'OPENAI_API_KEY' },
-            {
-              id: 'gpt-4o-mini',
-              name: 'GPT-4o-mini',
-              envVar: 'OPENAI_API_KEY',
-            },
-            {
-              id: 'doubao-pro-32k',
-              name: 'Doubao Pro 32k',
-              envVar: 'ARK_API_KEY',
-            },
-          ],
+          models: MODEL_DISPLAY,
           defaultModel: defaultLLM.model,
           hasApiKey: !!defaultLLM.apiKey,
         });
@@ -137,13 +117,13 @@ async function handleGenerate(
   }
 
   try {
+    const llmConfig = resolveModel(modelName || defaultLLM.model, {
+      apiKey: apiKey || defaultLLM.apiKey,
+      baseUrl: defaultLLM.baseURL,
+    });
     const result = await runPipeline(source, {
       agentType: agentType || 'codex',
-      llm: {
-        apiKey: apiKey || defaultLLM.apiKey,
-        baseURL: defaultLLM.baseURL,
-        model: modelName || defaultLLM.model,
-      },
+      llm: llmConfig,
       name: skillName,
       stdout: false,
       dryRun: true, // 不写文件，直接返回内容

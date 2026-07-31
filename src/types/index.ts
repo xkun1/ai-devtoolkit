@@ -20,6 +20,17 @@ export interface LLMConfig {
   temperature?: number;
 }
 
+/** 模型预设扩展：本地模型标记 */
+export interface ModelPreset {
+  baseURL?: string;
+  envVar: string;
+  description: string;
+  /** 本地模型标记：跳过 API Key 检查 */
+  local?: boolean;
+  /** 本地模型实际名环境变量（如 OLLAMA_MODEL） */
+  localModelEnv?: string;
+}
+
 /** 生成结果 */
 export interface SkillResult {
   agentType: AgentType;

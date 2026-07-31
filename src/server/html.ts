@@ -189,6 +189,9 @@ async function init() {
       modelSel.appendChild(opt);
     }
     if (modelRes.defaultModel) modelSel.value = modelRes.defaultModel;
+    // 模型切换时控制 API Key 输入框显隐
+    modelSel.addEventListener('change', toggleApiKeyVisibility);
+    toggleApiKeyVisibility();
     if (!modelRes.hasApiKey) {
       showStatus('warning', '⚠️ 未检测到 API Key 环境变量，请在下方输入 API Key');
     }
@@ -254,6 +257,19 @@ function copyResult() {
   navigator.clipboard.writeText(lastContent).then(() => {
     showStatus('success', '✅ 已复制到剪贴板');
   });
+}
+
+function toggleApiKeyVisibility() {
+  const modelSel = document.getElementById('model');
+  const selected = modelSel.options[modelSel.selectedIndex];
+  const isLocal = selected && selected.value.includes('local');
+  const apiKeyGroup = document.getElementById('apiKey').closest('.form-group');
+  if (isLocal) {
+    apiKeyGroup.style.display = 'none';
+    showStatus('info', '🦙 使用本地模型，无需 API Key');
+  } else {
+    apiKeyGroup.style.display = '';
+  }
 }
 
 function showStatus(type, msg) {

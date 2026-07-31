@@ -112,6 +112,8 @@ doc2skill 兼容所有 **OpenAI 协议**的 API。内置常用模型预设：
 | `gpt-4o` | `OPENAI_API_KEY` | OpenAI 默认 |
 | `gpt-4o-mini` | `OPENAI_API_KEY` | OpenAI 默认 |
 | `doubao-pro-32k` | `ARK_API_KEY` | `ark.cn-beijing.volces.com/api/v3` |
+| `ollama-local` 🦙 | 无需 API Key | `localhost:11434/v1` |
+| `lmstudio-local` 🖥️ | 无需 API Key | `localhost:1234/v1` |
 
 ```bash
 # 方式一：环境变量（推荐）
@@ -120,6 +122,21 @@ npx doc2skill https://docs.example.com/api
 
 # 方式二：参数指定（或任何 OpenAI 兼容 API）
 npx doc2skill <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
+```
+
+### 🦙 本地模型（免费/离线）
+
+使用 Ollama 或 LM Studio，完全本地运行，无需 API Key：
+
+```bash
+# Ollama（需先安装 ollama 并拉取模型）
+npx doc2skill ./api.md --model ollama-local
+
+# 自定义 Ollama 模型名（通过环境变量）
+OLLAMA_MODEL=qwen2.5:7b npx doc2skill ./api.md --model ollama-local
+
+# LM Studio
+npx doc2skill ./api.md --model lmstudio-local
 ```
 
 参考 `.env.example` 配置环境变量。

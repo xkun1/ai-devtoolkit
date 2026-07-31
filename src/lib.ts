@@ -56,6 +56,15 @@ export { runPipeline } from './pipeline.js';
  * const result = await doc2skill(url, options);
  * ```
  */
+export {
+  MODEL_PRESETS,
+  MODEL_DISPLAY,
+  isLocalModel,
+  resolveModel,
+  resolveLocalModelName,
+} from './models.js';
+export type { ModelPreset } from './types/index.js';
+
 export { runPipeline as doc2skill } from './pipeline.js';
 
 export {

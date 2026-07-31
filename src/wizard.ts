@@ -13,29 +13,20 @@ export interface WizardResult {
   name?: string;
 }
 
-const MODEL_CHOICES = [
-  { name: 'DeepSeek Chat  (性价比之王)', value: 'deepseek-chat' },
-  { name: 'DeepSeek Reasoner (R1 推理)', value: 'deepseek-reasoner' },
-  { name: 'GPT-4o  (OpenAI 旗舰)', value: 'gpt-4o' },
-  { name: 'GPT-4o mini  (OpenAI 轻量)', value: 'gpt-4o-mini' },
-  { name: 'Doubao Pro 32k  (火山方舟)', value: 'doubao-pro-32k' },
-];
+import {
+  MODEL_DISPLAY,
+  MODEL_PRESETS,
+  isLocalModel,
+  resolveModel,
+} from './models.js';
 
-const MODEL_ENV: Record<string, string> = {
-  'deepseek-chat': 'DEEPSEEK_API_KEY',
-  'deepseek-reasoner': 'DEEPSEEK_API_KEY',
-  'gpt-4o': 'OPENAI_API_KEY',
-  'gpt-4o-mini': 'OPENAI_API_KEY',
-  'doubao-pro-32k': 'ARK_API_KEY',
-};
-
-const MODEL_BASE: Record<string, string | undefined> = {
-  'deepseek-chat': 'https://api.deepseek.com/v1',
-  'deepseek-reasoner': 'https://api.deepseek.com/v1',
-  'gpt-4o': undefined,
-  'gpt-4o-mini': undefined,
-  'doubao-pro-32k': 'https://ark.cn-beijing.volces.com/api/v3',
-};
+const MODEL_CHOICES = MODEL_DISPLAY.map((m) => ({ name: m.name, value: m.id }));
+const MODEL_ENV: Record<string, string> = {};
+const MODEL_BASE: Record<string, string | undefined> = {};
+for (const m of MODEL_DISPLAY) {
+  MODEL_ENV[m.id] = m.envVar;
+  MODEL_BASE[m.id] = MODEL_PRESETS[m.id]?.baseURL;
+}
 
 const AGENT_CHOICES = [
   { name: '🤖 Codex   → SKILL.md         (Codex Agent 技能)', value: 'codex' },
@@ -92,19 +83,24 @@ export async function runWizard(): Promise<WizardResult | null> {
     choices: MODEL_CHOICES,
   })) as string;
 
-  // 5. API Key
-  const envVar = MODEL_ENV[model] || 'OPENAI_API_KEY';
-  const envKey = process.env[envVar] || process.env.OPENAI_API_KEY || '';
-  let apiKey = envKey;
-  if (!apiKey) {
-    info('');
-    info(`  ⚠ 未检测到 ${envVar} 环境变量`);
-    apiKey = await input({
-      message: `🔑 输入 API Key（或设置 ${envVar} 后重试）：`,
-      validate: (v) => (v.trim() ? true : 'API Key 不能为空'),
-    });
+  // 5. API Key（本地模型跳过）
+  let apiKey = '';
+  if (!isLocalModel(model)) {
+    const envVar = MODEL_ENV[model] || 'OPENAI_API_KEY';
+    const envKey = process.env[envVar] || process.env.OPENAI_API_KEY || '';
+    apiKey = envKey;
+    if (!apiKey) {
+      info('');
+      info(`  ⚠ 未检测到 ${envVar} 环境变量`);
+      apiKey = await input({
+        message: `🔑 输入 API Key（或设置 ${envVar} 后重试）：`,
+        validate: (v) => (v.trim() ? true : 'API Key 不能为空'),
+      });
+    } else {
+      success(`已检测到 ${envVar} 环境变量`);
+    }
   } else {
-    success(`已检测到 ${envVar} 环境变量`);
+    success('使用本地模型，无需 API Key');
   }
 
   // 6. 输出路径
@@ -141,10 +137,6 @@ export async function runWizard(): Promise<WizardResult | null> {
     agentType,
     outputPath,
     name,
-    llm: {
-      apiKey,
-      baseURL: MODEL_BASE[model],
-      model,
-    },
+    llm: resolveModel(model, { apiKey, baseUrl: MODEL_BASE[model] }),
   };
 }

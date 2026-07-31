@@ -5,41 +5,10 @@ import { runWizard } from './wizard.js';
 import { loadConfig } from './config.js';
 import { startWatch } from './watcher.js';
 import { startServer } from './server.js';
+import { MODEL_PRESETS, isLocalModel, resolveModel } from './models.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { listTemplates } from './templates/index.js';
-import type { AgentType, LLMConfig } from './types/index.js';
-
-// 内置模型预设：常用模型的默认 baseURL
-const MODEL_PRESETS: Record<
-  string,
-  { baseURL?: string; envVar: string; description: string }
-> = {
-  'deepseek-chat': {
-    baseURL: 'https://api.deepseek.com/v1',
-    envVar: 'DEEPSEEK_API_KEY',
-    description: 'DeepSeek Chat',
-  },
-  'deepseek-reasoner': {
-    baseURL: 'https://api.deepseek.com/v1',
-    envVar: 'DEEPSEEK_API_KEY',
-    description: 'DeepSeek Reasoner (R1)',
-  },
-  'gpt-4o': {
-    baseURL: undefined,
-    envVar: 'OPENAI_API_KEY',
-    description: 'OpenAI GPT-4o',
-  },
-  'gpt-4o-mini': {
-    baseURL: undefined,
-    envVar: 'OPENAI_API_KEY',
-    description: 'OpenAI GPT-4o-mini',
-  },
-  'doubao-pro-32k': {
-    baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-    envVar: 'ARK_API_KEY',
-    description: '火山方舟 Doubao Pro',
-  },
-};
+import type { AgentType } from './types/index.js';
 
 const program = new Command();
 
@@ -48,7 +17,7 @@ program
   .description(
     '📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）',
   )
-  .version('0.6.0');
+  .version('0.6.1');
 
 program
   .argument(
@@ -177,8 +146,10 @@ program
     }
     const agentType = agentTypeRaw as AgentType;
 
-    const llmConfig = resolveLLMConfig({ model, apiKey, baseUrl });
-    if (!llmConfig.apiKey) {
+    const llmConfig = resolveModel(model, { apiKey, baseUrl });
+
+    // 本地模型跳过 API Key 检查
+    if (!isLocalModel(model) && !llmConfig.apiKey) {
       const preset = MODEL_PRESETS[model];
       const envVar = preset?.envVar || 'OPENAI_API_KEY';
       error(`缺少 API Key。请设置环境变量 ${envVar}`);
@@ -189,6 +160,9 @@ program
       info('');
       info('或通过参数指定:');
       info(`  npx doc2skill ${sources[0]} --api-key sk-xxxxx --model ${model}`);
+      info('');
+      info('或使用本地模型（免费/离线）:');
+      info(`  npx doc2skill ${sources[0]} --model ollama-local`);
       info('');
       info('或直接运行 npx doc2skill 不带参数进入交互式向导');
       process.exit(1);
@@ -256,21 +230,5 @@ program
       process.exit(1);
     }
   });
-
-/** 解析 LLM 配置：优先级 参数 > 环境变量 > 模型预设 */
-function resolveLLMConfig(options: {
-  model: string;
-  apiKey?: string;
-  baseUrl?: string;
-}): LLMConfig {
-  const preset = MODEL_PRESETS[options.model];
-  const envVar = preset?.envVar || 'OPENAI_API_KEY';
-
-  const apiKey =
-    options.apiKey || process.env[envVar] || process.env.OPENAI_API_KEY;
-  const baseURL = options.baseUrl || preset?.baseURL;
-
-  return { apiKey: apiKey || '', baseURL, model: options.model };
-}
 
 program.parse(process.argv);

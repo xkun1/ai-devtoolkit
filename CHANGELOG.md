@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.6.1] — 2026-07-31
+
+### 新功能
+
+- **本地模型支持**：新增 Ollama 和 LM Studio 预设，免费/离线运行
+- 本地模型自动跳过 API Key 检查
+- 统一模型注册表（src/models.ts），CLI / Wizard / Web UI 共用
+- Web UI 选择本地模型时自动隐藏 API Key 输入框
+- 环境变量自定义本地模型名（OLLAMA_MODEL / LMSTUDIO_MODEL）
+
 ## [0.6.0] — 2026-07-31
 
 ### 新功能
