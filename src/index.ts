@@ -4,6 +4,7 @@ import { isValidAgentType } from './format/index.js';
 import { runWizard } from './wizard.js';
 import { loadConfig } from './config.js';
 import { startWatch } from './watcher.js';
+import { startServer } from './server.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { listTemplates } from './templates/index.js';
 import type { AgentType, LLMConfig } from './types/index.js';
@@ -47,7 +48,7 @@ program
   .description(
     '📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）',
   )
-  .version('0.5.0');
+  .version('0.6.0');
 
 program
   .argument(
@@ -67,6 +68,8 @@ program
   .option('--crawl', '爬取模式：自动发现并抓取文档站点子页面')
   .option('--crawl-depth <n>', '爬取最大深度（默认 2）')
   .option('--crawl-pages <n>', '爬取最大页面数（默认 10）')
+  .option('--ui', '启动 Web UI 界面（本地浏览器交互）')
+  .option('--port <n>', 'Web UI 端口号（默认 3456）')
   .option('--base-url <url>', 'LLM API Base URL（覆盖预设）')
   .option('--api-key <key>', 'API Key（不安全，建议用环境变量）')
   .option('-v, --verbose', '显示详细日志')
@@ -94,6 +97,36 @@ program
 
     // 加载配置文件，CLI 参数优先覆盖
     const cfg = await loadConfig();
+
+    // ─── Web UI 模式 ───
+    if (options.ui) {
+      const port = options.port ? parseInt(options.port, 10) : 3456;
+      startServer({
+        port,
+        apiKey:
+          options.apiKey ||
+          process.env.DEEPSEEK_API_KEY ||
+          process.env.OPENAI_API_KEY ||
+          '',
+        baseURL: options.baseUrl,
+        model: options.model || cfg.model || 'deepseek-chat',
+      });
+      // 尝试自动打开浏览器
+      try {
+        const openUrl = 'http://localhost:' + port;
+        const { exec } = await import('node:child_process');
+        const cmd =
+          process.platform === 'darwin'
+            ? 'open'
+            : process.platform === 'win32'
+              ? 'start'
+              : 'xdg-open';
+        exec(cmd + ' ' + openUrl);
+      } catch {
+        // 忽略打开失败
+      }
+      return; // 不退出进程，保持服务运行
+    }
 
     // 合并优先级：CLI 参数 > 配置文件 > 内置默认值
     const model = options.model || cfg.model || 'deepseek-chat';

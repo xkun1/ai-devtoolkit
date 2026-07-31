@@ -46,6 +46,18 @@ npx doc2skill ./api.md --stdout >> ./SKILL.md
 npx doc2skill
 ```
 
+### 🌐 Web UI 模式
+
+```bash
+# 启动本地 Web 界面（自动打开浏览器）
+npx doc2skill --ui
+
+# 自定义端口
+npx doc2skill --ui --port 8080
+```
+
+在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载技能包文件。
+
 ### 🚀 进阶用法
 
 ```bash
@@ -128,6 +140,8 @@ Options:
   --stdout             输出到标准输出而不写文件（便于管道集成）
   --dry-run            预览生成结果，不写入文件
   --force              强制覆盖已存在的输出文件
+  --ui                 启动 Web UI 界面（本地浏览器交互）
+  --port <n>           Web UI 端口号（默认 3456）
   --crawl              爬取模式：自动发现并抓取文档站点子页面
   --crawl-depth <n>    爬取最大深度（默认 2）
   --crawl-pages <n>    爬取最大页面数（默认 10）
@@ -271,6 +285,7 @@ npm test
 - [x] watch 模式（文档变更自动刷新）
 - [x] 技能包模板市场（6 套内置模板：api-doc / coding-guide / cheatsheet 等）
 - [x] 增量更新（--update 检测文档 hash，跳过未变更内容）
+- [x] Web UI 界面（--ui 浏览器可视化交互）
 
 ## 📄 License
 
