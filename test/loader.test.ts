@@ -3,9 +3,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { detectSourceType } from '../src/loader/index.js';
-import { loadFromFile } from '../src/loader/file.js';
-import { formatResult, isValidAgentType, DEFAULT_OUTPUT_PATHS } from '../src/format/index.js';
-import type { AgentType } from '../src/types/index.js';
+import {
+  formatResult,
+  isValidAgentType,
+  DEFAULT_OUTPUT_PATHS,
+} from '../src/format/index.js';
 
 describe('detectSourceType', () => {
   it('识别 URL', () => {

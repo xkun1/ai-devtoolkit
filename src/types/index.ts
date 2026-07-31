@@ -15,7 +15,7 @@ export interface LoadedDocument {
 /** LLM 调用配置 */
 export interface LLMConfig {
   apiKey: string;
- baseURL?: string;
+  baseURL?: string;
   model: string;
   temperature?: number;
 }
@@ -33,4 +33,8 @@ export interface PipelineOptions {
   outputPath?: string;
   llm: LLMConfig;
   verbose?: boolean;
+  /** 自定义技能名（用于 Codex SKILL.md frontmatter），默认从文档标题生成 */
+  name?: string;
+  /** 输出到 stdout 而不写文件 */
+  stdout?: boolean;
 }

@@ -3,7 +3,11 @@ import type { LoadedDocument, AgentType } from '../types/index.js';
 const MAX_INPUT_CHARS = 60000;
 
 /** 根据目标 Agent 构建专属提炼 Prompt */
-export function buildPrompt(doc: LoadedDocument, agentType: AgentType): string {
+export function buildPrompt(
+  doc: LoadedDocument,
+  agentType: AgentType,
+  name?: string,
+): string {
   // 超长文档截断（保留头尾，中间省略）
   const content = truncateContent(doc.content);
   const title = doc.title || 'Untitled';
@@ -15,7 +19,12 @@ export function buildPrompt(doc: LoadedDocument, agentType: AgentType): string {
     claude: buildClaudePrompt(content, title, source),
   };
 
-  return templates[agentType];
+  let prompt = templates[agentType];
+  // 自定义技能名：作为最高优先级指令追加到末尾
+  if (name) {
+    prompt += `\n\n## IMPORTANT\nThe skill name MUST be exactly "${name}". Use it as the top-level title / skill identifier, do not invent another name.`;
+  }
+  return prompt;
 }
 
 function truncateContent(text: string): string {
@@ -31,7 +40,11 @@ function truncateContent(text: string): string {
 // ═══════════════════════════════════════════════════════
 // Codex SKILL.md 模板
 // ═══════════════════════════════════════════════════════
-function buildCodexPrompt(content: string, title: string, source: string): string {
+function buildCodexPrompt(
+  content: string,
+  title: string,
+  source: string,
+): string {
   return `You are creating a Codex Agent SKILL.md file.
 
 Below is technical documentation about "${title}" (source: ${source}).
@@ -71,7 +84,11 @@ ${content}
 // ═══════════════════════════════════════════════════════
 // Cursor .cursorrules 模板
 // ═══════════════════════════════════════════════════════
-function buildCursorPrompt(content: string, title: string, source: string): string {
+function buildCursorPrompt(
+  content: string,
+  title: string,
+  source: string,
+): string {
   return `You are creating a .cursorrules file for the Cursor AI editor.
 
 Below is technical documentation about "${title}" (source: ${source}).
@@ -109,7 +126,11 @@ ${content}
 // ═══════════════════════════════════════════════════════
 // Claude CLAUDE.md 模板
 // ═══════════════════════════════════════════════════════
-function buildClaudePrompt(content: string, title: string, source: string): string {
+function buildClaudePrompt(
+  content: string,
+  title: string,
+  source: string,
+): string {
   return `You are creating a CLAUDE.md file for Claude Code.
 
 Below is technical documentation about "${title}" (source: ${source}).

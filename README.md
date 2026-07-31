@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-green.svg)](https://nodejs.org/)
+[![CI](https://github.com/xkun1/doc2skill/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/doc2skill/actions)
 
 ---
 
@@ -15,9 +16,10 @@
 
 | 输入 | → | 输出 |
 |------|:---:|------|
-| 📄 网页 URL | → | 🤖 Codex `SKILL.md` |
+| 📄 网页 URL | → | 🤖 Codex `SKILL.md`（带 frontmatter） |
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursorrules` |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` |
+| 📚 多文档合并 | → | 🧩 一个融合技能包 |
 
 ## 🎬 快速开始
 
@@ -30,6 +32,18 @@ npx doc2skill ./sdk-guide.pdf --type cursor
 
 # 从 Markdown 生成 Claude 项目记忆
 npx doc2skill ./CONTRIBUTING.md --type claude
+
+# 多文档合并为一个技能包
+npx doc2skill ./api.md ./sdk.md ./errors.md --type codex
+
+# 自定义技能名
+npx doc2skill ./api.md --name my-api-spec
+
+# stdout 模式：直接管道给其他工具
+npx doc2skill ./api.md --stdout >> ./SKILL.md
+
+# 无参数 → 交互式向导
+npx doc2skill
 ```
 
 ### 输出示例
@@ -48,6 +62,18 @@ npx doc2skill ./CONTRIBUTING.md --type claude
   🎯 Agent: codex
   📄 文件: ./SKILL.md
   📏 大小: 3,205 字符
+```
+
+生成的 `SKILL.md` 自动注入 frontmatter：
+
+```yaml
+---
+name: stripe-api-docs
+description: "Stripe API Docs"
+---
+
+# Stripe API 技能指令
+...
 ```
 
 ## 🔧 配置 LLM
@@ -71,18 +97,22 @@ npx doc2skill https://docs.example.com/api
 npx doc2skill <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
 ```
 
+参考 `.env.example` 配置环境变量。
+
 ## 📖 CLI 完整参数
 
 ```
-Usage: doc2skill [options] <source>
+Usage: doc2skill [options] <sources...>
 
 Arguments:
-  source               文档来源：URL 或本地文件路径
+  sources              文档来源：URL 或本地文件路径（可多个，将合并为一个技能包）
 
 Options:
   -t, --type <type>    目标 Agent: codex | cursor | claude (默认: codex)
   -o, --out <path>     输出文件路径 (默认: SKILL.md / .cursorrules / CLAUDE.md)
   -m, --model <model>  LLM 模型名 (默认: deepseek-chat)
+  -n, --name <name>    自定义技能名（用于 Codex SKILL.md frontmatter）
+  --stdout             输出到标准输出而不写文件（便于管道集成）
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   -v, --verbose        显示详细日志
@@ -93,32 +123,55 @@ Options:
 ## 🏗️ 架构
 
 ```
-Source (URL/PDF/MD)
+Sources (URL/PDF/MD, 可多个)
   │
-  ├── 🔌 Loader        按来源加载
+  ├── 🔌 Loader        按来源加载（并发）
   │   ├── URL         → fetch + cheerio 正文提取 + turndown 转 Markdown
   │   ├── PDF         → pdf-parse 文本提取
   │   └── File        → 本地文件直读
+  │   └── merge       → 多文档带来源标签合并
   │
-  ├── 🧠 Transform     LLM 智能提炼
-  │   ├── Codex Prompt  → 结构化技能指令
+  ├── 🧠 Transform     LLM 智能提炼（内置指数退避重试）
+  │   ├── Codex Prompt  → 结构化技能指令 + frontmatter
   │   ├── Cursor Prompt → 编码规则约束
   │   └── Claude Prompt → 项目记忆格式
   │
-  ├── 📐 Format        格式化输出
+  ├── 📐 Format        格式化输出 + frontmatter 注入
   │
-  └── 💾 Writer        写入文件
+  └── 💾 Writer        写入文件 / stdout
 ```
 
 **设计原则**：
 - **单一职责** — 每个模块只做一件事
 - **可扩展** — 新增 Agent 类型只需加一个 Prompt 模板
 - **协议兼容** — 任何 OpenAI 兼容 API 即插即用
+- **健壮性** — LLM 调用内置重试（429/5xx/网络错误，1s→2s→4s 退避，最多 3 次）
+- **管道友好** — `--stdout` 模式支持与其他工具集成
+
+## 🧪 测试
+
+```bash
+# 全套测试（49 个用例）
+npm test
+
+# 类型检查
+npm run typecheck
+
+# 构建
+npm run build
+```
+
+测试覆盖：
+- ✅ Loader：URL 正文提取 / PDF 解析 / 本地文件
+- ✅ Transform：LLM 重试机制（mock OpenAI SDK）
+- ✅ Format：slugify / frontmatter 注入 / 描述提取
+- ✅ Pipeline：端到端编排（mock LLM）
+- ✅ E2E：真实网页加载
 
 ## 🔨 本地开发
 
 ```bash
-git clone https://github.com/kun-labs/doc2skill.git
+git clone https://github.com/xkun1/doc2skill.git
 cd doc2skill
 npm install
 
@@ -138,11 +191,16 @@ npm test
 - [x] PDF 文档解析
 - [x] Codex / Cursor / Claude 三种输出
 - [x] DeepSeek / OpenAI / 火山方舟 预设
-- [ ] 多文档合并（一个技能包融合多个来源）
-- [ ] 交互式模式（inquirer 选择）
+- [x] 多文档合并（一个技能包融合多个来源）
+- [x] Codex SKILL.md frontmatter 自动注入
+- [x] LLM 调用重试机制（指数退避）
+- [x] stdout 模式（管道集成）
+- [x] 自定义技能名
+- [x] CI（GitHub Actions，多 Node 版本矩阵）
+- [x] 交互式向导（无参数运行 `npx doc2skill` 进入 inquirer 引导）
 - [ ] 技能包模板市场
 - [ ] 增量更新（检测文档变更后刷新技能）
 
 ## 📄 License
 
-MIT License © 2026 [kun](https://github.com/kun-labs)
+MIT License © 2026 [kun](https://github.com/xkun1)

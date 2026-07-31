@@ -4,9 +4,24 @@ type LogLevel = 'silent' | 'error' | 'info' | 'debug';
 
 let currentLevel: LogLevel = 'info';
 let spinner: any = null;
+// stdout 模式下所有日志转 stderr，避免污染管道输出
+let logToStderr = false;
 
 export function setVerbose(verbose: boolean) {
   currentLevel = verbose ? 'debug' : 'info';
+}
+
+export function setLogToStderr(value: boolean) {
+  logToStderr = value;
+}
+
+/** 普通日志输出：遵循 stdout 重定向 */
+function print(msg: string) {
+  if (logToStderr) {
+    console.error(msg);
+  } else {
+    console.log(msg);
+  }
 }
 
 export function startSpinner(text: string) {
@@ -38,13 +53,13 @@ export function failSpinner(text?: string) {
 
 export function info(msg: string) {
   if (currentLevel !== 'silent') {
-    console.log(msg);
+    print(msg);
   }
 }
 
 export function debug(msg: string) {
   if (currentLevel === 'debug') {
-    console.log(`  \x1b[90m${msg}\x1b[0m`);
+    print(`  \x1b[90m${msg}\x1b[0m`);
   }
 }
 
@@ -53,9 +68,9 @@ export function error(msg: string) {
 }
 
 export function success(msg: string) {
-  console.log(`\x1b[32m✓ ${msg}\x1b[0m`);
+  print(`\x1b[32m✓ ${msg}\x1b[0m`);
 }
 
 export function warn(msg: string) {
-  console.log(`\x1b[33m⚠ ${msg}\x1b[0m`);
+  print(`\x1b[33m⚠ ${msg}\x1b[0m`);
 }

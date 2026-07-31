@@ -7,8 +7,9 @@ export async function transformToSkill(
   doc: LoadedDocument,
   config: LLMConfig,
   agentType: AgentType,
+  name?: string,
 ): Promise<string> {
-  const prompt = buildPrompt(doc, agentType);
+  const prompt = buildPrompt(doc, agentType, name);
   return callLLM(prompt, config);
 }
 

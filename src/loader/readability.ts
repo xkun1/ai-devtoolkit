@@ -1,5 +1,3 @@
-import type { LoadedDocument } from '../types/index.js';
-
 /**
  * 网页正文提取器：fetch HTML → cheerio 清洗 → turndown 转 Markdown
  * 启发式策略：移除噪声标签 → 定位正文容器 → 转换为干净的 Markdown
@@ -29,12 +27,33 @@ export async function extractContent(url: string): Promise<{
 
   // 移除噪声标签
   const noiseSelectors = [
-    'script', 'style', 'noscript', 'iframe', 'svg',
-    'nav', 'header', 'footer', 'aside',
-    '.nav', '.navbar', '.header', '.footer', '.sidebar',
-    '.menu', '.breadcrumb', '.pagination', '.ads', '.ad',
-    '[role="navigation"]', '[role="banner"]', '[role="complementary"]',
-    '.cookie', '.popup', '.modal', '.share', '.comments',
+    'script',
+    'style',
+    'noscript',
+    'iframe',
+    'svg',
+    'nav',
+    'header',
+    'footer',
+    'aside',
+    '.nav',
+    '.navbar',
+    '.header',
+    '.footer',
+    '.sidebar',
+    '.menu',
+    '.breadcrumb',
+    '.pagination',
+    '.ads',
+    '.ad',
+    '[role="navigation"]',
+    '[role="banner"]',
+    '[role="complementary"]',
+    '.cookie',
+    '.popup',
+    '.modal',
+    '.share',
+    '.comments',
   ];
   $(noiseSelectors.join(', ')).remove();
 
@@ -43,9 +62,14 @@ export async function extractContent(url: string): Promise<{
     'article',
     'main',
     '[role="main"]',
-    '.post-content', '.article-content', '.entry-content',
-    '.content', '.markdown-body', '.documentation',
-    '#content', '#main',
+    '.post-content',
+    '.article-content',
+    '.entry-content',
+    '.content',
+    '.markdown-body',
+    '.documentation',
+    '#content',
+    '#main',
   ];
 
   let body = '';
@@ -97,7 +121,7 @@ async function fetchHtml(url: string): Promise<string> {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
+        Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
       },
     });
