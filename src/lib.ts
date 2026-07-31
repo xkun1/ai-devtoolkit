@@ -57,3 +57,21 @@ export { runPipeline } from './pipeline.js';
  * ```
  */
 export { runPipeline as doc2skill } from './pipeline.js';
+
+export {
+  TEMPLATES,
+  getTemplate,
+  listTemplates,
+  isValidTemplate,
+  listTemplatesByCategory,
+} from './templates/index.js';
+export type { SkillTemplate } from './templates/index.js';
+
+export {
+  contentHash,
+  getCachePath,
+  needsUpdate,
+  markGenerated,
+} from './utils/hash.js';
+
+export { estimateTokens, estimateCost, formatCost } from './utils/token.js';

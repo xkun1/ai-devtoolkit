@@ -1,4 +1,5 @@
 import type { LoadedDocument, LLMConfig, AgentType } from '../types/index.js';
+import type { SkillTemplate } from '../templates/index.js';
 import { callLLM } from './llm.js';
 import { buildPrompt } from './prompts.js';
 
@@ -8,8 +9,9 @@ export async function transformToSkill(
   config: LLMConfig,
   agentType: AgentType,
   name?: string,
+  template?: SkillTemplate,
 ): Promise<string> {
-  const prompt = buildPrompt(doc, agentType, name);
+  const prompt = buildPrompt(doc, agentType, name, template);
   return callLLM(prompt, config);
 }
 

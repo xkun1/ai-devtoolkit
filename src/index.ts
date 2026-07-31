@@ -5,6 +5,7 @@ import { runWizard } from './wizard.js';
 import { loadConfig } from './config.js';
 import { startWatch } from './watcher.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
+import { listTemplates } from './templates/index.js';
 import type { AgentType, LLMConfig } from './types/index.js';
 
 // 内置模型预设：常用模型的默认 baseURL
@@ -46,7 +47,7 @@ program
   .description(
     '📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）',
   )
-  .version('0.4.0');
+  .version('0.5.0');
 
 program
   .argument(
@@ -69,7 +70,28 @@ program
   .option('--base-url <url>', 'LLM API Base URL（覆盖预设）')
   .option('--api-key <key>', 'API Key（不安全，建议用环境变量）')
   .option('-v, --verbose', '显示详细日志')
+  .option(
+    '--template <id>',
+    '使用预设模板（api-doc / coding-guide / cheatsheet 等）',
+  )
+  .option('--list-templates', '列出所有可用模板')
+  .option('--update', '增量更新：跳过未变更的文档')
   .action(async (sources: string[], options) => {
+    // --list-templates：列出模板后退出
+    if (options.listTemplates) {
+      info('');
+      info('  📋 内置模板列表');
+      info('  ─────────────────────────────────');
+      for (const t of listTemplates()) {
+        const agents = t.agents.length ? t.agents.join('/') : '全部';
+        info(`  🏷️  ${t.id.padEnd(16)} ${t.name}`);
+        info(`     ${t.description}`);
+        info(`     适合: ${agents}`);
+        info('');
+      }
+      return;
+    }
+
     // 加载配置文件，CLI 参数优先覆盖
     const cfg = await loadConfig();
 
@@ -78,6 +100,7 @@ program
     const agentTypeRaw = options.type || cfg.type || 'codex';
     const outputPath = options.out || cfg.out;
     const skillName = options.name || cfg.name;
+    const templateId = options.template || cfg.template;
     const baseUrl = options.baseUrl || cfg.baseUrl;
     const apiKey = options.apiKey || cfg.apiKey;
     const verbose = options.verbose || cfg.verbose || false;
@@ -189,6 +212,8 @@ program
         crawlPages: options.crawlPages
           ? parseInt(options.crawlPages, 10)
           : undefined,
+        template: templateId,
+        incremental: options.update || false,
       });
     } catch (err: any) {
       error(`\n❌ 执行失败: ${err.message}`);

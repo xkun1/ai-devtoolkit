@@ -49,4 +49,8 @@ export interface PipelineOptions {
   crawlPages?: number;
   /** watch 模式（文档变更后自动重新生成） */
   watch?: boolean;
+  /** 技能包模板 ID（如 api-doc / coding-guide / cheatsheet） */
+  template?: string;
+  /** 增量更新：跳过未变更的文档 */
+  incremental?: boolean;
 }

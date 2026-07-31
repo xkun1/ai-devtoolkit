@@ -22,6 +22,8 @@ export interface Doc2SkillConfig {
   apiKey?: string;
   /** 是否 verbose */
   verbose?: boolean;
+  /** 模板 ID */
+  template?: string;
 }
 
 const CONFIG_FILES = ['.doc2skill.json', '.doc2skillrc', '.doc2skillrc.json'];
@@ -78,6 +80,7 @@ function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
     'baseUrl',
     'apiKey',
     'verbose',
+    'template',
   ];
 
   for (const key of validKeys) {

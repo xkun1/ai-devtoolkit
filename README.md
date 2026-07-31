@@ -132,6 +132,9 @@ Options:
   --crawl-depth <n>    爬取最大深度（默认 2）
   --crawl-pages <n>    爬取最大页面数（默认 10）
   -w, --watch          监控模式：文档变更后自动重新生成
+  --template <id>      使用预设模板（api-doc / coding-guide / cheatsheet 等）
+  --list-templates     列出所有可用模板
+  --update             增量更新：跳过未变更的文档
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   -v, --verbose        显示详细日志
@@ -266,8 +269,8 @@ npm test
 - [x] 文档站点爬取（--crawl 自动发现子页面）
 - [x] Token 预估与费用提示
 - [x] watch 模式（文档变更自动刷新）
-- [ ] 技能包模板市场
-- [ ] 增量更新（检测文档变更后刷新技能）
+- [x] 技能包模板市场（6 套内置模板：api-doc / coding-guide / cheatsheet 等）
+- [x] 增量更新（--update 检测文档 hash，跳过未变更内容）
 
 ## 📄 License
 

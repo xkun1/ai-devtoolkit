@@ -1,4 +1,5 @@
 import type { LoadedDocument, AgentType } from '../types/index.js';
+import type { SkillTemplate } from '../templates/index.js';
 
 const MAX_INPUT_CHARS = 60000;
 
@@ -7,6 +8,7 @@ export function buildPrompt(
   doc: LoadedDocument,
   agentType: AgentType,
   name?: string,
+  template?: SkillTemplate,
 ): string {
   // 超长文档截断（保留头尾，中间省略）
   const content = truncateContent(doc.content);
@@ -23,6 +25,10 @@ export function buildPrompt(
   // 自定义技能名：作为最高优先级指令追加到末尾
   if (name) {
     prompt += `\n\n## IMPORTANT\nThe skill name MUST be exactly "${name}". Use it as the top-level title / skill identifier, do not invent another name.`;
+  }
+  // 模板策略：追加模板专属提炼指令
+  if (template && template.promptSuffix) {
+    prompt += `\n\n## Additional Instructions\n${template.promptSuffix}`;
   }
   return prompt;
 }

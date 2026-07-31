@@ -2,6 +2,21 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.0] — 2026-07-31
+
+### 新功能
+
+- **技能包模板市场**：内置 6 套模板（api-doc / coding-guide / project-rules / cheatsheet / sdk-guide / default）
+- **增量更新**：`--update` 用内容 hash 检测文档变更，跳过未变更的 LLM 调用
+- **`--list-templates`**：列出所有可用模板
+- **`--template <id>`**：选择预设模板，不同文档类型使用不同提炼策略
+
+### 改进
+
+- 测试增强至 91 个用例（新增 templates / hash 测试）
+- 编程式 API 导出模板和 hash 工具
+- `.doc2skill-cache.json` 缓存增量更新状态
+
 ## [0.4.0] — 2026-07-31
 
 ### 新功能

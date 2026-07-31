@@ -4,6 +4,8 @@ import type { PipelineOptions, SkillResult } from './types/index.js';
 import { loadDocuments, mergeDocuments } from './loader/index.js';
 import { crawlSite } from './loader/crawler.js';
 import { transformToSkill } from './transform/index.js';
+import { getTemplate } from './templates/index.js';
+import { getCachePath, needsUpdate, markGenerated } from './utils/hash.js';
 import { formatResult } from './format/index.js';
 import { injectSkillFrontmatter } from './format/frontmatter.js';
 import {
@@ -12,6 +14,7 @@ import {
   failSpinner,
   debug,
   success,
+  warn,
   info,
 } from './utils/logger.js';
 import { estimateTokens, estimateCost, formatCost } from './utils/token.js';
@@ -74,6 +77,37 @@ export async function runPipeline(
   }
 
   // Step 2: LLM 提炼
+  // 增量更新检查：文档未变更时跳过 LLM 调用
+  if (options.incremental) {
+    const defaultOut =
+      options.agentType === 'codex'
+        ? './SKILL.md'
+        : options.agentType === 'cursor'
+          ? './.cursorrules'
+          : './CLAUDE.md';
+    const outPath = options.outputPath || defaultOut;
+    const cachePath = getCachePath(outPath);
+    const shouldUpdate = needsUpdate(
+      cachePath,
+      doc.source,
+      doc.content,
+      options.agentType,
+      options.template,
+    );
+    if (!shouldUpdate) {
+      success('文档未变更，跳过生成（使用 --force 强制重新生成）');
+      return formatResult(
+        '文档未变更，已跳过。',
+        options.agentType,
+        options.outputPath,
+      );
+    }
+  }
+
+  const template = options.template ? getTemplate(options.template) : undefined;
+  if (options.template && !template) {
+    warn(`未知模板: ${options.template}，使用默认模板`);
+  }
   startSpinner(`正在用 ${options.llm.model} 提炼技能知识...`);
 
   // Token 预估（让用户了解成本）
@@ -96,6 +130,7 @@ export async function runPipeline(
       options.llm,
       options.agentType,
       options.name,
+      template,
     );
     debug(`LLM 输出长度: ${skillContent.length} 字符`);
   } catch (err: any) {
@@ -159,6 +194,17 @@ export async function runPipeline(
 
   await writeFileWithDir(result.suggestedPath, result.content);
   success(`已生成: ${result.suggestedPath}`);
+  // 增量更新：记录 hash
+  if (options.incremental) {
+    const cachePath = getCachePath(result.suggestedPath);
+    markGenerated(
+      cachePath,
+      doc.source,
+      doc.content,
+      options.agentType,
+      options.template,
+    );
+  }
 
   info('');
   info(`  🎯 Agent: ${options.agentType}`);
