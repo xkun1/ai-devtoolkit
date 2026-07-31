@@ -2,6 +2,23 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.0] — 2026-07-31
+
+### 新功能
+
+- **编程式 API**：可作为 Node.js 库使用（`import { doc2skill } from 'doc2skill'`），双入口构建（CLI + lib）
+- **dry-run 预览模式**：`--dry-run` 只查看生成结果不写文件
+- **覆盖保护**：文件已存在时拒绝覆盖，`--force` 强制覆盖
+- **配置文件支持**：`.doc2skill.json` 项目级默认值，CLI 参数优先覆盖
+- **本地 HTML 文件**：`.html` / `.htm` 文件走 cheerio + turndown 正文提取管线
+- **examples 目录**：编程式 API 示例 + CLI 快速参考 + 样例文档
+
+### 改进
+
+- tsup 双入口构建（index CLI + lib 编程式 API）
+- package.json exports 字段支持子路径导入
+- 测试增强至 60 个用例（新增 config / dry-run / 覆盖保护 / HTML loader 测试）
+
 ## [0.2.0] — 2026-07-31
 
 ### 新功能

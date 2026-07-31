@@ -1,0 +1,5 @@
+{
+  "type": "codex",
+  "model": "deepseek-chat",
+  "out": "./SKILL.md"
+}

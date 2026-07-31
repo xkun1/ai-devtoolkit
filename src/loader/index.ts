@@ -2,11 +2,13 @@ import type { LoadedDocument, SourceType } from '../types/index.js';
 import { loadFromUrl } from './url.js';
 import { loadFromPdf } from './pdf.js';
 import { loadFromFile } from './file.js';
+import { loadFromHtml } from './html.js';
 
 /** 判断 source 类型 */
 export function detectSourceType(source: string): SourceType {
   if (/^https?:\/\//i.test(source)) return 'url';
   if (/\.pdf$/i.test(source)) return 'pdf';
+  if (/\.html?$/i.test(source)) return 'html';
   if (/\.(md|markdown)$/i.test(source)) return 'markdown';
   if (/\.(txt|text|rst|html?|xml|json|ya?ml|csv)$/i.test(source)) return 'text';
   return 'text';
@@ -20,6 +22,8 @@ export async function loadDocument(source: string): Promise<LoadedDocument> {
       return loadFromUrl(source);
     case 'pdf':
       return loadFromPdf(source);
+    case 'html':
+      return loadFromHtml(source);
     default:
       return loadFromFile(source, type);
   }
@@ -58,4 +62,4 @@ export function mergeDocuments(docs: LoadedDocument[]): LoadedDocument {
   };
 }
 
-export { loadFromUrl, loadFromPdf, loadFromFile };
+export { loadFromUrl, loadFromPdf, loadFromFile, loadFromHtml };

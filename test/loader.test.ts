@@ -2,7 +2,10 @@
  * Loader 单元测试 — 验证文档加载管线（不依赖 LLM）
  */
 import { describe, it, expect } from 'vitest';
-import { detectSourceType } from '../src/loader/index.js';
+import { detectSourceType, loadFromHtml } from '../src/loader/index.js';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   formatResult,
   isValidAgentType,
@@ -17,6 +20,11 @@ describe('detectSourceType', () => {
 
   it('识别 PDF', () => {
     expect(detectSourceType('./guide.pdf')).toBe('pdf');
+  });
+
+  it('识别 HTML', () => {
+    expect(detectSourceType('./page.html')).toBe('html');
+    expect(detectSourceType('./page.htm')).toBe('html');
   });
 
   it('识别 Markdown', () => {
@@ -77,5 +85,27 @@ describe('DEFAULT_OUTPUT_PATHS', () => {
     expect(keys).toContain('codex');
     expect(keys).toContain('cursor');
     expect(keys).toContain('claude');
+  });
+});
+
+describe('loadFromHtml', () => {
+  it('从本地 HTML 文件提取正文为 Markdown', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-html-'));
+    const htmlPath = join(dir, 'test.html');
+    await writeFile(
+      htmlPath,
+      '<html><head><title>Test Page</title></head>' +
+        '<body><nav>Home About</nav><main><h1>Hello World</h1>' +
+        '<p>This is a paragraph with enough text to pass content checks.</p>' +
+        '<p>Another paragraph here.</p></main></body></html>',
+    );
+
+    const doc = await loadFromHtml(htmlPath);
+    expect(doc.type).toBe('html');
+    expect(doc.title).toBe('Test Page');
+    expect(doc.content).toContain('Hello World');
+    expect(doc.content).toContain('paragraph');
+    // 导航文字应被清洗掉
+    expect(doc.content).not.toContain('About');
   });
 });

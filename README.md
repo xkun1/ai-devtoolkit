@@ -113,6 +113,8 @@ Options:
   -m, --model <model>  LLM 模型名 (默认: deepseek-chat)
   -n, --name <name>    自定义技能名（用于 Codex SKILL.md frontmatter）
   --stdout             输出到标准输出而不写文件（便于管道集成）
+  --dry-run            预览生成结果，不写入文件
+  --force              强制覆盖已存在的输出文件
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   -v, --verbose        显示详细日志
@@ -120,14 +122,25 @@ Options:
   -h, --help           帮助
 ```
 
+也支持项目级配置文件 `.doc2skill.json`，CLI 参数优先覆盖配置文件值：
+
+```json
+{
+  "type": "codex",
+  "model": "deepseek-chat",
+  "out": "./SKILL.md"
+}
+```
+
 ## 🏗️ 架构
 
 ```
-Sources (URL/PDF/MD, 可多个)
+Sources (URL/PDF/HTML/MD, 可多个)
   │
   ├── 🔌 Loader        按来源加载（并发）
   │   ├── URL         → fetch + cheerio 正文提取 + turndown 转 Markdown
   │   ├── PDF         → pdf-parse 文本提取
+  │   ├── HTML        → 本地 HTML 文件正文提取
   │   └── File        → 本地文件直读
   │   └── merge       → 多文档带来源标签合并
   │
@@ -168,6 +181,36 @@ npm run build
 - ✅ Pipeline：端到端编排（mock LLM）
 - ✅ E2E：真实网页加载
 
+## 📦 编程式 API
+
+除了 CLI，doc2skill 也可作为 Node.js 库使用：
+
+```typescript
+import { doc2skill } from 'doc2skill';
+
+const result = await doc2skill('https://docs.example.com/api', {
+  agentType: 'codex',
+  llm: {
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    model: 'deepseek-chat',
+  },
+});
+
+console.log(result.content);       // 生成的内容
+console.log(result.suggestedPath); // 建议输出路径
+```
+
+也支持只加载不提炼：
+
+```typescript
+import { loadDocument } from 'doc2skill';
+
+const doc = await loadDocument('https://example.com');
+console.log(doc.content); // 提取的 Markdown
+```
+
+完整 API 文档见 `examples/` 目录。
+
 ## 🔨 本地开发
 
 ```bash
@@ -198,6 +241,11 @@ npm test
 - [x] 自定义技能名
 - [x] CI（GitHub Actions，多 Node 版本矩阵）
 - [x] 交互式向导（无参数运行 `npx doc2skill` 进入 inquirer 引导）
+- [x] 编程式 API（可作为 Node.js 库 import）
+- [x] dry-run 预览模式
+- [x] 覆盖保护（--force）
+- [x] 配置文件（.doc2skill.json 项目级默认值）
+- [x] 本地 HTML 文件支持
 - [ ] 技能包模板市场
 - [ ] 增量更新（检测文档变更后刷新技能）
 

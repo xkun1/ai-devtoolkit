@@ -213,4 +213,67 @@ describe('Pipeline E2E (mocked LLM)', () => {
       process.stdout.write = originalWrite;
     }
   });
+  it('dry-run 模式：预览内容，不写文件', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-dryrun-'));
+    const mdPath = join(dir, 'doc.md');
+    await writeFile(
+      mdPath,
+      '# Dry Run Test\n\nDocumentation with enough content to pass the minimum length check for dry run mode testing.\n',
+    );
+    const outPath = join(dir, 'should-not-exist.md');
+
+    const result = await runPipeline(mdPath, {
+      agentType: 'codex',
+      outputPath: outPath,
+      dryRun: true,
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+    });
+
+    // 结果内容正常返回
+    expect(result.content).toContain('Mocked Skill');
+    // 文件未写入
+    await expect(readFile(outPath, 'utf-8')).rejects.toThrow();
+  });
+
+  it('覆盖保护：文件已存在时拒绝写入', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-overwrite-'));
+    const mdPath = join(dir, 'doc.md');
+    await writeFile(
+      mdPath,
+      '# Overwrite Test\n\nDocumentation with enough content to pass the minimum length check for overwrite protection testing.\n',
+    );
+    const outPath = join(dir, 'SKILL.md');
+    // 预先创建文件
+    await writeFile(outPath, 'existing content');
+
+    await expect(
+      runPipeline(mdPath, {
+        agentType: 'codex',
+        outputPath: outPath,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      }),
+    ).rejects.toThrow('文件已存在');
+  });
+
+  it('--force 覆盖已存在文件', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-force-'));
+    const mdPath = join(dir, 'doc.md');
+    await writeFile(
+      mdPath,
+      '# Force Test\n\nDocumentation with enough content to pass the minimum length check for force overwrite testing.\n',
+    );
+    const outPath = join(dir, 'SKILL.md');
+    await writeFile(outPath, 'old content');
+
+    await runPipeline(mdPath, {
+      agentType: 'codex',
+      outputPath: outPath,
+      force: true,
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+    });
+
+    // 文件被覆盖
+    const written = await readFile(outPath, 'utf-8');
+    expect(written).toContain('Mocked Skill');
+  });
 });

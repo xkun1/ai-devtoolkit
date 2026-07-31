@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, access } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { PipelineOptions, SkillResult } from './types/index.js';
 import { loadDocuments, mergeDocuments } from './loader/index.js';
@@ -83,6 +83,35 @@ export async function runPipeline(
     // stdout 模式：纯内容输出，便于管道（日志已在 stderr）
     process.stdout.write(result.content);
     return result;
+  }
+
+  // dry-run 模式：预览结果，不写文件
+  if (options.dryRun) {
+    info('');
+    info('  ───── 📋 预览结果 (dry-run) ─────');
+    info(`  🎯 Agent: ${options.agentType}`);
+    info(`  📄 目标:  ${result.suggestedPath}`);
+    info(`  📏 大小:  ${result.content.length} 字符`);
+    info('  ─────────────────────────────────');
+    info('');
+    info(result.content);
+    info('');
+    return result;
+  }
+
+  // 覆盖保护：文件已存在且未指定 --force 时拒绝覆盖
+  if (!options.force) {
+    try {
+      await access(result.suggestedPath);
+      // 文件存在
+      throw new Error(
+        `文件已存在: ${result.suggestedPath}\n  使用 --force 覆盖，或 --out 指定其他路径`,
+      );
+    } catch (err: any) {
+      // ENOENT = 文件不存在，正常继续
+      if (err.message?.startsWith('文件已存在')) throw err;
+      if (err.code !== 'ENOENT') throw err;
+    }
   }
 
   await writeFileWithDir(result.suggestedPath, result.content);

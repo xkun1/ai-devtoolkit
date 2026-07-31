@@ -2,12 +2,12 @@
  * 网页正文提取器：fetch HTML → cheerio 清洗 → turndown 转 Markdown
  * 启发式策略：移除噪声标签 → 定位正文容器 → 转换为干净的 Markdown
  */
-export async function extractContent(url: string): Promise<{
+/** 从 HTML 字符串提取正文（cheerio 清洗 + turndown 转 Markdown） */
+export async function extractFromHtml(html: string): Promise<{
   content: string;
   title: string;
   meta: Record<string, string>;
 }> {
-  const html = await fetchHtml(url);
   const $ = (await import('cheerio')).load(html);
 
   // 提取标题
@@ -15,7 +15,7 @@ export async function extractContent(url: string): Promise<{
     $('title').first().text().trim() ||
     $('h1').first().text().trim() ||
     $('meta[property="og:title"]').attr('content') ||
-    url;
+    '';
 
   // 提取元信息
   const meta: Record<string, string> = {};
@@ -109,6 +109,20 @@ export async function extractContent(url: string): Promise<{
     .trim();
 
   return { content: cleaned, title, meta };
+}
+
+/** 从 URL 抓取并提取正文 */
+export async function extractContent(url: string): Promise<{
+  content: string;
+  title: string;
+  meta: Record<string, string>;
+}> {
+  const html = await fetchHtml(url);
+  const result = await extractFromHtml(html);
+  return {
+    ...result,
+    title: result.title || url,
+  };
 }
 
 /** 抓取 HTML，带 UA 伪装和超时 */

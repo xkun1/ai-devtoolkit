@@ -1,22 +1,41 @@
 {
   "name": "doc2skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.mjs",
+      "require": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "doc2skill": "./bin/cli.js"
   },
   "files": [
     "dist",
     "bin",
+    "examples",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "build": "tsup",
     "dev": "tsx src/index.ts",
     "start": "node bin/cli.js",
     "test": "vitest run",
