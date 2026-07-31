@@ -104,6 +104,65 @@ describe('callLLM 重试行为', () => {
     const promise = callLLM('prompt', config).catch((e) => e);
     await vi.runAllTimersAsync();
     const err = await promise;
-    expect(err.message).toBe('LLM 返回空内容');
+    expect(err.message).toContain('LLM 返回空内容');
+  });
+});
+
+describe('extractContent 多格式兼容', () => {
+  beforeEach(() => {
+    mockCreate.mockReset();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // 通过 callLLM 间接测试 extractContent（mock create 返回不同格式）
+  it('标准 OpenAI 格式正常解析', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: '标准格式内容' } }],
+    });
+    const result = await callLLM('prompt', config);
+    await vi.runAllTimersAsync();
+    expect(result).toBe('标准格式内容');
+  });
+
+  it('旧版 completions 格式 choices[0].text', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ text: '旧版格式内容' }],
+    });
+    const result = await callLLM('prompt', config);
+    await vi.runAllTimersAsync();
+    expect(result).toBe('旧版格式内容');
+  });
+
+  it('直接 message.content 格式', async () => {
+    mockCreate.mockResolvedValue({
+      message: { content: '直接消息格式' },
+    });
+    const result = await callLLM('prompt', config);
+    await vi.runAllTimersAsync();
+    expect(result).toBe('直接消息格式');
+  });
+
+  it('直接 content 字符串格式', async () => {
+    mockCreate.mockResolvedValue({
+      content: '简化格式内容',
+    });
+    const result = await callLLM('prompt', config);
+    await vi.runAllTimersAsync();
+    expect(result).toBe('简化格式内容');
+  });
+
+  it('未识别格式抛出带提示的错误', async () => {
+    mockCreate.mockResolvedValue({
+      unknown_field: '无法识别',
+    });
+    const promise = callLLM('prompt', config).catch((e) => e);
+    await vi.runAllTimersAsync();
+    const err = await promise;
+    expect(err.message).toContain('格式异常');
+    expect(err.message).toContain('unknown_field');
   });
 });

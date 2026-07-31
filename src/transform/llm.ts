@@ -59,9 +59,13 @@ export async function callLLM(
         temperature: config.temperature ?? 0.3,
       });
 
-      const content = res.choices[0]?.message?.content;
+      const content = extractContent(res);
       if (!content) {
-        throw new Error('LLM 返回空内容');
+        throw new Error(
+          'LLM 返回空内容或格式异常（返回片段: ' +
+            JSON.stringify(res).slice(0, 300) +
+            '）',
+        );
       }
       return content.trim();
     } catch (err: any) {
@@ -80,4 +84,71 @@ export async function callLLM(
     }
   }
   throw lastError;
+}
+
+/**
+ * 从 LLM 响应中提取文本内容，兼容多种返回格式
+ *
+ * 标准 OpenAI: { choices: [{ message: { content: "..." } }] }
+ * 变体1:       { choices: [{ text: "..." }] }              (旧版 completions)
+ * 变体2:       { message: { content: "..." } }              (部分本地服务)
+ * 变体3:       { content: "..." }                           (简化格式)
+ * 变体4:       { data: { content: "..." } }                 (自定义封装)
+ * 变体5:       直接返回字符串
+ */
+function extractContent(res: any): string | null {
+  if (!res) return null;
+
+  // 直接返回字符串
+  if (typeof res === 'string') return res;
+
+  // 标准 OpenAI 格式: choices[0].message.content
+  if (res.choices?.[0]?.message?.content) {
+    return res.choices[0].message.content;
+  }
+
+  // 旧版 completions 格式: choices[0].text
+  if (res.choices?.[0]?.text) {
+    return res.choices[0].text;
+  }
+
+  // 直接 message.content（部分本地服务）
+  if (res.message?.content) {
+    return res.message.content;
+  }
+
+  // 直接 content 字段
+  if (typeof res.content === 'string') {
+    return res.content;
+  }
+
+  // data.content 封装
+  if (res.data?.content) {
+    return res.data.content;
+  }
+
+  // data.message.content 封装
+  if (res.data?.message?.content) {
+    return res.data.message.content;
+  }
+
+  // 最后兜底：尝试 res.response / res.output 等
+  if (res.response?.choices?.[0]?.message?.content) {
+    return res.response.choices[0].message.content;
+  }
+
+  if (res.output) {
+    if (typeof res.output === 'string') return res.output;
+    if (Array.isArray(res.output)) {
+      // 可能是 output 数组，拼接文本
+      return res.output
+        .map((item: any) =>
+          typeof item === 'string' ? item : item?.content || item?.text || '',
+        )
+        .filter(Boolean)
+        .join('\n');
+    }
+  }
+
+  return null;
 }

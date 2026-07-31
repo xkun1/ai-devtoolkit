@@ -36,24 +36,40 @@ export const MODEL_PRESETS: Record<string, ModelPreset> = {
     envVar: '_LOCAL',
     description: 'Ollama 本地模型',
     local: true,
-    localModelEnv: 'OLLAMA_MODEL',
   },
   'lmstudio-local': {
     baseURL: 'http://localhost:1234/v1',
     envVar: '_LOCAL',
     description: 'LM Studio 本地模型',
     local: true,
-    localModelEnv: 'LMSTUDIO_MODEL',
+  },
+  // 自定义本地模型：用户自行输入服务地址并选择模型
+  'custom-local': {
+    baseURL: '',
+    envVar: '_LOCAL',
+    description: '自定义本地模型服务（OpenAI 兼容 API）',
+    local: true,
   },
 };
 
-/** 模型展示信息（用于 Wizard 和 Web UI 下拉列表） */
-export const MODEL_DISPLAY: {
+/** 本地模型探测结果 */
+export interface LocalModelInfo {
+  id: string;
+  name: string;
+}
+
+/** 模型展示项 */
+export interface ModelDisplayItem {
   id: string;
   name: string;
   envVar: string;
   local?: boolean;
-}[] = [
+  /** 本地服务默认地址（用于前端预填提示） */
+  defaultBaseUrl?: string;
+}
+
+/** 模型展示信息（用于 Wizard 和 Web UI 下拉列表） */
+export const MODEL_DISPLAY: ModelDisplayItem[] = [
   {
     id: 'deepseek-chat',
     name: 'DeepSeek Chat (性价比之王)',
@@ -80,10 +96,18 @@ export const MODEL_DISPLAY: {
     name: '🦙 Ollama 本地模型 (免费/离线)',
     envVar: '_LOCAL',
     local: true,
+    defaultBaseUrl: 'http://localhost:11434',
   },
   {
     id: 'lmstudio-local',
     name: '🖥️ LM Studio 本地模型 (免费/离线)',
+    envVar: '_LOCAL',
+    local: true,
+    defaultBaseUrl: 'http://localhost:1234',
+  },
+  {
+    id: 'custom-local',
+    name: '🔧 自定义本地模型 (填写服务地址)',
     envVar: '_LOCAL',
     local: true,
   },
@@ -94,29 +118,19 @@ export function isLocalModel(modelId: string): boolean {
   return MODEL_PRESETS[modelId]?.local === true;
 }
 
-/** 解析本地模型实际名称 */
-export function resolveLocalModelName(modelId: string): string {
-  const preset = MODEL_PRESETS[modelId];
-  if (!preset?.local) return modelId;
-
-  // 优先从环境变量读取实际模型名（如 OLLAMA_MODEL=qwen2.5:7b）
-  const envVar = preset.localModelEnv;
-  if (envVar && process.env[envVar]) {
-    return process.env[envVar]!;
-  }
-
-  // 本地模型默认名
-  const defaults: Record<string, string> = {
-    'ollama-local': 'qwen2.5:7b',
-    'lmstudio-local': 'local-model',
-  };
-  return defaults[modelId] || 'local-model';
-}
-
-/** 解析模型配置：返回最终用于 LLM 调用的 config */
+/** 解析模型配置：返回最终用于 LLM 调用的 config
+ *
+ * - localModelName：本地模型实际名称（由探测或手动输入），
+ *   仅对 custom-local / ollama-local / lmstudio-local 有效
+ * - baseUrl：覆盖预设中的 baseURL
+ */
 export function resolveModel(
   modelId: string,
-  options?: { apiKey?: string; baseUrl?: string },
+  options?: {
+    apiKey?: string;
+    baseUrl?: string;
+    localModelName?: string;
+  },
 ): {
   apiKey: string;
   baseURL?: string;
@@ -128,8 +142,9 @@ export function resolveModel(
     // 本地模型：不需要 API Key，用占位符
     return {
       apiKey: 'local-no-key',
-      baseURL: options?.baseUrl || preset.baseURL,
-      model: resolveLocalModelName(modelId),
+      baseURL: options?.baseUrl || preset.baseURL || undefined,
+      // 优先使用传入的实际模型名，其次从环境变量取
+      model: options?.localModelName || process.env.LOCAL_MODEL_NAME || modelId,
     };
   }
 
@@ -140,4 +155,68 @@ export function resolveModel(
   const baseURL = options?.baseUrl || preset?.baseURL;
 
   return { apiKey, baseURL, model: modelId };
+}
+
+/**
+ * 探测本地模型服务，返回可用模型列表
+ *
+ * 支持两种协议：
+ * - OpenAI 兼容接口（/v1/models）：LM Studio / vLLM / Xinference 等
+ * - Ollama 原生接口（/api/tags）
+ *
+ * 用户输入地址后自动尝试多种探测路径，取第一个成功的。
+ */
+export async function detectLocalModels(
+  baseURL: string,
+  timeoutMs = 5000,
+): Promise<LocalModelInfo[]> {
+  const base = (baseURL || '').trim().replace(/\/+$/, '');
+  if (!base) return [];
+
+  // 候选探测路径（按优先级排列）
+  const candidates: string[] = [];
+  if (/\/v1\/?$/i.test(base)) {
+    // 地址已含 /v1，直接拼接 /models
+    candidates.push(`${base}/models`);
+  } else {
+    candidates.push(`${base}/v1/models`);
+    candidates.push(`${base}/models`);
+  }
+  // Ollama 原生接口兜底
+  candidates.push(`${base}/api/tags`);
+
+  for (const url of candidates) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const data: any = await res.json();
+
+      // OpenAI 格式: { data: [{ id: "model-name", ... }] }
+      if (Array.isArray(data?.data) && data.data.length > 0) {
+        return data.data
+          .map((m: any) => ({
+            id: String(m.id || m.name || ''),
+            name: String(m.id || m.name || ''),
+          }))
+          .filter((m: LocalModelInfo) => m.id);
+      }
+
+      // Ollama 格式: { models: [{ name: "llama3:8b", ... }] }
+      if (Array.isArray(data?.models) && data.models.length > 0) {
+        return data.models
+          .map((m: any) => ({
+            id: String(m.name || m.model || ''),
+            name: String(m.name || m.model || ''),
+          }))
+          .filter((m: LocalModelInfo) => m.id);
+      }
+    } catch {
+      // 连接失败/超时，尝试下一个候选路径
+    }
+  }
+
+  return [];
 }

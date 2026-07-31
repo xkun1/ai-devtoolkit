@@ -17,7 +17,7 @@ program
   .description(
     '📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）',
   )
-  .version('0.6.1');
+  .version('0.6.2');
 
 program
   .argument(

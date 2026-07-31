@@ -61,8 +61,9 @@ export {
   MODEL_DISPLAY,
   isLocalModel,
   resolveModel,
-  resolveLocalModelName,
+  detectLocalModels,
 } from './models.js';
+export type { ModelDisplayItem, LocalModelInfo } from './models.js';
 export type { ModelPreset } from './types/index.js';
 
 export { runPipeline as doc2skill } from './pipeline.js';

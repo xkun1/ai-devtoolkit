@@ -64,4 +64,20 @@ export interface PipelineOptions {
   template?: string;
   /** 增量更新：跳过未变更的文档 */
   incremental?: boolean;
+  /** 预加载内容（Web UI 文件上传用，跳过 loader 直接传入原始文本） */
+  preloaded?: PreloadedContent;
+}
+
+/** 预加载的文档内容（Web UI 文件上传用，跳过 loader 直接传入内容） */
+export interface PreloadedContent {
+  /** 原始内容文本 */
+  content: string;
+  /** 文件名（用于生成标题） */
+  fileName?: string;
+  /** 来源标记 */
+  source?: string;
+  /** 二进制内容（Base64 编码），用于 PDF/DOCX 上传 */
+  binaryContent?: string;
+  /** 文件 MIME 类型（如 application/pdf） */
+  mimeType?: string;
 }

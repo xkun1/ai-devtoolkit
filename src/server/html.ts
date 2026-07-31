@@ -49,6 +49,7 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-secondary { background: var(--border); color: var(--text); }
   .btn-secondary:hover { background: #444c56; }
+  .btn-sm { padding: 6px 16px; font-size: 13px; }
   .actions { display: flex; gap: 12px; margin-top: 8px; }
   .status {
     padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px;
@@ -58,6 +59,26 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   .status.info { background: rgba(88,166,255,0.1); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
   .status.error { background: rgba(248,81,73,0.1); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
   .status.success { background: rgba(63,185,80,0.1); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .status.warning { background: rgba(210,153,34,0.1); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+  /* 文件上传区 */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 28px;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+  }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(88,166,255,0.05); }
+  .upload-zone.dragover { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+  .upload-zone .upload-icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-zone .upload-text { font-size: 13px; color: var(--text-muted); }
+  .upload-zone .upload-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .file-info {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    padding: 8px 12px; background: var(--bg); border-radius: 6px; font-size: 13px;
+  }
+  .file-info .remove { color: var(--red); cursor: pointer; font-size: 16px; }
+  /* 本地模型配置区 */
+  .local-config { display: none; margin-top: 8px; padding: 12px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); }
+  .local-config.show { display: block; }
+  .local-config .row { margin-bottom: 8px; }
   .preview-wrap { margin-top: 20px; }
   .preview-wrap.hidden { display: none; }
   .preview-header {
@@ -94,17 +115,31 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   <header>
     <h1>📄 → 🤖 <span>doc2skill</span></h1>
     <p>将任意网页或文档，1秒转化为 AI Agent 技能包</p>
+    <p style='font-size:11px;color:var(--text-muted);margin-top:4px'>v0.6.2 · 支持 PDF/DOCX/MD/TXT 上传</p>
   </header>
 
   <div class="card">
+    <!-- 文档来源：URL/路径 输入 -->
     <div class="form-group">
-      <label>文档来源（URL 或本地文件路径）</label>
+      <label>📄 文档来源（URL 或本地文件路径）</label>
       <input type="text" id="source" placeholder="https://docs.example.com/api  或  ./guide.pdf">
+    </div>
+
+    <!-- 文件上传区 -->
+    <div class="form-group">
+      <label>📁 或直接上传文件</label>
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📤</div>
+        <div class="upload-text">点击选择文件，或拖拽到此处</div>
+        <div class="upload-hint">支持 .md .txt .html .pdf .docx 等文档格式</div>
+        <input type="file" id="fileInput" style="display:none" accept=".md,.markdown,.txt,.text,.html,.htm,.json,.yaml,.yml,.csv,.xml,.rst,.pdf,.docx,.doc">
+      </div>
+      <div id="fileInfo" style="display:none"></div>
     </div>
 
     <div class="row">
       <div class="form-group">
-        <label>目标 Agent</label>
+        <label>🎯 目标 Agent</label>
         <select id="agentType">
           <option value="codex">🤖 Codex → SKILL.md</option>
           <option value="cursor">🎯 Cursor → .cursorrules</option>
@@ -112,19 +147,40 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
         </select>
       </div>
       <div class="form-group">
-        <label>提炼模板</label>
+        <label>📋 提炼模板</label>
         <select id="template"></select>
       </div>
     </div>
 
     <div class="row">
       <div class="form-group">
-        <label>LLM 模型</label>
+        <label>🧠 LLM 模型</label>
         <select id="model"></select>
       </div>
       <div class="form-group">
-        <label>API Key（留空则用环境变量）</label>
+        <label>🔑 API Key（留空则用环境变量）</label>
         <input type="text" id="apiKey" placeholder="sk-xxx（可选）">
+      </div>
+    </div>
+
+    <!-- 本地模型动态配置区 -->
+    <div class="local-config" id="localConfig">
+      <div class="row">
+        <div class="form-group" style="flex:2">
+          <label>🏠 本地服务地址</label>
+          <input type="text" id="localBaseUrl" placeholder="http://localhost:11434" value="http://localhost:11434">
+        </div>
+        <div class="form-group" style="flex:0 0 auto; display:flex; align-items:flex-end">
+          <button class="btn btn-secondary btn-sm" id="detectBtn" onclick="detectLocalModels()">
+            🔍 探测模型
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>🧠 检测到的模型</label>
+        <select id="localModelSelect">
+          <option value="">点击「探测模型」获取列表...</option>
+        </select>
       </div>
     </div>
 
@@ -146,8 +202,8 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
         <h3>📋 生成结果</h3>
         <div>
           <span class="preview-meta" id="previewMeta"></span>
-          <button class="btn btn-secondary" style="margin-left:12px;padding:6px 16px;font-size:13px" onclick="download()">⬇ 下载</button>
-          <button class="btn btn-secondary" style="padding:6px 16px;font-size:13px" onclick="copyResult()">📋 复制</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:12px" onclick="download()">⬇ 下载</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyResult()">📋 复制</button>
         </div>
       </div>
       <pre class="preview" id="preview"></pre>
@@ -164,6 +220,7 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
 <script>
 let lastContent = '';
 let lastAgentType = 'codex';
+let uploadedFile = null; // { name, content, isBinary, mimeType }
 const FILENAMES = { codex: 'SKILL.md', cursor: '.cursorrules', claude: 'CLAUDE.md' };
 
 // 初始化：加载模板和模型列表
@@ -186,12 +243,13 @@ async function init() {
       const opt = document.createElement('option');
       opt.value = m.id;
       opt.textContent = m.name;
+      if (m.defaultBaseUrl) opt.dataset.defaultBaseUrl = m.defaultBaseUrl;
       modelSel.appendChild(opt);
     }
     if (modelRes.defaultModel) modelSel.value = modelRes.defaultModel;
-    // 模型切换时控制 API Key 输入框显隐
-    modelSel.addEventListener('change', toggleApiKeyVisibility);
-    toggleApiKeyVisibility();
+    // 模型切换时控制 API Key / 本地配置显隐
+    modelSel.addEventListener('change', toggleModelConfig);
+    toggleModelConfig();
     if (!modelRes.hasApiKey) {
       showStatus('warning', '⚠️ 未检测到 API Key 环境变量，请在下方输入 API Key');
     }
@@ -200,14 +258,176 @@ async function init() {
   }
 }
 
+// ─── 文件上传 ───
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('dragover');
+});
+uploadZone.addEventListener('dragleave', () => {
+  uploadZone.classList.remove('dragover');
+});
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) {
+    handleFile(fileInput.files[0]);
+  }
+});
+
+function handleFile(file) {
+  const lowerName = file.name.toLowerCase();
+  const isPdf = lowerName.endsWith('.pdf');
+  const isDocx = lowerName.endsWith('.docx') || lowerName.endsWith('.doc');
+  const isBinary = isPdf || isDocx;
+
+  if (isBinary) {
+    // PDF/DOCX 用 Base64 读取（二进制）
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // readAsDataURL 返回 'data:application/pdf;base64,XXXX'
+      // 提取纯 Base64 部分
+      const base64 = e.target.result.split(',')[1];
+      uploadedFile = {
+        name: file.name,
+        isBinary: true,
+        binaryContent: base64,
+        mimeType: isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+      showFileInfo(file);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    // 文本文件用 utf-8 读取
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      uploadedFile = { name: file.name, isBinary: false, content: e.target.result };
+      showFileInfo(file);
+    };
+    reader.readAsText(file);
+  }
+}
+
+function showFileInfo(file) {
+  const info = document.getElementById('fileInfo');
+  info.style.display = 'block';
+  info.className = 'file-info';
+  var lowerName2 = file.name.toLowerCase();
+  var icon = lowerName2.endsWith('.pdf') ? '📕' : (lowerName2.endsWith('.docx') || lowerName2.endsWith('.doc')) ? '📘' : '📎';
+  // 清空 URL 输入，避免冲突
+  document.getElementById('source').value = '';
+  showStatus('info', '已加载文件: ' + file.name);
+}
+
+function removeFile() {
+  uploadedFile = null;
+  fileInput.value = '';
+  document.getElementById('fileInfo').style.display = 'none';
+}
+
+// ─── 本地模型配置 ───
+
+function toggleModelConfig() {
+  const modelSel = document.getElementById('model');
+  const selected = modelSel.options[modelSel.selectedIndex];
+  const isLocal = selected && (
+    selected.value.includes('local') || (selected.value === 'custom-local')
+  );
+  const apiKeyGroup = document.getElementById('apiKey').closest('.form-group');
+  const localConfig = document.getElementById('localConfig');
+
+  if (isLocal) {
+    apiKeyGroup.style.display = 'none';
+    localConfig.classList.add('show');
+    // 预填默认地址
+    const defaultUrl = selected.dataset.defaultBaseUrl || 'http://localhost:11434';
+    document.getElementById('localBaseUrl').value = defaultUrl;
+    showStatus('info', '🔧 使用本地模型，请输入服务地址并探测可用模型');
+  } else {
+    apiKeyGroup.style.display = '';
+    localConfig.classList.remove('show');
+  }
+}
+
+async function detectLocalModels() {
+  const baseUrl = document.getElementById('localBaseUrl').value.trim();
+  if (!baseUrl) {
+    showStatus('error', '❌ 请先输入本地服务地址');
+    return;
+  }
+  const btn = document.getElementById('detectBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 探测中...';
+
+  try {
+    const res = await fetch('/api/local-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '探测失败');
+
+    const sel = document.getElementById('localModelSelect');
+    sel.innerHTML = '';
+
+    if (data.count === 0) {
+      sel.innerHTML = '<option value="">未检测到模型，请检查地址或手动输入</option>';
+      showStatus('warning', '⚠️ 未检测到可用模型，请确认服务已启动且地址正确');
+    } else {
+      for (const m of data.models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        sel.appendChild(opt);
+      }
+      showStatus('success', '✅ 探测到 ' + data.count + ' 个可用模型');
+    }
+  } catch (e) {
+    showStatus('error', '❌ 探测失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 探测模型';
+  }
+}
+
+// ─── 生成技能包 ───
+
 async function generate() {
   const source = document.getElementById('source').value.trim();
   const agentType = document.getElementById('agentType').value;
   const template = document.getElementById('template').value;
-  const modelName = document.getElementById('model').value;
+  const modelSel = document.getElementById('model');
+  const modelName = modelSel.value;
   const apiKey = document.getElementById('apiKey').value.trim();
 
-  if (!source) { showStatus('error', '❌ 请输入文档来源'); return; }
+  // 检查来源
+  if (!source && !uploadedFile) {
+    showStatus('error', '❌ 请输入文档来源或上传文件');
+    return;
+  }
+
+  // 检查本地模型配置
+  let localModelName = '';
+  const isLocal = modelName.includes('local');
+  if (isLocal) {
+    localModelName = document.getElementById('localModelSelect').value;
+    if (!localModelName) {
+      showStatus('warning', '⚠️ 请先点击「探测模型」并选择一个模型');
+      return;
+    }
+  }
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
@@ -216,10 +436,20 @@ async function generate() {
   showStatus('info', '⏳ 正加载文档并用 LLM 提炼，请稍候...');
 
   try {
+    const localBaseUrl = document.getElementById('localBaseUrl').value.trim();
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, agentType, template, modelName, apiKey }),
+      body: JSON.stringify({
+        source: source || undefined,
+        fileContent: uploadedFile && !uploadedFile.isBinary ? uploadedFile.content : undefined,
+        binaryContent: uploadedFile && uploadedFile.isBinary ? uploadedFile.binaryContent : undefined,
+        mimeType: uploadedFile && uploadedFile.isBinary ? uploadedFile.mimeType : undefined,
+        fileName: uploadedFile ? uploadedFile.name : undefined,
+        agentType, template, modelName, apiKey,
+        localBaseUrl: isLocal ? localBaseUrl : undefined,
+        localModelName: isLocal ? localModelName : undefined,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '生成失败');
@@ -259,19 +489,6 @@ function copyResult() {
   });
 }
 
-function toggleApiKeyVisibility() {
-  const modelSel = document.getElementById('model');
-  const selected = modelSel.options[modelSel.selectedIndex];
-  const isLocal = selected && selected.value.includes('local');
-  const apiKeyGroup = document.getElementById('apiKey').closest('.form-group');
-  if (isLocal) {
-    apiKeyGroup.style.display = 'none';
-    showStatus('info', '🦙 使用本地模型，无需 API Key');
-  } else {
-    apiKeyGroup.style.display = '';
-  }
-}
-
 function showStatus(type, msg) {
   const el = document.getElementById('status');
   el.className = 'status show ' + type;
@@ -282,6 +499,7 @@ function clearAll() {
   document.getElementById('source').value = '';
   document.getElementById('previewWrap').classList.add('hidden');
   document.getElementById('status').className = 'status';
+  removeFile();
   lastContent = '';
 }
 

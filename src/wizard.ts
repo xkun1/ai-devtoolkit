@@ -19,6 +19,7 @@ import {
   isLocalModel,
   resolveModel,
 } from './models.js';
+import { detectLocalModels } from './models.js';
 
 const MODEL_CHOICES = MODEL_DISPLAY.map((m) => ({ name: m.name, value: m.id }));
 const MODEL_ENV: Record<string, string> = {};
@@ -85,6 +86,10 @@ export async function runWizard(): Promise<WizardResult | null> {
 
   // 5. API Key（本地模型跳过）
   let apiKey = '';
+  // 本地模型：动态地址 + 探测模型列表
+  let localBaseUrl: string | undefined;
+  let localModelName: string | undefined;
+
   if (!isLocalModel(model)) {
     const envVar = MODEL_ENV[model] || 'OPENAI_API_KEY';
     const envKey = process.env[envVar] || process.env.OPENAI_API_KEY || '';
@@ -100,6 +105,10 @@ export async function runWizard(): Promise<WizardResult | null> {
       success(`已检测到 ${envVar} 环境变量`);
     }
   } else {
+    // 本地模型：输入服务地址 → 自动探测 → 选择模型
+    localBaseUrl = await promptLocalBaseURL(model);
+    const detected = await detectAndSelectModel(localBaseUrl);
+    localModelName = detected;
     success('使用本地模型，无需 API Key');
   }
 
@@ -118,6 +127,7 @@ export async function runWizard(): Promise<WizardResult | null> {
   info(`  🤖 Agent:  ${agentType}`);
   if (name) info(`  🏷️  技能名:  ${name}`);
   info(`  🧠 模型:    ${model}`);
+  if (localModelName) info(`  🔧 本地模型: ${localModelName}`);
   info(`  💾 输出:    ${outputPath}`);
   info('  ─────────────────────────────────────────');
   info('');
@@ -137,6 +147,41 @@ export async function runWizard(): Promise<WizardResult | null> {
     agentType,
     outputPath,
     name,
-    llm: resolveModel(model, { apiKey, baseUrl: MODEL_BASE[model] }),
+    llm: resolveModel(model, {
+      apiKey,
+      baseUrl: localBaseUrl || MODEL_BASE[model],
+      localModelName,
+    }),
   };
+}
+
+/** 提示输入本地模型服务地址 */
+async function promptLocalBaseURL(model: string): Promise<string> {
+  const preset = MODEL_PRESETS[model];
+  const hint = preset?.baseURL || 'http://localhost:11434';
+  // 去掉末尾的 /v1，只保留基础地址
+  const defaultUrl = hint.replace(/\/v1\/?$/, '');
+  return input({
+    message: '🏠 输入本地模型服务地址：',
+    default: defaultUrl,
+    validate: (v) => (/^https?:\/\//i.test(v.trim()) ? true : '请输入完整 URL'),
+  });
+}
+
+/** 探测本地服务可用模型并让用户选择 */
+async function detectAndSelectModel(baseUrl: string): Promise<string> {
+  info('  🔍 正在探测本地可用模型...');
+  const models = await detectLocalModels(baseUrl);
+  if (models.length === 0) {
+    info('  ⚠ 未能自动探测到模型列表，请手动输入模型名');
+    return input({
+      message: '🧠 输入本地模型名称：',
+      validate: (v) => (v.trim() ? true : '不能为空'),
+    });
+  }
+  success(`探测到 ${models.length} 个可用模型`);
+  return select({
+    message: '选择要使用的模型：',
+    choices: models.map((m) => ({ name: m.name, value: m.id })),
+  });
 }

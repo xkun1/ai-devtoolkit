@@ -28,7 +28,85 @@ export async function runPipeline(
 
   // Step 1: 加载（crawl 模式或常规加载）
   let doc;
-  if (
+  // ── 预加载内容模式（Web UI 文件上传）──
+  if (options.preloaded?.content || options.preloaded?.binaryContent) {
+    const pl = options.preloaded;
+    const fileName = pl.fileName || 'uploaded';
+    let processed = pl.content || '';
+    let title = fileName.replace(/\.[^.]+$/, '');
+    let meta: Record<string, string> = {};
+    let docType: 'pdf' | 'html' | 'text' = 'text';
+
+    // ── 二进制文件：PDF / DOCX ──
+    if (pl.binaryContent) {
+      const buffer = Buffer.from(pl.binaryContent, 'base64');
+      const ext = fileName.toLowerCase();
+
+      if (/\.pdf$/.test(ext) || pl.mimeType === 'application/pdf') {
+        // PDF 提取
+        docType = 'pdf';
+        try {
+          const { extractPdfFromBuffer } = await import('./loader/pdf.js');
+          const result = await extractPdfFromBuffer(buffer, fileName);
+          processed = result.content;
+          title = result.title || title;
+          meta = { format: 'pdf' };
+        } catch (err: any) {
+          throw new Error(
+            'PDF 解析失败: ' + err.message + '（请确认文件是有效的 PDF 格式）',
+            { cause: err },
+          );
+        }
+      } else if (/\.docx?$/.test(ext) || pl.mimeType?.includes('word')) {
+        // DOCX 提取
+        docType = 'text';
+        try {
+          const { extractDocxFromBuffer } = await import('./loader/doc.js');
+          const result = await extractDocxFromBuffer(buffer, fileName);
+          processed = result.content;
+          title = result.title || title;
+          meta = { format: 'docx' };
+        } catch (err: any) {
+          throw new Error(
+            'DOCX 解析失败: ' +
+              err.message +
+              '（请确认文件是有效的 .docx 格式）',
+            { cause: err },
+          );
+        }
+      } else {
+        // 其他二进制类型，尝试当文本读
+        processed = buffer.toString('utf-8');
+      }
+    } else {
+      // ── 文本文件：Markdown / HTML / TXT ──
+      const isHtml = /^\s*<!doctype|<html/i.test(processed);
+
+      if (isHtml) {
+        docType = 'html';
+        try {
+          const { extractFromHtml } = await import('./loader/readability.js');
+          const result = await extractFromHtml(processed);
+          processed = result.content;
+          title = result.title || title;
+          meta = result.meta;
+        } catch {
+          // 提取失败就用原文
+        }
+      }
+    }
+
+    // SPA 空壳检测
+    checkSpaShell(processed, fileName);
+
+    doc = {
+      source: pl.source || fileName,
+      type: docType,
+      content: processed,
+      title,
+      meta,
+    };
+  } else if (
     options.crawl &&
     sourceList.length === 1 &&
     /^https?:\/\//i.test(sourceList[0])
@@ -70,6 +148,11 @@ export async function runPipeline(
     succeedSpinner(
       `加载完成: ${doc.title || doc.source} (${doc.content.length} 字符)`,
     );
+  }
+
+  // SPA 空壳检测（URL 加载时）
+  if (doc.type === 'url') {
+    checkSpaShell(doc.content, doc.source);
   }
 
   if (doc.content.trim().length < 50) {
@@ -219,4 +302,29 @@ async function writeFileWithDir(path: string, content: string): Promise<void> {
   const dir = dirname(path);
   await mkdir(dir, { recursive: true });
   await writeFile(path, content, 'utf-8');
+}
+
+/**
+ * 检测 SPA 空壳页面：内容几乎为空但有大量 HTML 骨架
+ * 典型特征：<div id="root"> / <div id="app"> 且正文极少
+ *
+ * 这种页面内容是 JS 动态渲染的，fetch 拿不到实际内容。
+ * 检测到后发出警告（不阻止流程，因为有些页面确实内容少）
+ */
+function checkSpaShell(content: string, source: string): void {
+  const stripped = content.replace(/<[^>]+>/g, '').trim();
+  const hasRootDiv = /<div\s+id=["']?(root|app)["']?/i.test(content);
+  const hasScriptBundle = /\/assets\/.+\.js|src=.*\.js/i.test(content);
+  const textLength = stripped.length;
+
+  // SPA 空壳特征：有 root/app div + JS bundle 但纯文字极少
+  if (hasRootDiv && hasScriptBundle && textLength < 500) {
+    warn(
+      `⚠️ 检测到 SPA 动态页面（${source}），内容由 JavaScript 渲染，fetch 无法获取实际内容。\n` +
+        `   建议：\n` +
+        `   1. 用浏览器打开页面，复制渲染后的内容保存为 .md/.txt 再上传\n` +
+        `   2. 或寻找该文档的 Markdown/PDF 原始版本\n` +
+        `   3. 当前生成结果可能不完整`,
+    );
+  }
 }
