@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+SKILL.md
+.cursorrules
+CLAUDE.md
+coverage/
+.DS_Store
+*.tsbuildinfo

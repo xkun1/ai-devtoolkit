@@ -1,0 +1,57 @@
+{
+  "name": "doc2skill",
+  "version": "0.1.0",
+  "description": "📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）",
+  "main": "dist/index.js",
+  "bin": {
+    "doc2skill": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsx src/index.ts",
+    "start": "node bin/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "cursor",
+    "codex",
+    "claude",
+    "rag",
+    "skill",
+    "agent",
+    "docs",
+    "pdf",
+    "automation",
+    "developer-tools",
+    "llm"
+  ],
+  "author": "kun",
+  "license": "MIT",
+  "homepage": "https://github.com/kun-labs/doc2skill",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kun-labs/doc2skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kun-labs/doc2skill/issues"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "openai": "^4.77.0",
+    "ora": "^8.1.1",
+    "pdf-parse": "^1.1.1",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/turndown": "^5.0.5",
+    "tsup": "^8.0.1",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.2",
+    "vitest": "^4.1.10"
+  }
+}
