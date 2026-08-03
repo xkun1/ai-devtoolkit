@@ -70,6 +70,12 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   .upload-zone .upload-icon { font-size: 32px; margin-bottom: 8px; }
   .upload-zone .upload-text { font-size: 13px; color: var(--text-muted); }
   .upload-zone .upload-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .upload-zone.uploaded {
+    border-color: var(--green); background: rgba(63,185,80,0.08);
+    cursor: not-allowed; pointer-events: none; opacity: 0.75;
+  }
+  .upload-zone.uploaded .upload-icon { color: var(--green); }
+  .upload-zone.uploaded .upload-text { color: var(--green); font-weight: 600; }
   .file-info {
     display: flex; align-items: center; gap: 8px; margin-top: 8px;
     padding: 8px 12px; background: var(--bg); border-radius: 6px; font-size: 13px;
@@ -287,6 +293,11 @@ fileInput.addEventListener('change', () => {
 });
 
 function handleFile(file) {
+  // 已上传文件时拒绝再次上传
+  if (uploadedFile) {
+    showStatus('warning', '⚠️ 已有一个文件，请先点击 ✕ 移除后再上传新文件');
+    return;
+  }
   const lowerName = file.name.toLowerCase();
   const isPdf = lowerName.endsWith('.pdf');
   const isDocx = lowerName.endsWith('.docx') || lowerName.endsWith('.doc');
@@ -327,13 +338,21 @@ function showFileInfo(file) {
   var icon = lowerName2.endsWith('.pdf') ? '📕' : (lowerName2.endsWith('.docx') || lowerName2.endsWith('.doc')) ? '📘' : '📎';
   // 清空 URL 输入，避免冲突
   document.getElementById('source').value = '';
-  showStatus('info', '已加载文件: ' + file.name);
+  // 锁定上传区：已上传文件，不能再上传
+  document.getElementById('uploadZone').classList.add('uploaded');
+  document.querySelector('#uploadZone .upload-text').textContent = '✅ 已上传：' + file.name;
+  document.querySelector('#uploadZone .upload-hint').textContent = '如需更换文件，请点击下方 ✕ 移除后重新上传';
+  showStatus('success', '✅ 文件已上传: ' + file.name + '（已锁定上传区）');
 }
 
 function removeFile() {
   uploadedFile = null;
   fileInput.value = '';
   document.getElementById('fileInfo').style.display = 'none';
+  // 解锁上传区
+  document.getElementById('uploadZone').classList.remove('uploaded');
+  document.querySelector('#uploadZone .upload-text').textContent = '点击选择文件，或拖拽到此处';
+  document.querySelector('#uploadZone .upload-hint').textContent = '支持 .md .txt .html .pdf .docx 等文档格式';
 }
 
 // ─── 本地模型配置 ───
