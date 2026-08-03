@@ -194,28 +194,79 @@ export async function detectLocalModels(
       if (!res.ok) continue;
       const data: any = await res.json();
 
-      // OpenAI 格式: { data: [{ id: "model-name", ... }] }
-      if (Array.isArray(data?.data) && data.data.length > 0) {
-        return data.data
-          .map((m: any) => ({
-            id: String(m.id || m.name || ''),
-            name: String(m.id || m.name || ''),
-          }))
-          .filter((m: LocalModelInfo) => m.id);
-      }
-
-      // Ollama 格式: { models: [{ name: "llama3:8b", ... }] }
-      if (Array.isArray(data?.models) && data.models.length > 0) {
-        return data.models
-          .map((m: any) => ({
-            id: String(m.name || m.model || ''),
-            name: String(m.name || m.model || ''),
-          }))
-          .filter((m: LocalModelInfo) => m.id);
-      }
+      const models = parseModelList(data);
+      if (models.length > 0) return models;
     } catch {
       // 连接失败/超时，尝试下一个候选路径
     }
+  }
+
+  return [];
+}
+
+/**
+ * 解析模型列表响应，兼容多种格式：
+ * - OpenAI:  { data: [{ id }] }
+ * - Ollama:  { models: [{ name }] }
+ * - 数组:    ['model1', 'model2']
+ * - result:  { result: ['model1'] }
+ * - 单模型:  { model: 'xxx' } 或 { id: 'xxx' }
+ */
+function parseModelList(data: any): LocalModelInfo[] {
+  if (!data) return [];
+
+  // 直接数组
+  if (Array.isArray(data)) {
+    return data
+      .map((m: any) =>
+        typeof m === 'string'
+          ? { id: m, name: m }
+          : {
+              id: String(m.id || m.name || m.model || ''),
+              name: String(m.id || m.name || m.model || ''),
+            },
+      )
+      .filter((m: LocalModelInfo) => m.id);
+  }
+
+  // OpenAI 格式: { data: [{ id }] }
+  if (Array.isArray(data.data) && data.data.length > 0) {
+    return data.data
+      .map((m: any) => ({
+        id: String(m.id || m.name || m.model || ''),
+        name: String(m.id || m.name || m.model || ''),
+      }))
+      .filter((m: LocalModelInfo) => m.id);
+  }
+
+  // Ollama 格式: { models: [{ name }] }
+  if (Array.isArray(data.models) && data.models.length > 0) {
+    return data.models
+      .map((m: any) => ({
+        id: String(m.name || m.model || m.id || ''),
+        name: String(m.name || m.model || m.id || ''),
+      }))
+      .filter((m: LocalModelInfo) => m.id);
+  }
+
+  // result 格式: { result: [...] }
+  if (Array.isArray(data.result)) {
+    return data.result
+      .map((m: any) =>
+        typeof m === 'string'
+          ? { id: m, name: m }
+          : {
+              id: String(m.id || m.name || m.model || ''),
+              name: String(m.id || m.name || m.model || ''),
+            },
+      )
+      .filter((m: LocalModelInfo) => m.id);
+  }
+
+  // 单模型格式: { model: 'xxx' } 或 { id: 'xxx' }
+  if (data.model || data.id) {
+    const id = String(data.model || data.id || '');
+    if (id) return [{ id, name: id }];
   }
 
   return [];

@@ -65,9 +65,20 @@ describe('resolveModel', () => {
     expect(config.apiKey).toBe('local-no-key');
   });
 
-  it('自定义本地模型 baseURL 为空字符串', () => {
+  it('custom-local 无地址时 baseURL 应为 undefined 而非空字符串', () => {
     const config = resolveModel('custom-local', {});
-    expect(config.model).toBe('custom-local'); // 无 localModelName 时回退到 id
+    expect(config.baseURL).toBeUndefined();
+    expect(config.model).toBe('custom-local');
+  });
+
+  it('custom-local 无地址时不会误连 OpenAI 官方 API', () => {
+    const config = resolveModel('custom-local', {
+      localModelName: 'test-model',
+    });
+    // 修复前：baseURL 为 '' → OpenAI SDK 默认连 api.openai.com
+    // 修复后：baseURL 为 undefined，但仍应校验 apiKey 占位符
+    expect(config.baseURL).toBeUndefined();
+    expect(config.apiKey).toBe('local-no-key');
   });
 
   it('云端模型需要 API Key', () => {

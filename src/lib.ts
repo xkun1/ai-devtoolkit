@@ -68,6 +68,9 @@ export type { ModelPreset } from './types/index.js';
 
 export { runPipeline as doc2skill } from './pipeline.js';
 
+export { startServer, WEB_UI_HTML } from './server.js';
+export type { ServerOptions } from './server.js';
+
 export {
   TEMPLATES,
   getTemplate,
