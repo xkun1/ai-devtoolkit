@@ -52,10 +52,29 @@ export async function runPipeline(
           title = result.title || title;
           meta = { format: 'pdf' };
         } catch (err: any) {
-          throw new Error(
-            'PDF 解析失败: ' + err.message + '（请确认文件是有效的 PDF 格式）',
-            { cause: err },
-          );
+          // 兼容'假 PDF'：文件名是 .pdf 但内容实际是 HTML（某些网页'另存为 PDF'产物）
+          const rawText = buffer.toString('utf-8');
+          if (/^\s*<!doctype|<html/i.test(rawText)) {
+            docType = 'html';
+            try {
+              const { extractFromHtml } =
+                await import('./loader/readability.js');
+              const result = await extractFromHtml(rawText);
+              processed = result.content;
+              title = result.title || title;
+              meta = { format: 'html-in-pdf' };
+            } catch {
+              processed = rawText;
+              meta = { format: 'html-in-pdf' };
+            }
+          } else {
+            throw new Error(
+              'PDF 解析失败: ' +
+                err.message +
+                '（请确认文件是有效的 PDF 格式）',
+              { cause: err },
+            );
+          }
         }
       } else if (/\.docx?$/.test(ext) || pl.mimeType?.includes('word')) {
         // DOCX 提取

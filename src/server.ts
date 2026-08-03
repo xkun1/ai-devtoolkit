@@ -200,7 +200,7 @@ async function handleGenerate(
     const result = await runPipeline(pipelineSource, {
       agentType: agentType || 'codex',
       llm: llmConfig,
-      name: fileName || skillName,
+      name: (fileName || skillName || '').replace(/\.[^.]+$/, '') || undefined,
       stdout: false,
       dryRun: true, // 不写文件，直接返回内容
       force: false,

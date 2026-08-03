@@ -58,4 +58,25 @@ describe('二进制文件上传（PDF/DOCX Base64）', () => {
     });
     expect(result.content).toContain('Mocked Skill');
   });
+
+  it('假 PDF（文件名 .pdf 但内容为 HTML）自动降级为 HTML 提取', async () => {
+    const fakeHtml =
+      '<!doctype html><html><head><title>Fake PDF Page</title></head>' +
+      '<body><main><h1>Real Content</h1><p>This is real content inside fake pdf. '.repeat(
+        10,
+      ) +
+      '</p></main></body></html>';
+    const result = await runPipeline('__preloaded__', {
+      agentType: 'codex',
+      llm: { apiKey: 'test', model: 'mock-model' },
+      dryRun: true,
+      preloaded: {
+        content: '',
+        binaryContent: Buffer.from(fakeHtml).toString('base64'),
+        mimeType: 'application/pdf',
+        fileName: 'fake-document.pdf',
+      },
+    });
+    expect(result.content).toContain('Mocked Skill');
+  });
 });
