@@ -422,36 +422,6 @@ npm run build
 npm test
 ```
 
-## 🗺️ Roadmap
-
-- [x] Web URL text extraction
-- [x] PDF document parsing
-- [x] Codex / Cursor / Claude output formats
-- [x] DeepSeek / OpenAI / Volcengine Ark presets
-- [x] Multi-document merge (fuse multiple sources into one skill pack)
-- [x] Codex SKILL.md frontmatter auto-injection
-- [x] LLM call retry mechanism (exponential backoff)
-- [x] stdout mode (pipe integration)
-- [x] Custom skill names
-- [x] CI (GitHub Actions, multi-Node version matrix)
-- [x] Interactive wizard (run `npx ai-devtoolkit` with no args for inquirer-guided setup)
-- [x] Programmatic API (usable as a Node.js library)
-- [x] dry-run preview mode
-- [x] Overwrite protection (--force)
-- [x] Config file (.devtoolkit.json project-level defaults)
-- [x] Local HTML file support
-- [x] Documentation site crawling (--crawl auto-discovers sub-pages)
-- [x] Token estimation and cost hints
-- [x] Watch mode (auto-refresh on document change)
-- [x] Skill pack template marketplace (6 built-in templates: api-doc / coding-guide / cheatsheet, etc.)
-- [x] Incremental updates (--update with full generation fingerprint + real-artifact verification)
-- [x] Web UI interface (--ui browser-based visual interaction)
-- [x] Long document lossless chunking, hierarchical merge, and source coverage stats
-- [x] Codex / Cursor / Claude current recommended directory structures (--legacy to revert)
-- [x] Full generation fingerprint, real-artifact cache reuse, and atomic writes
-- [x] Static validation and quality scoring of generated results
-- [x] MCP Server mode (--mcp for AI Agent native tool integration)
-- [x] Batch directory processing (auto-scan dirs, --merge to combine)
 
 ## 📄 License
 
