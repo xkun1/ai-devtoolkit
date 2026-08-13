@@ -41,7 +41,7 @@
 
 ### 修复
 
-- 修复 npm 根入口误指向 CLI，恢复 `import { devtoolkit } from 'devtoolkit'`
+- 修复 npm 根入口误指向 CLI，恢复 `import { devtoolkit } from 'ai-devtoolkit'`
 - 恢复 `-w / --watch` 参数并增加端口、爬取参数和模板校验
 - 统一 `--local-model`、`OLLAMA_MODEL`、`LMSTUDIO_MODEL` 与 `LOCAL_MODEL_NAME`
 - Web UI 改为仅监听回环地址，禁止读取服务端本地路径
@@ -110,7 +110,7 @@
 
 ### 新功能
 
-- **编程式 API**：可作为 Node.js 库使用（`import { devtoolkit } from 'devtoolkit'`），双入口构建（CLI + lib）
+- **编程式 API**：可作为 Node.js 库使用（`import { devtoolkit } from 'ai-devtoolkit'`），双入口构建（CLI + lib）
 - **dry-run 预览模式**：`--dry-run` 只查看生成结果不写文件
 - **覆盖保护**：文件已存在时拒绝覆盖，`--force` 强制覆盖
 - **配置文件支持**：`.devtoolkit.json` 项目级默认值，CLI 参数优先覆盖
@@ -127,7 +127,7 @@
 
 ### 新功能
 
-- **交互式向导**：无参数运行 `npx devtoolkit` 进入引导问答，逐步选择来源/类型/模型
+- **交互式向导**：无参数运行 `npx ai-devtoolkit` 进入引导问答，逐步选择来源/类型/模型
 - **多文档合并**：支持传入多个来源，合并提炼为一个技能包
 - **stdout 模式**：`--stdout` 输出到标准输出，便于管道集成
 - **自定义技能名**：`--name` 指定 Codex SKILL.md frontmatter 中的技能名

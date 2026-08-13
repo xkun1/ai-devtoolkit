@@ -29,35 +29,35 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 
 ```bash
 # Zero-install, run directly
-npx devtoolkit https://docs.example.com/api --type codex
+npx ai-devtoolkit https://docs.example.com/api --type codex
 
 # Generate Cursor rules from a local PDF
-npx devtoolkit ./sdk-guide.pdf --type cursor
+npx ai-devtoolkit ./sdk-guide.pdf --type cursor
 
 # Generate Claude project memory from Markdown
-npx devtoolkit ./CONTRIBUTING.md --type claude
+npx ai-devtoolkit ./CONTRIBUTING.md --type claude
 
 # Merge multiple documents into one skill pack
-npx devtoolkit ./api.md ./sdk.md ./errors.md --type codex
+npx ai-devtoolkit ./api.md ./sdk.md ./errors.md --type codex
 
 # Custom skill name
-npx devtoolkit ./api.md --name my-api-spec
+npx ai-devtoolkit ./api.md --name my-api-spec
 
 # stdout mode: pipe directly to other tools
-npx devtoolkit ./api.md --stdout >> ./SKILL.md
+npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # No arguments → interactive wizard
-npx devtoolkit
+npx ai-devtoolkit
 ```
 
 ### 🌐 Web UI Mode
 
 ```bash
 # Launch local web interface (auto-opens browser)
-npx devtoolkit --ui
+npx ai-devtoolkit --ui
 
 # Custom port
-npx devtoolkit --ui --port 8080
+npx ai-devtoolkit --ui --port 8080
 ```
 
 Paste a URL, choose a template, preview results in real time, and download a complete ZIP skill pack with one click. Codex `references/` and Claude `.claude/rules/` multi-file directories are fully preserved.
@@ -70,7 +70,7 @@ Make devtoolkit a native tool for AI Agents — via the MCP protocol, Agents can
 
 ```bash
 # Start MCP Server (stdio JSON-RPC)
-npx devtoolkit --mcp
+npx ai-devtoolkit --mcp
 ```
 
 **Claude Desktop config** (`claude_desktop_config.json`):
@@ -175,25 +175,25 @@ Local models require no API Key — specify model info via environment variables
 
 ```bash
 # Crawl an entire documentation site (auto-discover sub-pages)
-npx devtoolkit https://docs.example.com --crawl --crawl-depth 2
+npx ai-devtoolkit https://docs.example.com --crawl --crawl-depth 2
 
 # Batch process an entire directory (one skill pack per file)
-npx devtoolkit ./docs/ --type codex
+npx ai-devtoolkit ./docs/ --type codex
 
 # Directory merge mode: combine all files into one skill pack
-npx devtoolkit ./docs/ --type codex --merge
+npx ai-devtoolkit ./docs/ --type codex --merge
 
 # Control directory scan depth
-npx devtoolkit ./docs/ --type codex --dir-depth 3
+npx ai-devtoolkit ./docs/ --type codex --dir-depth 3
 
 # Watch mode: auto-refresh skill pack on document change
-npx devtoolkit ./api.md --watch
+npx ai-devtoolkit ./api.md --watch
 
 # Preview mode: see results without writing files
-npx devtoolkit ./api.md --dry-run
+npx ai-devtoolkit ./api.md --dry-run
 
 # Legacy workflow: single-file output (SKILL.md / .cursorrules / CLAUDE.md)
-npx devtoolkit ./api.md --type cursor --legacy
+npx ai-devtoolkit ./api.md --type cursor --legacy
 ```
 
 Inputs exceeding ~24K characters are semantically chunked by Markdown structure, then processed through "per-chunk extraction → hierarchical merge → final synthesis." No silent mid-document truncation. Codex overflow automatically sinks to `references/`; Claude overflow splits into `.claude/rules/`.
@@ -245,10 +245,10 @@ devtoolkit is compatible with all **OpenAI-protocol** APIs. Built-in model prese
 ```bash
 # Option 1: Environment variable (recommended)
 export DEEPSEEK_API_KEY="sk-xxxxx"
-npx devtoolkit https://docs.example.com/api
+npx ai-devtoolkit https://docs.example.com/api
 
 # Option 2: CLI args (or any OpenAI-compatible API)
-npx devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
+npx ai-devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
 ```
 
 ### 🦙 Local Models (Free / Offline)
@@ -257,16 +257,16 @@ Run entirely locally with Ollama or LM Studio — no API Key required:
 
 ```bash
 # Ollama (install ollama and pull a model first)
-npx devtoolkit ./api.md --model ollama-local
+npx ai-devtoolkit ./api.md --model ollama-local
 
 # Custom Ollama model name (via environment variable)
-OLLAMA_MODEL=qwen2.5:7b npx devtoolkit ./api.md --model ollama-local
+OLLAMA_MODEL=qwen2.5:7b npx ai-devtoolkit ./api.md --model ollama-local
 
 # Explicitly specify the local model name via CLI arg
-npx devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
+npx ai-devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
 
 # LM Studio
-npx devtoolkit ./api.md --model lmstudio-local
+npx ai-devtoolkit ./api.md --model lmstudio-local
 ```
 
 See `.env.example` for environment variable configuration.
@@ -377,7 +377,7 @@ Test coverage:
 Beyond the CLI, devtoolkit can be used as a Node.js library:
 
 ```typescript
-import { devtoolkit } from 'devtoolkit';
+import { devtoolkit } from 'ai-devtoolkit';
 
 const result = await devtoolkit('https://docs.example.com/api', {
   agentType: 'codex',
@@ -397,7 +397,7 @@ console.log(result.stats);         // Chunking, LLM calls, and cache stats
 Also supports load-only without extraction:
 
 ```typescript
-import { loadDocument } from 'devtoolkit';
+import { loadDocument } from 'ai-devtoolkit';
 
 const doc = await loadDocument('https://example.com');
 console.log(doc.content); // Extracted Markdown
@@ -434,7 +434,7 @@ npm test
 - [x] stdout mode (pipe integration)
 - [x] Custom skill names
 - [x] CI (GitHub Actions, multi-Node version matrix)
-- [x] Interactive wizard (run `npx devtoolkit` with no args for inquirer-guided setup)
+- [x] Interactive wizard (run `npx ai-devtoolkit` with no args for inquirer-guided setup)
 - [x] Programmatic API (usable as a Node.js library)
 - [x] dry-run preview mode
 - [x] Overwrite protection (--force)

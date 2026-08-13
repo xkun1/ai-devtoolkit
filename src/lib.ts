@@ -3,7 +3,7 @@
  *
  * 用法：
  * ```ts
- * import { devtoolkit } from 'devtoolkit';
+ * import { devtoolkit } from 'ai-devtoolkit';
  *
  * const result = await devtoolkit('https://docs.example.com/api', {
  *   agentType: 'codex',

@@ -1,5 +1,5 @@
 {
-  "name": "devtoolkit",
+  "name": "ai-devtoolkit",
   "version": "0.7.0",
   "description": "🛠️ 开发者工具箱：AI 技能包生成 · 代码搜索 · 环境迁移（Cursor / Codex / Claude）",
   "main": "dist/index.js",

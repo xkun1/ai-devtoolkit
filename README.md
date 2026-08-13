@@ -29,25 +29,25 @@
 
 ```bash
 # 零安装直接用
-npx devtoolkit https://docs.example.com/api --type codex
+npx ai-devtoolkit https://docs.example.com/api --type codex
 
 # 从本地 PDF 生成 Cursor 规则
-npx devtoolkit ./sdk-guide.pdf --type cursor
+npx ai-devtoolkit ./sdk-guide.pdf --type cursor
 
 # 从 Markdown 生成 Claude 项目记忆
-npx devtoolkit ./CONTRIBUTING.md --type claude
+npx ai-devtoolkit ./CONTRIBUTING.md --type claude
 
 # 多文档合并为一个技能包
-npx devtoolkit ./api.md ./sdk.md ./errors.md --type codex
+npx ai-devtoolkit ./api.md ./sdk.md ./errors.md --type codex
 
 # 自定义技能名
-npx devtoolkit ./api.md --name my-api-spec
+npx ai-devtoolkit ./api.md --name my-api-spec
 
 # stdout 模式：直接管道给其他工具
-npx devtoolkit ./api.md --stdout >> ./SKILL.md
+npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # 无参数 → 交互式向导
-npx devtoolkit
+npx ai-devtoolkit
 ```
 
 ### 🔍 代码搜索模式（不用打开 IDEA 了！）
@@ -97,16 +97,16 @@ devtoolkit --scan-code --search "config" /path/to/project
 
 ```bash
 # 导出当前环境配置
-npx devtoolkit --env-export
+npx ai-devtoolkit --env-export
 
 # 导出到指定目录
-npx devtoolkit --env-export /path/to/output-dir
+npx ai-devtoolkit --env-export /path/to/output-dir
 
 # 预览恢复内容（dry-run，不实际执行）
-npx devtoolkit --env-import devtoolkit-env.json
+npx ai-devtoolkit --env-import devtoolkit-env.json
 
 # 实际执行恢复
-npx devtoolkit --env-import devtoolkit-env.json --execute
+npx ai-devtoolkit --env-import devtoolkit-env.json --execute
 ```
 
 **生成的文件**：
@@ -136,10 +136,10 @@ npx devtoolkit --env-import devtoolkit-env.json --execute
 
 ```bash
 # 启动本地 Web 界面（自动打开浏览器）
-npx devtoolkit --ui
+npx ai-devtoolkit --ui
 
 # 自定义端口
-npx devtoolkit --ui --port 8080
+npx ai-devtoolkit --ui --port 8080
 ```
 
 在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；Codex `references/` 和 Claude `.claude/rules/` 等多文件目录会完整保留。
@@ -155,7 +155,7 @@ Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传�
 
 ```bash
 # 启动 MCP Server（stdio JSON-RPC）
-npx devtoolkit --mcp
+npx ai-devtoolkit --mcp
 ```
 
 **Claude Desktop 配置**（`claude_desktop_config.json`）：
@@ -262,25 +262,25 @@ MCP Server 提供 4 个工具：
 
 ```bash
 # 爬取整个文档站点（自动发现子页面）
-npx devtoolkit https://docs.example.com --crawl --crawl-depth 2
+npx ai-devtoolkit https://docs.example.com --crawl --crawl-depth 2
 
 # 批量处理整个目录（每个文件生成独立技能包）
-npx devtoolkit ./docs/ --type codex
+npx ai-devtoolkit ./docs/ --type codex
 
 # 目录合并模式：所有文件合并为一个技能包
-npx devtoolkit ./docs/ --type codex --merge
+npx ai-devtoolkit ./docs/ --type codex --merge
 
 # 控制目录扫描深度
-npx devtoolkit ./docs/ --type codex --dir-depth 3
+npx ai-devtoolkit ./docs/ --type codex --dir-depth 3
 
 # 监控模式：文档变更后自动刷新技能包
-npx devtoolkit ./api.md --watch
+npx ai-devtoolkit ./api.md --watch
 
 # 预览模式：只看结果不写文件
-npx devtoolkit ./api.md --dry-run
+npx ai-devtoolkit ./api.md --dry-run
 
 # 兼容旧工作流：生成 SKILL.md / .cursorrules / CLAUDE.md 单文件
-npx devtoolkit ./api.md --type cursor --legacy
+npx ai-devtoolkit ./api.md --type cursor --legacy
 ```
 
 超过约 2.4 万字符的输入会按 Markdown 语义完整分块，并执行“逐块抽取 → 分层归并 → 最终合成”；不会再静默截掉文档中间内容。Codex 超长结果自动下沉到 `references/`，Claude 超长结果自动拆到 `.claude/rules/`。
@@ -332,10 +332,10 @@ devtoolkit 兼容所有 **OpenAI 协议**的 API。内置常用模型预设：
 ```bash
 # 方式一：环境变量（推荐）
 export DEEPSEEK_API_KEY="sk-xxxxx"
-npx devtoolkit https://docs.example.com/api
+npx ai-devtoolkit https://docs.example.com/api
 
 # 方式二：参数指定（或任何 OpenAI 兼容 API）
-npx devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
+npx ai-devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
 ```
 
 ### 🦙 本地模型（免费/离线）
@@ -344,16 +344,16 @@ npx devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model
 
 ```bash
 # Ollama（需先安装 ollama 并拉取模型）
-npx devtoolkit ./api.md --model ollama-local
+npx ai-devtoolkit ./api.md --model ollama-local
 
 # 自定义 Ollama 模型名（通过环境变量）
-OLLAMA_MODEL=qwen2.5:7b npx devtoolkit ./api.md --model ollama-local
+OLLAMA_MODEL=qwen2.5:7b npx ai-devtoolkit ./api.md --model ollama-local
 
 # 也可通过参数明确指定本地服务中的真实模型名
-npx devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
+npx ai-devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
 
 # LM Studio
-npx devtoolkit ./api.md --model lmstudio-local
+npx ai-devtoolkit ./api.md --model lmstudio-local
 ```
 
 参考 `.env.example` 配置环境变量。
@@ -464,7 +464,7 @@ npm run build
 除了 CLI，devtoolkit 也可作为 Node.js 库使用：
 
 ```typescript
-import { devtoolkit } from 'devtoolkit';
+import { devtoolkit } from 'ai-devtoolkit';
 
 const result = await devtoolkit('https://docs.example.com/api', {
   agentType: 'codex',
@@ -484,7 +484,7 @@ console.log(result.stats);         // 分块、LLM 调用与缓存统计
 也支持只加载不提炼：
 
 ```typescript
-import { loadDocument } from 'devtoolkit';
+import { loadDocument } from 'ai-devtoolkit';
 
 const doc = await loadDocument('https://example.com');
 console.log(doc.content); // 提取的 Markdown
@@ -521,7 +521,7 @@ npm test
 - [x] stdout 模式（管道集成）
 - [x] 自定义技能名
 - [x] CI（GitHub Actions，多 Node 版本矩阵）
-- [x] 交互式向导（无参数运行 `npx devtoolkit` 进入 inquirer 引导）
+- [x] 交互式向导（无参数运行 `npx ai-devtoolkit` 进入 inquirer 引导）
 - [x] 编程式 API（可作为 Node.js 库 import）
 - [x] dry-run 预览模式
 - [x] 覆盖保护（--force）
