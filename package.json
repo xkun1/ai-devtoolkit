@@ -75,13 +75,13 @@
   ],
   "author": "kun",
   "license": "MIT",
-  "homepage": "https://github.com/xkun1/devtoolkit",
+  "homepage": "https://github.com/xkun1/ai-devtoolkit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xkun1/devtoolkit.git"
+    "url": "git+https://github.com/xkun1/ai-devtoolkit.git"
   },
   "bugs": {
-    "url": "https://github.com/xkun1/devtoolkit/issues"
+    "url": "https://github.com/xkun1/ai-devtoolkit/issues"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
