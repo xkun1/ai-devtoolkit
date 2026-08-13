@@ -509,38 +509,6 @@ npm run build
 npm test
 ```
 
-## 🗺️ 路线图
-
-- [x] 网页 URL 正文提取
-- [x] PDF 文档解析
-- [x] Codex / Cursor / Claude 三种输出
-- [x] DeepSeek / OpenAI / 火山方舟 预设
-- [x] 多文档合并（一个技能包融合多个来源）
-- [x] Codex SKILL.md frontmatter 自动注入
-- [x] LLM 调用重试机制（指数退避）
-- [x] stdout 模式（管道集成）
-- [x] 自定义技能名
-- [x] CI（GitHub Actions，多 Node 版本矩阵）
-- [x] 交互式向导（无参数运行 `npx ai-devtoolkit` 进入 inquirer 引导）
-- [x] 编程式 API（可作为 Node.js 库 import）
-- [x] dry-run 预览模式
-- [x] 覆盖保护（--force）
-- [x] 配置文件（.devtoolkit.json 项目级默认值）
-- [x] 本地 HTML 文件支持
-- [x] 文档站点爬取（--crawl 自动发现子页面）
-- [x] Token 预估与费用提示
-- [x] watch 模式（文档变更自动刷新）
-- [x] 技能包模板市场（6 套内置模板：api-doc / coding-guide / cheatsheet 等）
-- [x] 增量更新（--update 完整生成指纹 + 真实产物校验）
-- [x] Web UI 界面（--ui 浏览器可视化交互）
-- [x] 长文档无损分块、分层归并与来源覆盖统计
-- [x] Codex / Cursor / Claude 当前推荐目录结构（可用 --legacy 回退）
-- [x] 完整生成指纹、真实产物缓存复用与原子写入
-- [x] 生成结果静态校验与质量评分
-- [x] MCP Server 模式（--mcp 让 AI Agent 原生调用）
-- [x] 批量目录处理（自动扫描目录，--merge 合并为一个）
-- [x] 🔍 代码搜索（`--scan-code` 扫描索引 + `--search` 自然语言搜索 + LLM 智能解释）
-
 ## 📄 License
 
 MIT License © 2026 [kun](https://github.com/xkun1)
