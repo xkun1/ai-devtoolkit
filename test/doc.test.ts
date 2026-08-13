@@ -3,9 +3,16 @@ import { runPipeline } from '../src/pipeline.js';
 
 // mock LLM 避免真实调用
 vi.mock('../src/transform/index.js', () => ({
-  transformToSkill: vi
-    .fn()
-    .mockResolvedValue('# Mocked Skill from binary upload.'),
+  transformDocumentToSkill: vi.fn().mockResolvedValue({
+    content: '# Mocked Skill from binary upload.',
+    stats: {
+      sourceChars: 100,
+      processedChars: 100,
+      sourceChunks: 1,
+      llmCalls: 1,
+      reductionPasses: 0,
+    },
+  }),
 }));
 
 describe('二进制文件上传（PDF/DOCX Base64）', () => {

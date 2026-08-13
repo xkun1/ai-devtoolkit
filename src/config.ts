@@ -5,7 +5,7 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentType } from './types/index.js';
+import type { AgentType, OutputMode } from './types/index.js';
 
 export interface Doc2SkillConfig {
   /** 默认 Agent 类型 */
@@ -24,6 +24,8 @@ export interface Doc2SkillConfig {
   verbose?: boolean;
   /** 模板 ID */
   template?: string;
+  /** 输出结构：modern（默认）或 legacy。 */
+  outputMode?: OutputMode;
 }
 
 const CONFIG_FILES = ['.doc2skill.json', '.doc2skillrc', '.doc2skillrc.json'];
@@ -71,6 +73,9 @@ export async function loadConfig(
 
 /** 校验配置对象，忽略不认识的字段 */
 function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`配置文件 ${filepath} 顶层必须是 JSON 对象`);
+  }
   const config: Doc2SkillConfig = {};
   const validKeys: (keyof Doc2SkillConfig)[] = [
     'type',
@@ -81,6 +86,7 @@ function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
     'apiKey',
     'verbose',
     'template',
+    'outputMode',
   ];
 
   for (const key of validKeys) {
@@ -93,6 +99,37 @@ function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
   if (config.type && !['codex', 'cursor', 'claude'].includes(config.type)) {
     throw new Error(
       `配置文件 ${filepath} 中 type 无效: ${config.type}（可选: codex, cursor, claude）`,
+    );
+  }
+
+  const stringKeys: (keyof Doc2SkillConfig)[] = [
+    'out',
+    'model',
+    'name',
+    'baseUrl',
+    'apiKey',
+    'template',
+  ];
+  for (const key of stringKeys) {
+    if (config[key] !== undefined && typeof config[key] !== 'string') {
+      throw new Error(`配置文件 ${filepath} 中 ${key} 必须是字符串`);
+    }
+  }
+  if (config.verbose !== undefined && typeof config.verbose !== 'boolean') {
+    throw new Error(`配置文件 ${filepath} 中 verbose 必须是布尔值`);
+  }
+  if (
+    config.outputMode !== undefined &&
+    typeof config.outputMode !== 'string'
+  ) {
+    throw new Error(`配置文件 ${filepath} 中 outputMode 必须是字符串`);
+  }
+  if (
+    config.outputMode !== undefined &&
+    !['modern', 'legacy'].includes(config.outputMode)
+  ) {
+    throw new Error(
+      `配置文件 ${filepath} 中 outputMode 无效（可选: modern, legacy）`,
     );
   }
 

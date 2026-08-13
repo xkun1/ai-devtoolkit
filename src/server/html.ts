@@ -121,14 +121,14 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   <header>
     <h1>📄 → 🤖 <span>doc2skill</span></h1>
     <p>将任意网页或文档，1秒转化为 AI Agent 技能包</p>
-    <p style='font-size:11px;color:var(--text-muted);margin-top:4px'>v0.6.2 · 支持 PDF/DOCX/MD/TXT 上传</p>
+    <p style='font-size:11px;color:var(--text-muted);margin-top:4px'>支持 PDF/DOCX/MD/TXT 上传</p>
   </header>
 
   <div class="card">
-    <!-- 文档来源：URL/路径 输入 -->
+    <!-- 文档来源：公网 URL 输入 -->
     <div class="form-group">
-      <label>📄 文档来源（URL 或本地文件路径）</label>
-      <input type="text" id="source" placeholder="https://docs.example.com/api  或  ./guide.pdf">
+      <label>📄 文档来源（HTTP(S) 公网 URL）</label>
+      <input type="text" id="source" placeholder="https://docs.example.com/api">
     </div>
 
     <!-- 文件上传区 -->
@@ -147,9 +147,9 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
       <div class="form-group">
         <label>🎯 目标 Agent</label>
         <select id="agentType">
-          <option value="codex">🤖 Codex → SKILL.md</option>
-          <option value="cursor">🎯 Cursor → .cursorrules</option>
-          <option value="claude">🧠 Claude → CLAUDE.md</option>
+          <option value="codex">🤖 Codex → Skills 目录</option>
+          <option value="cursor">🎯 Cursor → .cursor/rules/*.mdc</option>
+          <option value="claude">🧠 Claude → CLAUDE.md / rules</option>
         </select>
       </div>
       <div class="form-group">
@@ -177,7 +177,7 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
           <input type="text" id="localBaseUrl" placeholder="http://localhost:11434" value="http://localhost:11434">
         </div>
         <div class="form-group" style="flex:0 0 auto; display:flex; align-items:flex-end">
-          <button class="btn btn-secondary btn-sm" id="detectBtn" onclick="detectLocalModels()">
+          <button class="btn btn-secondary btn-sm" id="detectBtn">
             🔍 探测模型
           </button>
         </div>
@@ -191,10 +191,10 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
     </div>
 
     <div class="actions">
-      <button class="btn btn-primary" id="generateBtn" onclick="generate()">
+      <button class="btn btn-primary" id="generateBtn">
         ⚡ 生成技能包
       </button>
-      <button class="btn btn-secondary" id="clearBtn" onclick="clearAll()">
+      <button class="btn btn-secondary" id="clearBtn">
         清空
       </button>
     </div>
@@ -208,8 +208,8 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
         <h3>📋 生成结果</h3>
         <div>
           <span class="preview-meta" id="previewMeta"></span>
-          <button class="btn btn-secondary btn-sm" style="margin-left:12px" onclick="download()">⬇ 下载</button>
-          <button class="btn btn-secondary btn-sm" onclick="copyResult()">📋 复制</button>
+          <button class="btn btn-secondary btn-sm" id="downloadBtn" style="margin-left:12px">⬇ 下载</button>
+          <button class="btn btn-secondary btn-sm" id="copyBtn">📋 复制</button>
         </div>
       </div>
       <pre class="preview" id="preview"></pre>
@@ -223,11 +223,22 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   </footer>
 </div>
 
-<script>
+<script nonce="__DOC2SKILL_NONCE__">
 let lastContent = '';
+let lastSuggestedPath = '';
+let lastZip = null;
 let lastAgentType = 'codex';
 let uploadedFile = null; // { name, content, isBinary, mimeType }
-const FILENAMES = { codex: 'SKILL.md', cursor: '.cursorrules', claude: 'CLAUDE.md' };
+const FILENAMES = { codex: 'SKILL.md', cursor: 'project-rule.mdc', claude: 'CLAUDE.md' };
+const API_HEADERS = {
+  'X-Doc2Skill-Token': document.querySelector('meta[name="doc2skill-session"]')?.content || '',
+};
+
+document.getElementById('detectBtn').addEventListener('click', detectLocalModels);
+document.getElementById('generateBtn').addEventListener('click', generate);
+document.getElementById('clearBtn').addEventListener('click', clearAll);
+document.getElementById('downloadBtn').addEventListener('click', download);
+document.getElementById('copyBtn').addEventListener('click', copyResult);
 
 // 初始化：加载模板和模型列表
 async function init() {
@@ -337,7 +348,8 @@ function showFileInfo(file) {
   var lowerName2 = file.name.toLowerCase();
   var icon = lowerName2.endsWith('.pdf') ? '📕' : (lowerName2.endsWith('.docx') || lowerName2.endsWith('.doc')) ? '📘' : '📎';
   var sizeKB = (file.size / 1024).toFixed(1);
-  info.innerHTML = icon + ' ' + file.name + ' (' + sizeKB + ' KB) <span class="remove" onclick="removeFile()">✕</span>';
+  info.innerHTML = icon + ' ' + file.name + ' (' + sizeKB + ' KB) <button type="button" class="remove" id="removeFileBtn" aria-label="移除文件">✕</button>';
+  document.getElementById('removeFileBtn').addEventListener('click', removeFile);
   // 清空 URL 输入，避免冲突
   document.getElementById('source').value = '';
   // 锁定上传区：已上传文件，不能再上传
@@ -395,7 +407,7 @@ async function detectLocalModels() {
   try {
     const res = await fetch('/api/local-models', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...API_HEADERS },
       body: JSON.stringify({ baseUrl }),
     });
     const data = await res.json();
@@ -461,7 +473,7 @@ async function generate() {
     const localBaseUrl = document.getElementById('localBaseUrl').value.trim();
     const res = await fetch('/api/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...API_HEADERS },
       body: JSON.stringify({
         source: source || undefined,
         fileContent: uploadedFile && !uploadedFile.isBinary ? uploadedFile.content : undefined,
@@ -477,12 +489,20 @@ async function generate() {
     if (!res.ok) throw new Error(data.error || '生成失败');
 
     lastContent = data.content;
+    lastSuggestedPath = data.suggestedPath || '';
+    lastZip = data.zip || null;
     lastAgentType = agentType;
     document.getElementById('preview').textContent = data.content;
     const badge = '<span class="badge badge-' + agentType + '">' + agentType.toUpperCase() + '</span>';
-    document.getElementById('previewMeta').innerHTML = badge + ' ' + data.size + ' 字符';
+    const artifactCount = data.artifacts ? data.artifacts.length : 1;
+    const score = data.quality ? ' · 质量 ' + data.quality.score + '/100' : '';
+    document.getElementById('previewMeta').innerHTML = badge + ' ' + data.size + ' 字符 · ' + artifactCount + ' 个文件' + score;
+    document.getElementById('downloadBtn').textContent = '⬇ 下载完整 ZIP';
     document.getElementById('previewWrap').classList.remove('hidden');
-    showStatus('success', '✅ 生成成功！点击「下载」保存文件');
+    showStatus(
+      'success',
+      '✅ 生成成功！点击「下载完整 ZIP」保存全部文件',
+    );
   } catch (e) {
     showStatus('error', '❌ ' + e.message);
   } finally {
@@ -493,11 +513,39 @@ async function generate() {
 
 function download() {
   if (!lastContent) return;
+  if (lastZip && lastZip.id) {
+    downloadZip(lastZip);
+    return;
+  }
   const blob = new Blob([lastContent], { type: 'text/markdown;charset=utf-8' });
+  triggerDownload(
+    blob,
+    lastSuggestedPath.split('/').pop() || FILENAMES[lastAgentType] || 'skill.md',
+  );
+}
+
+async function downloadZip(zip) {
+  try {
+    showStatus('info', '⏳ 正在准备完整 ZIP...');
+    const res = await fetch('/api/download/' + encodeURIComponent(zip.id), {
+      headers: API_HEADERS,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'ZIP 下载失败');
+    }
+    triggerDownload(await res.blob(), zip.filename || 'doc2skill-package.zip');
+    showStatus('success', '✅ 完整 ZIP 已下载');
+  } catch (e) {
+    showStatus('error', '❌ ' + e.message);
+  }
+}
+
+function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = FILENAMES[lastAgentType] || 'skill.md';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -523,10 +571,12 @@ function clearAll() {
   document.getElementById('status').className = 'status';
   removeFile();
   lastContent = '';
+  lastSuggestedPath = '';
+  lastZip = null;
+  document.getElementById('downloadBtn').textContent = '⬇ 下载';
 }
 
 init();
 </script>
 </body>
-</html>\`;
-`;
+</html>`;

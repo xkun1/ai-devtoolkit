@@ -8,6 +8,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
+import { callLLM } from '../src/transform/llm.js';
 
 // Mock LLM 调用
 vi.mock('../src/transform/llm.js', () => ({
@@ -275,5 +276,82 @@ describe('Pipeline E2E (mocked LLM)', () => {
     // 文件被覆盖
     const written = await readFile(outPath, 'utf-8');
     expect(written).toContain('Mocked Skill');
+  });
+
+  it('未指定输出路径时使用现代 Codex 技能目录', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-modern-'));
+    const mdPath = join(dir, 'modern.md');
+    await writeFile(
+      mdPath,
+      '# Modern Skill\n\nDocumentation with enough content to generate a modern Codex skill directory.',
+    );
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      const result = await runPipeline(mdPath, {
+        agentType: 'codex',
+        force: true,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      });
+      expect(result.suggestedPath).toBe('.agents/skills/modern-skill/SKILL.md');
+      expect(
+        await readFile(join(dir, result.suggestedPath), 'utf-8'),
+      ).toContain('name: modern-skill');
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('增量命中返回真实产物且不再次调用 LLM', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cache-'));
+    const mdPath = join(dir, 'cached.md');
+    const outPath = join(dir, 'SKILL.md');
+    await writeFile(
+      mdPath,
+      '# Cached Skill\n\nDocumentation with enough stable content for incremental cache verification.',
+    );
+    vi.mocked(callLLM).mockClear();
+    const options = {
+      agentType: 'codex' as const,
+      outputPath: outPath,
+      force: false,
+      incremental: true,
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+    };
+    const first = await runPipeline(mdPath, options);
+    const callsAfterFirst = vi.mocked(callLLM).mock.calls.length;
+    const second = await runPipeline(mdPath, options);
+
+    expect(second.content).toBe(first.content);
+    expect(second.stats?.cacheHit).toBe(true);
+    expect(vi.mocked(callLLM)).toHaveBeenCalledTimes(callsAfterFirst);
+  });
+
+  it('增量模式下模型参数变化会重新调用 LLM', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cache-model-'));
+    const mdPath = join(dir, 'cached.md');
+    const outPath = join(dir, 'SKILL.md');
+    await writeFile(
+      mdPath,
+      '# Fingerprint Skill\n\nDocumentation with enough stable content for fingerprint verification.',
+    );
+    vi.mocked(callLLM).mockClear();
+    await runPipeline(mdPath, {
+      agentType: 'codex',
+      outputPath: outPath,
+      incremental: true,
+      llm: { apiKey: 'mock-key', model: 'model-a' },
+    });
+    const callsAfterFirst = vi.mocked(callLLM).mock.calls.length;
+    await runPipeline(mdPath, {
+      agentType: 'codex',
+      outputPath: outPath,
+      incremental: true,
+      force: true,
+      llm: { apiKey: 'mock-key', model: 'model-b' },
+    });
+    expect(vi.mocked(callLLM).mock.calls.length).toBeGreaterThan(
+      callsAfterFirst,
+    );
   });
 });

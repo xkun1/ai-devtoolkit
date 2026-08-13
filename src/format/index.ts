@@ -1,4 +1,5 @@
 import type { AgentType, SkillResult } from '../types/index.js';
+export { buildArtifacts, resolvePrimaryPath } from './artifacts.js';
 
 /** 默认输出路径 */
 export const DEFAULT_OUTPUT_PATHS: Record<AgentType, string> = {

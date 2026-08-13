@@ -10,7 +10,7 @@ cd doc2skill
 npm install
 ```
 
-需要 Node.js >= 18。
+需要 Node.js >= 20.19。
 
 ### 📋 开发工作流
 

@@ -27,6 +27,11 @@ export function slugify(text: string): string {
   return slug || DEFAULT_SKILL_NAME;
 }
 
+/** 将显式输入也规范化为 Codex 可移植的技能名。 */
+export function normalizeSkillName(text: string): string {
+  return slugify(text);
+}
+
 /** 清理行内 markdown 标记：加粗/斜体/代码/链接/删除线符号 */
 function stripInlineMarkdown(text: string): string {
   return text
@@ -75,7 +80,9 @@ export function injectSkillFrontmatter(
   if (hasFrontmatter(content)) return content;
 
   const name =
-    input.name ?? slugify(input.title ?? extractDescription(content, ''));
+    input.name !== undefined
+      ? normalizeSkillName(input.name)
+      : slugify(input.title ?? extractDescription(content, ''));
   const description =
     input.description ?? extractDescription(content, input.title ?? '');
 

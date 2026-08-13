@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   slugify,
+  normalizeSkillName,
   extractDescription,
   hasFrontmatter,
   injectSkillFrontmatter,
@@ -26,6 +27,16 @@ describe('slugify', () => {
 
   it('空字符串回退到默认值', () => {
     expect(slugify('')).toBe('doc-skill');
+  });
+});
+
+describe('normalizeSkillName', () => {
+  it('显式技能名也会规范化', () => {
+    expect(normalizeSkillName('My Skill_Name')).toBe('my-skill-name');
+  });
+
+  it('危险或不可移植名称不会原样进入 frontmatter', () => {
+    expect(normalizeSkillName('../Bad: Skill')).toBe('bad-skill');
   });
 });
 

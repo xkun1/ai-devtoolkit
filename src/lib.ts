@@ -14,10 +14,15 @@
  */
 export type {
   AgentType,
+  OutputMode,
   SourceType,
   LoadedDocument,
   LLMConfig,
   SkillResult,
+  GeneratedArtifact,
+  GenerationStats,
+  QualityIssue,
+  QualityReport,
   PipelineOptions,
 } from './types/index.js';
 
@@ -33,16 +38,27 @@ export {
   loadFromHtml,
 } from './loader/index.js';
 
-export { transformToSkill, buildPrompt, callLLM } from './transform/index.js';
+export {
+  transformToSkill,
+  transformDocumentToSkill,
+  buildPrompt,
+  callLLM,
+  splitDocument,
+  DEFAULT_CHUNK_CHARS,
+} from './transform/index.js';
+export type { TransformOptions, TransformResult } from './transform/index.js';
 
 export {
   formatResult,
   isValidAgentType,
   DEFAULT_OUTPUT_PATHS,
+  buildArtifacts,
+  resolvePrimaryPath,
 } from './format/index.js';
 
 export {
   slugify,
+  normalizeSkillName,
   extractDescription,
   hasFrontmatter,
   injectSkillFrontmatter,
@@ -85,6 +101,24 @@ export {
   getCachePath,
   needsUpdate,
   markGenerated,
+  buildGenerationFingerprint,
+  createCacheKey,
+  loadCachedResult,
+  saveGeneratedResult,
 } from './utils/hash.js';
 
+export {
+  validateSkillResult,
+  assertValidSkillResult,
+  QUALITY_BASELINE_VERSION,
+} from './quality/validate.js';
+
 export { estimateTokens, estimateCost, formatCost } from './utils/token.js';
+export { writeFileAtomic } from './utils/atomic-write.js';
+export { createArtifactZip } from './utils/zip.js';
+export type { ZipPackage } from './utils/zip.js';
+export { DownloadStore } from './utils/download-store.js';
+export type {
+  DownloadStoreOptions,
+  DownloadTicket,
+} from './utils/download-store.js';

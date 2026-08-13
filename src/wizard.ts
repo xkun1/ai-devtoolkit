@@ -30,19 +30,13 @@ for (const m of MODEL_DISPLAY) {
 }
 
 const AGENT_CHOICES = [
-  { name: '🤖 Codex   → SKILL.md         (Codex Agent 技能)', value: 'codex' },
-  { name: '🎯 Cursor  → .cursorrules     (Cursor 编码规则)', value: 'cursor' },
+  { name: '🤖 Codex   → .agents/skills/  (Codex Agent 技能)', value: 'codex' },
+  { name: '🎯 Cursor  → .cursor/rules/   (Cursor 项目规则)', value: 'cursor' },
   {
     name: '🧠 Claude  → CLAUDE.md        (Claude Code 项目记忆)',
     value: 'claude',
   },
 ];
-
-const DEFAULT_OUTPUT: Record<AgentType, string> = {
-  codex: './SKILL.md',
-  cursor: './.cursorrules',
-  claude: './CLAUDE.md',
-};
 
 export async function runWizard(): Promise<WizardResult | null> {
   info('');
@@ -112,13 +106,12 @@ export async function runWizard(): Promise<WizardResult | null> {
     success('使用本地模型，无需 API Key');
   }
 
-  // 6. 输出路径
-  const defaultOut = DEFAULT_OUTPUT[agentType];
+  // 6. 输出路径（留空时按标题生成当前推荐目录结构）
   const customOut = await input({
-    message: '💾 输出文件路径：',
-    default: defaultOut,
+    message: '💾 自定义主文件路径（回车使用推荐结构）：',
+    default: '',
   });
-  const outputPath = customOut.trim() || defaultOut;
+  const outputPath = customOut.trim() || undefined;
 
   // 7. 确认
   info('');
@@ -128,7 +121,7 @@ export async function runWizard(): Promise<WizardResult | null> {
   if (name) info(`  🏷️  技能名:  ${name}`);
   info(`  🧠 模型:    ${model}`);
   if (localModelName) info(`  🔧 本地模型: ${localModelName}`);
-  info(`  💾 输出:    ${outputPath}`);
+  info(`  💾 输出:    ${outputPath || '自动（推荐目录结构）'}`);
   info('  ─────────────────────────────────────────');
   info('');
 

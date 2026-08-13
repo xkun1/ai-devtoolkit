@@ -1,13 +1,20 @@
-import { writeFile, mkdir, access } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { access } from 'node:fs/promises';
 import type { PipelineOptions, SkillResult } from './types/index.js';
 import { loadDocuments, mergeDocuments } from './loader/index.js';
 import { crawlSite } from './loader/crawler.js';
-import { transformToSkill } from './transform/index.js';
+import { transformDocumentToSkill } from './transform/index.js';
 import { getTemplate } from './templates/index.js';
-import { getCachePath, needsUpdate, markGenerated } from './utils/hash.js';
-import { formatResult } from './format/index.js';
-import { injectSkillFrontmatter } from './format/frontmatter.js';
+import {
+  buildGenerationFingerprint,
+  createCacheKey,
+  getCachePath,
+  loadCachedResult,
+  saveGeneratedResult,
+} from './utils/hash.js';
+import { buildArtifacts, resolvePrimaryPath } from './format/artifacts.js';
+import { PROMPT_VERSION } from './transform/prompts.js';
+import { assertValidSkillResult } from './quality/validate.js';
+import { writeFileAtomic } from './utils/atomic-write.js';
 import {
   startSpinner,
   succeedSpinner,
@@ -178,31 +185,44 @@ export async function runPipeline(
     throw new Error('文档内容过短（<50字符），可能加载失败或页面无正文内容');
   }
 
+  const outputMode = options.outputMode ?? 'modern';
+  const expectedPrimaryPath = resolvePrimaryPath(
+    options.agentType,
+    doc,
+    options.name,
+    options.outputPath,
+    outputMode,
+  );
+  const cachePath = getCachePath(expectedPrimaryPath);
+  const cacheKey = createCacheKey(doc.source, expectedPrimaryPath);
+  const fingerprint = buildGenerationFingerprint({
+    source: doc.source,
+    content: doc.content,
+    agentType: options.agentType,
+    template: options.template,
+    model: options.llm.model,
+    baseURL: options.llm.baseURL,
+    temperature: options.llm.temperature,
+    maxOutputTokens: options.llm.maxOutputTokens,
+    name: options.name,
+    outputMode,
+    promptVersion: PROMPT_VERSION,
+  });
+
   // Step 2: LLM 提炼
-  // 增量更新检查：文档未变更时跳过 LLM 调用
+  // 增量更新检查：完整指纹命中且真实产物未被改动时直接复用。
   if (options.incremental) {
-    const defaultOut =
-      options.agentType === 'codex'
-        ? './SKILL.md'
-        : options.agentType === 'cursor'
-          ? './.cursorrules'
-          : './CLAUDE.md';
-    const outPath = options.outputPath || defaultOut;
-    const cachePath = getCachePath(outPath);
-    const shouldUpdate = needsUpdate(
+    const cached = loadCachedResult(
       cachePath,
-      doc.source,
-      doc.content,
+      cacheKey,
+      fingerprint,
       options.agentType,
-      options.template,
     );
-    if (!shouldUpdate) {
-      success('文档未变更，跳过生成（使用 --force 强制重新生成）');
-      return formatResult(
-        '文档未变更，已跳过。',
-        options.agentType,
-        options.outputPath,
-      );
+    if (cached) {
+      cached.quality = assertValidSkillResult(cached);
+      success(`缓存命中，已复用 ${cached.artifacts?.length ?? 1} 个真实产物`);
+      if (options.stdout) process.stdout.write(cached.content);
+      return cached;
     }
   }
 
@@ -225,39 +245,35 @@ export async function runPipeline(
     info(`  📊 预估: ~${inputTokens} 输入 tokens`);
   }
 
-  let skillContent;
+  let transformed;
   try {
-    skillContent = await transformToSkill(
+    transformed = await transformDocumentToSkill(
       doc,
       options.llm,
       options.agentType,
       options.name,
       template,
     );
-    debug(`LLM 输出长度: ${skillContent.length} 字符`);
+    debug(`LLM 输出长度: ${transformed.content.length} 字符`);
   } catch (err: any) {
     failSpinner(`LLM 提炼失败: ${err.message}`);
     throw err;
   }
-  succeedSpinner(`提炼完成 (${skillContent.length} 字符)`);
-
-  // Step 3: Codex 技能注入 frontmatter（name + description）
-  // 从原始文档内容提取 H1 作为 title 优先级最高，比文件名更有语义
-  const docH1 = doc.content.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (options.agentType === 'codex') {
-    skillContent = injectSkillFrontmatter(skillContent, {
-      name: options.name,
-      title: docH1 || doc.title,
-      description: doc.meta?.description,
-    });
-  }
-
-  // Step 4: 格式化 + 输出
-  const result = formatResult(
-    skillContent,
-    options.agentType,
-    options.outputPath,
+  succeedSpinner(
+    `提炼完成 (${transformed.content.length} 字符，${transformed.stats.sourceChunks} 个源分块 / ${transformed.stats.llmCalls} 次 LLM 调用)`,
   );
+
+  // Step 3: 生成各 Agent 当前推荐的文件结构。
+  const result = buildArtifacts({
+    agentType: options.agentType,
+    content: transformed.content,
+    doc,
+    name: options.name,
+    outputPath: options.outputPath,
+    outputMode,
+  });
+  result.stats = { ...transformed.stats, cacheHit: false };
+  result.quality = assertValidSkillResult(result);
 
   if (options.stdout) {
     // stdout 模式：纯内容输出，便于管道（日志已在 stderr）
@@ -271,7 +287,8 @@ export async function runPipeline(
     info('  ───── 📋 预览结果 (dry-run) ─────');
     info(`  🎯 Agent: ${options.agentType}`);
     info(`  📄 目标:  ${result.suggestedPath}`);
-    info(`  📏 大小:  ${result.content.length} 字符`);
+    info(`  📦 文件:  ${result.artifacts?.length ?? 1} 个`);
+    info(`  ✅ 质量:  ${result.quality.score}/100`);
     info('  ─────────────────────────────────');
     info('');
     info(result.content);
@@ -279,48 +296,45 @@ export async function runPipeline(
     return result;
   }
 
-  // 覆盖保护：文件已存在且未指定 --force 时拒绝覆盖
+  const artifacts = result.artifacts ?? [
+    {
+      path: result.suggestedPath,
+      content: result.content,
+      kind: 'primary' as const,
+    },
+  ];
+
+  // 覆盖保护：任一目标文件已存在且未指定 --force 时拒绝覆盖。
   if (!options.force) {
-    try {
-      await access(result.suggestedPath);
-      // 文件存在
-      throw new Error(
-        `文件已存在: ${result.suggestedPath}\n  使用 --force 覆盖，或 --out 指定其他路径`,
-      );
-    } catch (err: any) {
-      // ENOENT = 文件不存在，正常继续
-      if (err.message?.startsWith('文件已存在')) throw err;
-      if (err.code !== 'ENOENT') throw err;
+    for (const artifact of artifacts) {
+      try {
+        await access(artifact.path);
+        throw new Error(
+          `文件已存在: ${artifact.path}\n  使用 --force 覆盖，或 --out 指定其他路径`,
+        );
+      } catch (err: any) {
+        if (err.message?.startsWith('文件已存在')) throw err;
+        if (err.code !== 'ENOENT') throw err;
+      }
     }
   }
 
-  await writeFileWithDir(result.suggestedPath, result.content);
-  success(`已生成: ${result.suggestedPath}`);
-  // 增量更新：记录 hash
+  for (const artifact of artifacts) {
+    await writeFileAtomic(artifact.path, artifact.content);
+    success(`已生成: ${artifact.path}`);
+  }
+  // 所有产物写完后再原子更新缓存。
   if (options.incremental) {
-    const cachePath = getCachePath(result.suggestedPath);
-    markGenerated(
-      cachePath,
-      doc.source,
-      doc.content,
-      options.agentType,
-      options.template,
-    );
+    saveGeneratedResult(cachePath, cacheKey, fingerprint, result);
   }
 
   info('');
   info(`  🎯 Agent: ${options.agentType}`);
-  info(`  📄 文件: ${result.suggestedPath}`);
-  info(`  📏 大小: ${result.content.length} 字符`);
+  info(`  📦 文件: ${artifacts.length} 个`);
+  info(`  ✅ 质量: ${result.quality.score}/100`);
   info('');
 
   return result;
-}
-
-async function writeFileWithDir(path: string, content: string): Promise<void> {
-  const dir = dirname(path);
-  await mkdir(dir, { recursive: true });
-  await writeFile(path, content, 'utf-8');
 }
 
 /**

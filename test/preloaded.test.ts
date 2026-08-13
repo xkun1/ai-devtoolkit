@@ -3,9 +3,16 @@ import { runPipeline } from '../src/pipeline.js';
 
 // mock LLM 避免真实调用
 vi.mock('../src/transform/index.js', () => ({
-  transformToSkill: vi
-    .fn()
-    .mockResolvedValue('# Mocked Skill Content for preload test.'),
+  transformDocumentToSkill: vi.fn().mockResolvedValue({
+    content: '# Mocked Skill Content for preload test.',
+    stats: {
+      sourceChars: 100,
+      processedChars: 100,
+      sourceChunks: 1,
+      llmCalls: 1,
+      reductionPasses: 0,
+    },
+  }),
 }));
 
 describe('preloaded 预加载内容（Web UI 文件上传）', () => {

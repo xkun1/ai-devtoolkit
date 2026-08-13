@@ -118,6 +118,22 @@ export function isLocalModel(modelId: string): boolean {
   return MODEL_PRESETS[modelId]?.local === true;
 }
 
+/** 按模型类型解析本地服务中的真实模型名。 */
+export function resolveLocalModelName(
+  modelId: string,
+  explicitName?: string,
+): string | undefined {
+  const name =
+    explicitName ||
+    (modelId === 'ollama-local'
+      ? process.env.OLLAMA_MODEL
+      : modelId === 'lmstudio-local'
+        ? process.env.LMSTUDIO_MODEL
+        : undefined) ||
+    process.env.LOCAL_MODEL_NAME;
+  return name?.trim() || undefined;
+}
+
 /** 解析模型配置：返回最终用于 LLM 调用的 config
  *
  * - localModelName：本地模型实际名称（由探测或手动输入），
@@ -139,12 +155,17 @@ export function resolveModel(
   const preset = MODEL_PRESETS[modelId];
 
   if (preset?.local) {
+    const localModelName = resolveLocalModelName(
+      modelId,
+      options?.localModelName,
+    );
     // 本地模型：不需要 API Key，用占位符
     return {
       apiKey: 'local-no-key',
-      baseURL: options?.baseUrl || preset.baseURL || undefined,
-      // 优先使用传入的实际模型名，其次从环境变量取
-      model: options?.localModelName || process.env.LOCAL_MODEL_NAME || modelId,
+      baseURL: normalizeLocalBaseURL(
+        options?.baseUrl || preset.baseURL || undefined,
+      ),
+      model: localModelName || modelId,
     };
   }
 
@@ -155,6 +176,19 @@ export function resolveModel(
   const baseURL = options?.baseUrl || preset?.baseURL;
 
   return { apiKey, baseURL, model: modelId };
+}
+
+function normalizeLocalBaseURL(value?: string): string | undefined {
+  if (!value) return undefined;
+  const base = value.replace(/\/+$/, '');
+  try {
+    const url = new URL(base);
+    const path = url.pathname.replace(/\/+$/, '');
+    if (!path || path === '/') url.pathname = '/v1';
+    return url.href.replace(/\/$/, '');
+  } catch {
+    return base;
+  }
 }
 
 /**

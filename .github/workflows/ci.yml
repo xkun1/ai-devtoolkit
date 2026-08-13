@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: ['20.19', 22, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -29,8 +29,17 @@ jobs:
       - name: 类型检查
         run: npm run typecheck
 
+      - name: 代码检查
+        run: npm run lint
+
+      - name: 格式检查
+        run: npm run format:check
+
       - name: 构建
         run: npm run build
 
       - name: 测试
         run: npm test
+
+      - name: 发布包检查
+        run: npm run test:package

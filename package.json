@@ -32,11 +32,11 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
   },
   "scripts": {
     "build": "tsup",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx src/cli.ts",
     "start": "node bin/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -45,7 +45,8 @@
     "lint:fix": "eslint src/ test/ --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.{js,json}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "prepublishOnly": "npm run typecheck && npm run build && npm run test",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test && npm run test:package",
+    "test:package": "node scripts/package-smoke.cjs",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -85,6 +86,7 @@
     "@inquirer/prompts": "^7.0.0",
     "cheerio": "^1.0.0",
     "commander": "^12.1.0",
+    "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "openai": "^4.77.0",
     "ora": "^8.1.1",
@@ -106,5 +108,8 @@
     "tsx": "^4.6.0",
     "typescript": "^5.3.2",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2"
   }
 }

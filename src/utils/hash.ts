@@ -1,59 +1,174 @@
-/**
- * 增量更新：用文档内容 hash 检测变更
- *
- * 在 .doc2skill-cache.json 中记录每个 source 的 hash。
- * 如果 hash 未变，说明文档没有更新，可以跳过 LLM 调用。
- */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { createHash } from 'node:crypto';
+/** 增量生成缓存：完整指纹、真实产物校验与原子持久化。 */
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { dirname, join, resolve } from 'node:path';
+import type {
+  AgentType,
+  GeneratedArtifact,
+  GenerationStats,
+  OutputMode,
+  SkillResult,
+} from '../types/index.js';
 
 const CACHE_FILENAME = '.doc2skill-cache.json';
+const CACHE_VERSION = 2;
+
+export interface FingerprintInput {
+  source: string;
+  content: string;
+  agentType: AgentType | string;
+  template?: string;
+  model?: string;
+  baseURL?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  name?: string;
+  outputMode?: OutputMode;
+  promptVersion?: string;
+}
+
+interface CachedArtifact {
+  path: string;
+  hash: string;
+  kind: GeneratedArtifact['kind'];
+}
 
 interface CacheEntry {
-  /** 文档内容的 hash */
-  hash: string;
-  /** 上次生成时间 */
+  fingerprint: string;
   generatedAt: string;
-  /** 使用过的模板 */
-  template?: string;
-  /** 使用的 Agent 类型 */
   agentType: string;
+  stats?: Omit<GenerationStats, 'cacheHit'>;
+  artifacts: CachedArtifact[];
 }
 
-type CacheData = Record<string, CacheEntry>;
+interface CacheFile {
+  version: number;
+  entries: Record<string, CacheEntry>;
+}
 
-/** 计算文本内容的 hash */
+/** 计算文本内容的完整 SHA-256。 */
 export function contentHash(text: string): string {
-  return createHash('sha256').update(text).digest('hex').slice(0, 16);
+  return createHash('sha256').update(text).digest('hex');
 }
 
-/** 获取缓存文件路径（基于输出文件所在目录） */
+/** 获取缓存文件路径（基于输出文件所在目录）。 */
 export function getCachePath(outputPath: string): string {
-  const dir = dirname(outputPath);
-  return join(dir, CACHE_FILENAME);
+  return join(dirname(outputPath), CACHE_FILENAME);
 }
 
-/** 加载缓存（同步） */
-function loadCacheSync(cachePath: string): CacheData {
-  if (!existsSync(cachePath)) return {};
-  try {
-    const raw = readFileSync(cachePath, 'utf-8');
-    return JSON.parse(raw) as CacheData;
-  } catch {
-    return {};
-  }
-}
-
-/** 保存缓存（同步） */
-function saveCacheSync(cachePath: string, data: CacheData): void {
-  mkdirSync(dirname(cachePath), { recursive: true });
-  writeFileSync(cachePath, JSON.stringify(data, null, 2));
+/** 指纹覆盖源内容以及所有会影响输出的生成参数，不包含 API Key。 */
+export function buildGenerationFingerprint(input: FingerprintInput): string {
+  return contentHash(
+    stableStringify({
+      source: input.source,
+      contentHash: contentHash(input.content),
+      agentType: input.agentType,
+      template: input.template ?? null,
+      model: input.model ?? null,
+      baseURL: normalizeBaseURL(input.baseURL),
+      temperature: input.temperature ?? null,
+      maxOutputTokens: input.maxOutputTokens ?? null,
+      name: input.name ?? null,
+      outputMode: input.outputMode ?? 'modern',
+      promptVersion: input.promptVersion ?? null,
+      generatorVersion: 'p1-v1',
+    }),
+  );
 }
 
 /**
- * 检查文档是否需要重新生成
- * @returns true = 需要更新（hash 变了或首次运行），false = 跳过（未变更）
+ * 缓存命中时读取磁盘上的真实生成物；任一文件缺失或被修改都视为未命中。
+ */
+export function loadCachedResult(
+  cachePath: string,
+  cacheKey: string,
+  fingerprint: string,
+  agentType: AgentType,
+): SkillResult | undefined {
+  const cache = loadCacheSync(cachePath);
+  const entry = cache.entries[cacheKey];
+  if (
+    !entry ||
+    entry.fingerprint !== fingerprint ||
+    entry.agentType !== agentType ||
+    !entry.artifacts.length
+  ) {
+    return undefined;
+  }
+
+  const artifacts: GeneratedArtifact[] = [];
+  for (const cached of entry.artifacts) {
+    if (!existsSync(cached.path)) return undefined;
+    try {
+      const content = readFileSync(cached.path, 'utf-8');
+      if (contentHash(content) !== cached.hash) return undefined;
+      artifacts.push({ path: cached.path, content, kind: cached.kind });
+    } catch {
+      return undefined;
+    }
+  }
+
+  const primary = artifacts[0];
+  return {
+    agentType,
+    content: primary.content,
+    suggestedPath: primary.path,
+    artifacts,
+    stats: entry.stats ? { ...entry.stats, cacheHit: true } : undefined,
+  };
+}
+
+/** 记录生成结果。缓存最后落盘，确保不会指向尚未写完的文件。 */
+export function saveGeneratedResult(
+  cachePath: string,
+  cacheKey: string,
+  fingerprint: string,
+  result: SkillResult,
+): void {
+  const cache = loadCacheSync(cachePath);
+  const artifacts = result.artifacts ?? [
+    {
+      path: result.suggestedPath,
+      content: result.content,
+      kind: 'primary' as const,
+    },
+  ];
+  cache.entries[cacheKey] = {
+    fingerprint,
+    generatedAt: new Date().toISOString(),
+    agentType: result.agentType,
+    stats: result.stats
+      ? {
+          sourceChars: result.stats.sourceChars,
+          processedChars: result.stats.processedChars,
+          sourceChunks: result.stats.sourceChunks,
+          llmCalls: result.stats.llmCalls,
+          reductionPasses: result.stats.reductionPasses,
+        }
+      : undefined,
+    artifacts: artifacts.map((item) => ({
+      path: item.path,
+      hash: contentHash(item.content),
+      kind: item.kind,
+    })),
+  };
+  saveCacheSync(cachePath, cache);
+}
+
+/** 输出路径与来源共同组成稳定缓存键，避免同源多目标相互覆盖。 */
+export function createCacheKey(source: string, outputPath: string): string {
+  return `${contentHash(source).slice(0, 12)}:${contentHash(resolve(outputPath))}`;
+}
+
+/**
+ * 旧版兼容 API。新代码应使用 buildGenerationFingerprint/loadCachedResult。
  */
 export function needsUpdate(
   cachePath: string,
@@ -63,18 +178,12 @@ export function needsUpdate(
   template?: string,
 ): boolean {
   const cache = loadCacheSync(cachePath);
-  const hash = contentHash(content);
-  const entry = cache[source];
-
-  if (!entry) return true; // 首次运行
-  if (entry.hash !== hash) return true; // 内容变更
-  if (entry.agentType !== agentType) return true; // Agent 类型变了
-  if (entry.template !== template) return true; // 模板变了
-
-  return false;
+  const key = legacyKey(source);
+  const fingerprint = legacyFingerprint(source, content, agentType, template);
+  return cache.entries[key]?.fingerprint !== fingerprint;
 }
 
-/** 记录文档已生成（更新缓存） */
+/** 旧版兼容 API，仅记录指纹，不具备产物复用能力。 */
 export function markGenerated(
   cachePath: string,
   source: string,
@@ -83,18 +192,89 @@ export function markGenerated(
   template?: string,
 ): void {
   const cache = loadCacheSync(cachePath);
-  cache[source] = {
-    hash: contentHash(content),
+  cache.entries[legacyKey(source)] = {
+    fingerprint: legacyFingerprint(source, content, agentType, template),
     generatedAt: new Date().toISOString(),
     agentType,
-    template,
+    artifacts: [],
   };
   saveCacheSync(cachePath, cache);
 }
 
-/** 清除某个来源的缓存 */
 export function clearCacheEntry(cachePath: string, source: string): void {
   const cache = loadCacheSync(cachePath);
-  delete cache[source];
+  delete cache.entries[legacyKey(source)];
+  for (const key of Object.keys(cache.entries)) {
+    if (key.startsWith(`${contentHash(source).slice(0, 12)}:`)) {
+      delete cache.entries[key];
+    }
+  }
   saveCacheSync(cachePath, cache);
+}
+
+function loadCacheSync(cachePath: string): CacheFile {
+  if (!existsSync(cachePath)) return emptyCache();
+  try {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf-8')) as unknown;
+    if (!isCacheFile(parsed)) return emptyCache();
+    return parsed;
+  } catch {
+    return emptyCache();
+  }
+}
+
+function saveCacheSync(cachePath: string, data: CacheFile): void {
+  mkdirSync(dirname(cachePath), { recursive: true });
+  const tempPath = `${cachePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
+    renameSync(tempPath, cachePath);
+  } finally {
+    if (existsSync(tempPath)) unlinkSync(tempPath);
+  }
+}
+
+function emptyCache(): CacheFile {
+  return { version: CACHE_VERSION, entries: {} };
+}
+
+function isCacheFile(value: unknown): value is CacheFile {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Partial<CacheFile>;
+  return (
+    data.version === CACHE_VERSION &&
+    !!data.entries &&
+    typeof data.entries === 'object' &&
+    !Array.isArray(data.entries)
+  );
+}
+
+function normalizeBaseURL(baseURL?: string): string | null {
+  return baseURL?.replace(/\/+$/, '') || null;
+}
+
+function stableStringify(value: Record<string, unknown>): string {
+  const sorted = Object.fromEntries(
+    Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return JSON.stringify(sorted);
+}
+
+function legacyKey(source: string): string {
+  return `legacy:${contentHash(source)}`;
+}
+
+function legacyFingerprint(
+  source: string,
+  content: string,
+  agentType: string,
+  template?: string,
+): string {
+  return buildGenerationFingerprint({
+    source,
+    content,
+    agentType,
+    template,
+    outputMode: 'legacy',
+  });
 }

@@ -57,6 +57,7 @@ export async function callLLM(
           { role: 'user', content: prompt },
         ],
         temperature: config.temperature ?? 0.3,
+        max_completion_tokens: config.maxOutputTokens,
       });
 
       const content = extractContent(res);

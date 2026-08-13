@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/Node-%3E%3D18-green.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
 [![CI](https://github.com/xkun1/doc2skill/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/doc2skill/actions)
 
 ---
@@ -16,10 +16,10 @@
 
 | 输入 | → | 输出 |
 |------|:---:|------|
-| 📄 网页 URL | → | 🤖 Codex `SKILL.md`（带 frontmatter） |
-| 📕 PDF 文档 | → | 🎯 Cursor `.cursorrules` |
-| 📝 Markdown | → | 🧠 Claude `CLAUDE.md` |
-| 📚 多文档合并 | → | 🧩 一个融合技能包 |
+| 📄 网页 URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
+| 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
+| 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
+| 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
 
 ## 🎬 快速开始
 
@@ -56,7 +56,10 @@ npx doc2skill --ui
 npx doc2skill --ui --port 8080
 ```
 
-在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载技能包文件。
+在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；Codex `references/` 和 Claude `.claude/rules/` 等多文件目录会完整保留。
+
+Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传内容；
+不会读取服务端任意本地路径。上传请求默认限制为 10 MiB，远程文档默认限制为 5 MiB。
 
 ### 🚀 进阶用法
 
@@ -69,7 +72,12 @@ npx doc2skill ./api.md --watch
 
 # 预览模式：只看结果不写文件
 npx doc2skill ./api.md --dry-run
+
+# 兼容旧工作流：生成 SKILL.md / .cursorrules / CLAUDE.md 单文件
+npx doc2skill ./api.md --type cursor --legacy
 ```
+
+超过约 2.4 万字符的输入会按 Markdown 语义完整分块，并执行“逐块抽取 → 分层归并 → 最终合成”；不会再静默截掉文档中间内容。Codex 超长结果自动下沉到 `references/`，Claude 超长结果自动拆到 `.claude/rules/`。
 
 ### 输出示例
 
@@ -82,11 +90,11 @@ npx doc2skill ./api.md --dry-run
 ✔ 加载完成: Stripe API Docs (28,431 字符)
 ⠋ 正在用 deepseek-chat 提炼技能知识...
 ✔ 提炼完成 (3,205 字符)
-✓ 已生成: ./SKILL.md
+✓ 已生成: .agents/skills/stripe-api-docs/SKILL.md
 
   🎯 Agent: codex
-  📄 文件: ./SKILL.md
-  📏 大小: 3,205 字符
+  📦 文件: 1 个
+  ✅ 质量: 100/100
 ```
 
 生成的 `SKILL.md` 自动注入 frontmatter：
@@ -135,6 +143,9 @@ npx doc2skill ./api.md --model ollama-local
 # 自定义 Ollama 模型名（通过环境变量）
 OLLAMA_MODEL=qwen2.5:7b npx doc2skill ./api.md --model ollama-local
 
+# 也可通过参数明确指定本地服务中的真实模型名
+npx doc2skill ./api.md --model ollama-local --local-model qwen2.5:7b
+
 # LM Studio
 npx doc2skill ./api.md --model lmstudio-local
 ```
@@ -151,7 +162,7 @@ Arguments:
 
 Options:
   -t, --type <type>    目标 Agent: codex | cursor | claude (默认: codex)
-  -o, --out <path>     输出文件路径 (默认: SKILL.md / .cursorrules / CLAUDE.md)
+  -o, --out <path>     自定义主文件路径（默认按 Agent 推荐目录生成）
   -m, --model <model>  LLM 模型名 (默认: deepseek-chat)
   -n, --name <name>    自定义技能名（用于 Codex SKILL.md frontmatter）
   --stdout             输出到标准输出而不写文件（便于管道集成）
@@ -166,8 +177,10 @@ Options:
   --template <id>      使用预设模板（api-doc / coding-guide / cheatsheet 等）
   --list-templates     列出所有可用模板
   --update             增量更新：跳过未变更的文档
+  --legacy             输出旧版单文件结构
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
+  --local-model <name> 本地服务中的真实模型名
   -v, --verbose        显示详细日志
   -V, --version        版本号
   -h, --help           帮助
@@ -179,7 +192,7 @@ Options:
 {
   "type": "codex",
   "model": "deepseek-chat",
-  "out": "./SKILL.md"
+  "outputMode": "modern"
 }
 ```
 
@@ -195,14 +208,16 @@ Sources (URL/PDF/HTML/MD, 可多个)
   │   └── File        → 本地文件直读
   │   └── merge       → 多文档带来源标签合并
   │
-  ├── 🧠 Transform     LLM 智能提炼（内置指数退避重试）
+  ├── 🧠 Transform     全量分块提炼 + 分层归并（内置指数退避重试）
   │   ├── Codex Prompt  → 结构化技能指令 + frontmatter
   │   ├── Cursor Prompt → 编码规则约束
   │   └── Claude Prompt → 项目记忆格式
   │
-  ├── 📐 Format        格式化输出 + frontmatter 注入
+  ├── 📐 Format        Agent 原生目录 + frontmatter + 渐进披露
   │
-  └── 💾 Writer        写入文件 / stdout
+  ├── ✅ Quality       格式、元数据、长度、重复度校验
+  │
+  └── 💾 Writer        原子写入 / 完整指纹缓存 / stdout
 ```
 
 **设计原则**：
@@ -215,7 +230,7 @@ Sources (URL/PDF/HTML/MD, 可多个)
 ## 🧪 测试
 
 ```bash
-# 全套测试（49 个用例）
+# 全套测试
 npm test
 
 # 类型检查
@@ -228,7 +243,10 @@ npm run build
 测试覆盖：
 - ✅ Loader：URL 正文提取 / PDF 解析 / 本地文件
 - ✅ Transform：LLM 重试机制（mock OpenAI SDK）
+- ✅ 长文档：无损分块 / 并发抽取 / 分层合成
 - ✅ Format：slugify / frontmatter 注入 / 描述提取
+- ✅ 现代输出：Codex 技能目录 / Cursor MDC / Claude Rules
+- ✅ 质量基线与真实产物增量缓存
 - ✅ Pipeline：端到端编排（mock LLM）
 - ✅ E2E：真实网页加载
 
@@ -249,6 +267,9 @@ const result = await doc2skill('https://docs.example.com/api', {
 
 console.log(result.content);       // 生成的内容
 console.log(result.suggestedPath); // 建议输出路径
+console.log(result.artifacts);     // 完整文件列表（含 references/rules）
+console.log(result.quality);       // 静态质量报告
+console.log(result.stats);         // 分块、LLM 调用与缓存统计
 ```
 
 也支持只加载不提炼：
@@ -301,8 +322,12 @@ npm test
 - [x] Token 预估与费用提示
 - [x] watch 模式（文档变更自动刷新）
 - [x] 技能包模板市场（6 套内置模板：api-doc / coding-guide / cheatsheet 等）
-- [x] 增量更新（--update 检测文档 hash，跳过未变更内容）
+- [x] 增量更新（--update 完整生成指纹 + 真实产物校验）
 - [x] Web UI 界面（--ui 浏览器可视化交互）
+- [x] 长文档无损分块、分层归并与来源覆盖统计
+- [x] Codex / Cursor / Claude 当前推荐目录结构（可用 --legacy 回退）
+- [x] 完整生成指纹、真实产物缓存复用与原子写入
+- [x] 生成结果静态校验与质量评分
 
 ## 📄 License
 

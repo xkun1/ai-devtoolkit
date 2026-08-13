@@ -4,6 +4,7 @@ import {
   MODEL_DISPLAY,
   isLocalModel,
   resolveModel,
+  resolveLocalModelName,
   detectLocalModels,
 } from '../src/models.js';
 
@@ -61,7 +62,7 @@ describe('resolveModel', () => {
       localModelName: 'llama3:8b',
     });
     expect(config.model).toBe('llama3:8b');
-    expect(config.baseURL).toBe('http://localhost:5001');
+    expect(config.baseURL).toBe('http://localhost:5001/v1');
     expect(config.apiKey).toBe('local-no-key');
   });
 
@@ -88,6 +89,23 @@ describe('resolveModel', () => {
     expect(config.apiKey).toBe('sk-test');
     expect(config.model).toBe('deepseek-chat');
     expect(config.baseURL).toBe('https://api.deepseek.com/v1');
+  });
+});
+
+describe('resolveLocalModelName', () => {
+  it('显式参数优先', () => {
+    expect(resolveLocalModelName('ollama-local', 'qwen3:8b')).toBe('qwen3:8b');
+  });
+
+  it('按模型读取专属环境变量', () => {
+    const old = process.env.OLLAMA_MODEL;
+    process.env.OLLAMA_MODEL = 'llama3.2';
+    try {
+      expect(resolveLocalModelName('ollama-local')).toBe('llama3.2');
+    } finally {
+      if (old === undefined) delete process.env.OLLAMA_MODEL;
+      else process.env.OLLAMA_MODEL = old;
+    }
   });
 });
 

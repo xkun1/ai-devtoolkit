@@ -46,6 +46,21 @@ describe('loadConfig', () => {
     await expect(loadConfig(dir)).rejects.toThrow('type 无效');
   });
 
+  it('顶层不是对象时抛出明确错误', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-badshape-'));
+    await writeFile(join(dir, '.doc2skill.json'), 'null');
+    await expect(loadConfig(dir)).rejects.toThrow('顶层必须是 JSON 对象');
+  });
+
+  it('字段类型错误时拒绝配置', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-badfield-'));
+    await writeFile(
+      join(dir, '.doc2skill.json'),
+      JSON.stringify({ verbose: 'yes' }),
+    );
+    await expect(loadConfig(dir)).rejects.toThrow('verbose 必须是布尔值');
+  });
+
   it('支持 .doc2skillrc 格式', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'doc2skill-rc-'));
     await writeFile(
@@ -55,6 +70,22 @@ describe('loadConfig', () => {
     const config = await loadConfig(dir);
     expect(config.model).toBe('gpt-4o-mini');
     expect(config.out).toBe('./rules.md');
+  });
+
+  it('读取并校验 outputMode', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-mode-'));
+    await writeFile(
+      join(dir, '.doc2skill.json'),
+      JSON.stringify({ outputMode: 'legacy' }),
+    );
+    expect((await loadConfig(dir)).outputMode).toBe('legacy');
+
+    const badDir = await mkdtemp(join(tmpdir(), 'doc2skill-badmode-'));
+    await writeFile(
+      join(badDir, '.doc2skill.json'),
+      JSON.stringify({ outputMode: 'future' }),
+    );
+    await expect(loadConfig(badDir)).rejects.toThrow('outputMode 无效');
   });
 
   it('子目录查找会递归到父目录', async () => {

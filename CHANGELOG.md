@@ -2,6 +2,36 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### P1 — 长文档、原生格式、增量与质量闭环
+
+- 长文档改为全量语义分块、并发抽取、分层归并与最终合成，移除 60,000 字符静默截断
+- 默认输出当前推荐结构：Codex `.agents/skills/<name>/SKILL.md`、Cursor `.cursor/rules/<name>.mdc`、Claude 超长规则拆入 `.claude/rules/`
+- Codex 超长技能自动拆分 `references/details.md`，实现渐进披露；`--legacy` 可保留旧版单文件
+- 增量缓存纳入模型、温度、模板、名称、输出模式、Prompt 版本等完整指纹，并校验、复用磁盘真实产物
+- 生成物和缓存改用临时文件 + rename 原子写入
+- 新增格式、元数据、长度、重复度质量检查与评分，并返回分块和缓存统计
+- Web UI 支持一键下载完整 ZIP，保留 Agent 原生目录；ZIP 使用短期、有界、不可猜测的本地下载票据
+
+### 修复
+
+- 修复 npm 根入口误指向 CLI，恢复 `import { doc2skill } from 'doc2skill'`
+- 恢复 `-w / --watch` 参数并增加端口、爬取参数和模板校验
+- 统一 `--local-model`、`OLLAMA_MODEL`、`LMSTUDIO_MODEL` 与 `LOCAL_MODEL_NAME`
+- Web UI 改为仅监听回环地址，禁止读取服务端本地路径
+- 增加 Host / Origin / 会话令牌校验、请求体和并发限制
+- 公网 URL 抓取增加 DNS、重定向、私网地址与响应大小校验
+- Node.js 最低版本调整为 20.19，与运行时和开发依赖保持一致
+- CI 增加 Lint、格式和 npm 发布包 smoke test
+
+## [0.6.2] — 2026-07-31
+
+### 新功能
+
+- Web UI 支持 PDF / DOCX 文件上传和本地模型自动探测
+- 修复假 PDF 的 HTML 降级提取、技能名扩展名清理及上传状态问题
+
 ## [0.6.1] — 2026-07-31
 
 ### 新功能
