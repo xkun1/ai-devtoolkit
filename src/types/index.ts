@@ -112,6 +112,10 @@ export interface PipelineOptions {
   outputMode?: OutputMode;
   /** 预加载内容（Web UI 文件上传用，跳过 loader 直接传入原始文本） */
   preloaded?: PreloadedContent;
+  /** 目录模式下合并所有文件为一个技能包（默认逐文件生成独立技能包） */
+  mergeDir?: boolean;
+  /** 目录扫描最大递归深度（默认 5） */
+  dirMaxDepth?: number;
 }
 
 /** 预加载的文档内容（Web UI 文件上传用，跳过 loader 直接传入内容） */

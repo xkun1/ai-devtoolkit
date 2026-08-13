@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-13
+
+### 新功能
+
+- **MCP Server 模式**（`--mcp`）：通过 stdio JSON-RPC 2.0 协议让 AI Agent（Claude Desktop / Cursor 等）直接调用 doc2skill。提供 `generate_skill` 和 `scan_directory` 两个工具
+- **批量目录处理**：传入目录路径时自动递归扫描，每个文件生成独立技能包；`--merge` 合并为一个，`--dir-depth` 控制扫描深度
+- 新增 `scanDirectory` / `expandSources` / `isDirectory` / `isSupportedFile` 编程式 API
+
 ### P1 — 长文档、原生格式、增量与质量闭环
 
 - 长文档改为全量语义分块、并发抽取、分层归并与最终合成，移除 60,000 字符静默截断

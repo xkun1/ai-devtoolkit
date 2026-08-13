@@ -20,6 +20,8 @@
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
 | 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
+| 📂 批量目录处理 | → | 🤖 每个文件独立技能包（或 `--merge` 合并） |
+| 🔌 MCP Server | → | 🤖 AI Agent 原生工具调用 |
 
 ## 🎬 快速开始
 
@@ -63,9 +65,63 @@ Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传�
 
 ### 🚀 进阶用法
 
+### 🔌 MCP Server 模式
+
+让 doc2skill 成为 AI Agent 的原生工具——通过 MCP 协议，Agent 直接调用文档转技能包能力：
+
+```bash
+# 启动 MCP Server（stdio JSON-RPC）
+npx doc2skill --mcp
+```
+
+**Claude Desktop 配置**（`claude_desktop_config.json`）：
+```json
+{
+  "mcpServers": {
+    "doc2skill": {
+      "command": "npx",
+      "args": ["doc2skill", "--mcp"],
+      "env": {
+        "DEEPSEEK_API_KEY": "sk-xxx"
+      }
+    }
+  }
+}
+```
+
+**Cursor 配置**（`.cursor/mcp.json`）：
+```json
+{
+  "mcpServers": {
+    "doc2skill": {
+      "command": "npx",
+      "args": ["doc2skill", "--mcp"]
+    }
+  }
+}
+```
+
+MCP Server 提供 2 个工具：
+
+| 工具 | 说明 |
+|------|------|
+| `generate_skill` | 将文档/URL 转化为 AI Agent 技能包（支持批量目录） |
+| `scan_directory` | 扫描目录，返回受支持的文档文件列表 |
+
+### 🚀 进阶用法
+
 ```bash
 # 爬取整个文档站点（自动发现子页面）
 npx doc2skill https://docs.example.com --crawl --crawl-depth 2
+
+# 批量处理整个目录（每个文件生成独立技能包）
+npx doc2skill ./docs/ --type codex
+
+# 目录合并模式：所有文件合并为一个技能包
+npx doc2skill ./docs/ --type codex --merge
+
+# 控制目录扫描深度
+npx doc2skill ./docs/ --type codex --dir-depth 3
 
 # 监控模式：文档变更后自动刷新技能包
 npx doc2skill ./api.md --watch

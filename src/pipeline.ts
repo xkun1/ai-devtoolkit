@@ -1,6 +1,11 @@
 import { access } from 'node:fs/promises';
 import type { PipelineOptions, SkillResult } from './types/index.js';
-import { loadDocuments, mergeDocuments } from './loader/index.js';
+import {
+  loadDocuments,
+  mergeDocuments,
+  expandSources,
+  isDirectory,
+} from './loader/index.js';
 import { crawlSite } from './loader/crawler.js';
 import { transformDocumentToSkill } from './transform/index.js';
 import { getTemplate } from './templates/index.js';
@@ -28,6 +33,60 @@ import { estimateTokens, estimateCost, formatCost } from './utils/token.js';
 
 /** 核心管线：sources → load → merge → transform → format → output */
 export async function runPipeline(
+  sources: string | string[],
+  options: PipelineOptions,
+): Promise<SkillResult> {
+  const sourceList = Array.isArray(sources) ? sources : [sources];
+
+  // ── 目录批量模式 ──
+  const hadDir = await Promise.all(sourceList.map((s) => isDirectory(s)));
+  const hasDirectory = hadDir.some(Boolean);
+
+  if (hasDirectory) {
+    const { files } = await expandSources(sourceList, {
+      maxDepth: options.dirMaxDepth,
+    });
+    if (files.length === 0) {
+      throw new Error('目录中未找到受支持的文档文件');
+    }
+
+    // --merge 模式：展开目录后合并为一个技能包
+    if (options.mergeDir) {
+      info(`📂 目录展开: 找到 ${files.length} 个文件，合并为一个技能包`);
+      return runPipelineSingle(files, options);
+    }
+
+    // 批量模式：逐文件生成独立技能包
+    info('╔══════════════════════════════════════╗');
+    info('║   📂 批量目录模式 — 逐文件生成        ║');
+    info('╚══════════════════════════════════════╝');
+    info(`  📁 共 ${files.length} 个文档待处理`);
+    info('');
+
+    const results: SkillResult[] = [];
+    for (let i = 0; i < files.length; i++) {
+      info(`  [${i + 1}/${files.length}] 处理: ${files[i]}`);
+      const result = await runPipelineSingle(files[i], {
+        ...options,
+        force: true,
+        mergeDir: false,
+      });
+      results.push(result);
+      info('');
+    }
+
+    info('  ─────────────────────────────────');
+    info(`  ✅ 批量完成: ${results.length} 个技能包已生成`);
+    info('  ─────────────────────────────────');
+
+    return results[results.length - 1];
+  }
+
+  return runPipelineSingle(sourceList, options);
+}
+
+/** 单次管线执行（不含目录批量逻辑） */
+async function runPipelineSingle(
   sources: string | string[],
   options: PipelineOptions,
 ): Promise<SkillResult> {

@@ -87,6 +87,17 @@ export { runPipeline as doc2skill } from './pipeline.js';
 export { startServer, WEB_UI_HTML } from './server.js';
 export type { ServerOptions } from './server.js';
 
+export { startMcpServer } from './mcp-server.js';
+export type { McpServerOptions } from './mcp-server.js';
+
+export {
+  scanDirectory,
+  isDirectory,
+  isSupportedFile,
+  expandSources,
+} from './loader/directory.js';
+export type { ScanOptions } from './loader/directory.js';
+
 export {
   TEMPLATES,
   getTemplate,

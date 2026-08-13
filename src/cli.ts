@@ -7,6 +7,7 @@ import { runWizard } from './wizard.js';
 import { loadConfig } from './config.js';
 import { startWatch } from './watcher.js';
 import { startServer } from './server.js';
+import { startMcpServer } from './mcp-server.js';
 import {
   MODEL_PRESETS,
   isLocalModel,
@@ -39,6 +40,9 @@ interface CliOptions {
   listTemplates?: boolean;
   update?: boolean;
   legacy?: boolean;
+  mcp?: boolean;
+  merge?: boolean;
+  dirDepth?: number;
 }
 
 const PACKAGE_VERSION = readPackageVersion();
@@ -99,6 +103,13 @@ export function createProgram(): Command {
     .option('--list-templates', '列出所有可用模板')
     .option('--update', '增量更新：跳过未变更的文档')
     .option('--legacy', '输出旧版单文件（默认使用各 Agent 当前推荐目录结构）')
+    .option('--mcp', '启动 MCP Server（stdio JSON-RPC，供 AI Agent 直接调用）')
+    .option('--merge', '目录模式下合并所有文件为一个技能包')
+    .option(
+      '--dir-depth <n>',
+      '目录扫描最大递归深度（1-20，默认 5）',
+      (value) => parseInteger(value, 'dir-depth', 1, 20),
+    )
     .action(runCommand);
 
   return program;
@@ -138,6 +149,16 @@ async function runCommand(
       () => void openBrowser(`http://127.0.0.1:${port}`),
     );
     return;
+  }
+
+  if (options.mcp) {
+    startMcpServer({
+      model,
+      baseURL: baseUrl,
+      apiKey,
+      localModelName: options.localModel,
+    });
+    return; // MCP 模式阻塞运行，不会走到这里
   }
 
   const agentTypeRaw = options.type || cfg.type || 'codex';
@@ -208,6 +229,8 @@ async function runCommand(
     template: templateId,
     incremental: options.update || false,
     outputMode,
+    mergeDir: options.merge || false,
+    dirMaxDepth: options.dirDepth,
   };
 
   if (options.watch) {

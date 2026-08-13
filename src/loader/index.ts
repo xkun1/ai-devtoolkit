@@ -69,3 +69,10 @@ export function mergeDocuments(docs: LoadedDocument[]): LoadedDocument {
 export { loadFromUrl, loadFromPdf, loadFromFile, loadFromHtml, loadFromDocx };
 export { crawlSite } from './crawler.js';
 export type { CrawlOptions } from './crawler.js';
+export {
+  scanDirectory,
+  isDirectory,
+  isSupportedFile,
+  expandSources,
+} from './directory.js';
+export type { ScanOptions } from './directory.js';
