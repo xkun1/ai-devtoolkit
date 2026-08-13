@@ -24,6 +24,9 @@ import { runPipeline } from './pipeline.js';
 import { resolveModel, isLocalModel } from './models.js';
 import { info } from './utils/logger.js';
 
+/** 启动时传入的默认配置（CLI 参数），工具调用时可被参数覆盖 */
+let serverDefaults: McpServerOptions = {};
+
 // ── MCP 协议类型 ──
 
 interface JsonRpcRequest {
@@ -77,15 +80,30 @@ const GENERATE_SKILL_SCHEMA = {
     model: {
       type: 'string',
       description: 'LLM 模型名（默认 deepseek-chat）',
+      enum: [
+        'deepseek-chat',
+        'deepseek-reasoner',
+        'gpt-4o',
+        'gpt-4o-mini',
+        'doubao-pro-32k',
+        'ollama-local',
+        'lmstudio-local',
+        'custom-local',
+      ],
     },
     baseUrl: {
       type: 'string',
-      description: 'LLM API Base URL（覆盖预设）',
+      description: 'LLM API Base URL（覆盖预设）。custom-local 必填',
     },
     apiKey: {
       type: 'string',
       description:
         'API Key（建议用环境变量 DEEPSEEK_API_KEY 或 OPENAI_API_KEY）',
+    },
+    localModelName: {
+      type: 'string',
+      description:
+        '本地模型真实名称（如 qwen2.5-coder:7b）。ollama-local/lmstudio-local/custom-local 时必填，也可用环境变量 OLLAMA_MODEL / LMSTUDIO_MODEL / LOCAL_MODEL_NAME',
     },
     outputPath: {
       type: 'string',
@@ -151,7 +169,10 @@ export interface McpServerOptions {
  * 启动 MCP Server（stdio JSON-RPC 2.0）
  * 阻塞式 readline 循环，按行读取请求、写入响应。
  */
-export function startMcpServer(_options: McpServerOptions = {}): void {
+export function startMcpServer(options: McpServerOptions = {}): void {
+  // 启动时传入的配置作为默认值（CLI --model / --base-url 等优先生效）
+  serverDefaults = options;
+
   // MCP stdio：日志走 stderr，stdout 仅用于 JSON-RPC
   setLogToStderrForMcp();
 
@@ -312,15 +333,23 @@ async function handleGenerateSkill(
 
   // LLM 配置：优先用参数传入的，回退到环境变量
   const model =
-    (args.model as string) || process.env.DOC2SKILL_MODEL || 'deepseek-chat';
+    (args.model as string) ||
+    serverDefaults.model ||
+    process.env.DOC2SKILL_MODEL ||
+    'deepseek-chat';
   const apiKey =
     (args.apiKey as string) ||
+    serverDefaults.apiKey ||
     process.env.DEEPSEEK_API_KEY ||
     process.env.OPENAI_API_KEY ||
     '';
   const baseURL =
-    (args.baseUrl as string) || process.env.DOC2SKILL_BASE_URL || undefined;
-  const localModelName = args.localModelName as string | undefined;
+    (args.baseUrl as string) ||
+    serverDefaults.baseURL ||
+    process.env.DOC2SKILL_BASE_URL ||
+    undefined;
+  const localModelName =
+    (args.localModelName as string) || serverDefaults.localModelName;
 
   if (!isLocalModel(model) && !apiKey) {
     throw new Error(

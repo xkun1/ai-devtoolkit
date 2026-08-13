@@ -108,6 +108,70 @@ MCP Server 提供 2 个工具：
 | `generate_skill` | 将文档/URL 转化为 AI Agent 技能包（支持批量目录） |
 | `scan_directory` | 扫描目录，返回受支持的文档文件列表 |
 
+#### 使用本地模型（Ollama / LM Studio）
+
+本地模型无需 API Key，通过环境变量或 CLI 参数指定模型信息：
+
+**方式一：环境变量**（推荐，最简洁）
+
+```json
+{
+  "mcpServers": {
+    "doc2skill": {
+      "command": "npx",
+      "args": ["doc2skill", "--mcp", "--model", "ollama-local"],
+      "env": {
+        "OLLAMA_MODEL": "qwen2.5-coder:7b"
+      }
+    }
+  }
+}
+```
+
+**方式二：CLI 参数固定模型**（Agent 调用时无需再传模型参数）
+
+```json
+{
+  "mcpServers": {
+    "doc2skill": {
+      "command": "npx",
+      "args": [
+        "doc2skill", "--mcp",
+        "--model", "ollama-local",
+        "--local-model", "qwen2.5-coder:7b"
+      ]
+    }
+  }
+}
+```
+
+**方式三：自定义本地服务**（vLLM / Xinference 等 OpenAI 兼容 API）
+
+```json
+{
+  "mcpServers": {
+    "doc2skill": {
+      "command": "npx",
+      "args": [
+        "doc2skill", "--mcp",
+        "--model", "custom-local",
+        "--base-url", "http://localhost:8000/v1",
+        "--local-model", "my-model-name"
+      ]
+    }
+  }
+}
+```
+
+> **环境变量速查**：
+> | 变量名 | 用途 |
+> |--------|------|
+> | `OLLAMA_MODEL` | Ollama 模型名（如 `qwen2.5-coder:7b`） |
+> | `LMSTUDIO_MODEL` | LM Studio 模型名 |
+> | `LOCAL_MODEL_NAME` | 任意本地模型名（通用回退） |
+> | `DEEPSEEK_API_KEY` | DeepSeek API Key（云端模型） |
+> | `OPENAI_API_KEY` | OpenAI API Key（云端模型） |
+
 ### 🚀 进阶用法
 
 ```bash
