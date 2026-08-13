@@ -336,6 +336,8 @@ function showFileInfo(file) {
   info.className = 'file-info';
   var lowerName2 = file.name.toLowerCase();
   var icon = lowerName2.endsWith('.pdf') ? '📕' : (lowerName2.endsWith('.docx') || lowerName2.endsWith('.doc')) ? '📘' : '📎';
+  var sizeKB = (file.size / 1024).toFixed(1);
+  info.innerHTML = icon + ' ' + file.name + ' (' + sizeKB + ' KB) <span class="remove" onclick="removeFile()">✕</span>';
   // 清空 URL 输入，避免冲突
   document.getElementById('source').value = '';
   // 锁定上传区：已上传文件，不能再上传
@@ -349,6 +351,7 @@ function removeFile() {
   uploadedFile = null;
   fileInput.value = '';
   document.getElementById('fileInfo').style.display = 'none';
+  document.getElementById('fileInfo').innerHTML = '';
   // 解锁上传区
   document.getElementById('uploadZone').classList.remove('uploaded');
   document.querySelector('#uploadZone .upload-text').textContent = '点击选择文件，或拖拽到此处';

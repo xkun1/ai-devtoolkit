@@ -258,16 +258,22 @@ function serveJSON(res: ServerResponse, status: number, data: any): void {
   res.end(JSON.stringify(data));
 }
 
-/** 读取 JSON 请求体 */
+/** 读取 JSON 请求体
+ *
+ * 使用 Buffer 拼接而非 string +=，避免大文档跨 chunk 时的多字节字符截断。
+ */
 async function readBody(req: IncomingMessage): Promise<any> {
-  return new Promise((resolve) => {
-    let data = '';
-    req.on('data', (chunk) => (data += chunk));
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: any) => chunks.push(Buffer.from(chunk)));
+    req.on('error', reject);
     req.on('end', () => {
       try {
+        const buffer = Buffer.concat(chunks);
+        const data = buffer.toString('utf-8');
         resolve(data ? JSON.parse(data) : {});
-      } catch {
-        resolve({});
+      } catch (err) {
+        reject(err);
       }
     });
   });
@@ -329,9 +335,7 @@ async function readMultipartBody(
           }
 
           const headerStr = partBuf.subarray(0, headerEnd).toString('utf-8');
-          const content = partBuf
-            .subarray(headerEnd + headerSep.length)
-            .toString('utf-8');
+          const contentBuf = partBuf.subarray(headerEnd + headerSep.length);
 
           // 提取字段名
           const nameMatch = headerStr.match(/name="([^"]+)"/);
@@ -344,10 +348,23 @@ async function readMultipartBody(
           // 提取文件名（如果有）
           const filenameMatch = headerStr.match(/filename="([^"]+)"/);
           if (filenameMatch) {
-            result['fileContent'] = content;
+            const fname = filenameMatch[1].toLowerCase();
+            const isBinary =
+              fname.endsWith('.pdf') ||
+              fname.endsWith('.docx') ||
+              fname.endsWith('.doc');
+            if (isBinary) {
+              // 二进制文件用 base64 编码存储，避免 utf-8 转换损坏
+              result['binaryContent'] = contentBuf.toString('base64');
+              result['mimeType'] = fname.endsWith('.pdf')
+                ? 'application/pdf'
+                : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            } else {
+              result['fileContent'] = contentBuf.toString('utf-8');
+            }
             result['fileName'] = filenameMatch[1];
           } else {
-            result[fieldName] = content;
+            result[fieldName] = contentBuf.toString('utf-8');
           }
 
           offset = nextSep;
