@@ -1,5 +1,7 @@
 # 🚀 doc2skill
 
+**简体中文 | [English](README.en.md)**
+
 > 将任意网页或 PDF 文档，1 秒转化为 AI Agent（Cursor / Codex / Claude）的专属技能包！
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -448,6 +450,8 @@ npm test
 - [x] Codex / Cursor / Claude 当前推荐目录结构（可用 --legacy 回退）
 - [x] 完整生成指纹、真实产物缓存复用与原子写入
 - [x] 生成结果静态校验与质量评分
+- [x] MCP Server 模式（--mcp 让 AI Agent 原生调用）
+- [x] 批量目录处理（自动扫描目录，--merge 合并为一个）
 
 ## 📄 License
 

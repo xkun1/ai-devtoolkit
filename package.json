@@ -28,6 +28,7 @@
     "bin",
     "examples",
     "README.md",
+    "README.en.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
