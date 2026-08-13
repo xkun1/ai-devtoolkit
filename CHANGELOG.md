@@ -16,7 +16,7 @@
 
 - **📦 环境迁移模式**（`--env-export` / `--env-import`）：扫描当前电脑的开发环境，生成 JSON 快照和一键安装脚本，换新电脑时一键恢复全部配置
   - 扫描范围：Homebrew（formulae + casks）/ npm 全局包 / pip 包 / SDK 运行时 / VSCode 扩展 / macOS 应用 / Shell 配置 / Git 全局配置 / SSH 配置
-  - 生成 `doc2skill-env.json`（完整快照）和 `doc2skill-env-setup.sh`（可执行安装脚本）
+  - 生成 `devtoolkit-env.json`（完整快照）和 `devtoolkit-env-setup.sh`（可执行安装脚本）
   - `--env-import` 支持 dry-run 预览和 `--execute` 实际执行两种模式
   - 安全设计：SSH 私钥不自动迁移，仅提示手动处理
   - 新增编程式 API：`exportEnv` / `importEnv` / `detectEnvironment` / `exportEnvironment` / `importEnvironment` 等
@@ -25,7 +25,7 @@
 
 ### 新功能
 
-- **MCP Server 模式**（`--mcp`）：通过 stdio JSON-RPC 2.0 协议让 AI Agent（Claude Desktop / Cursor 等）直接调用 doc2skill。提供 `generate_skill` 和 `scan_directory` 两个工具
+- **MCP Server 模式**（`--mcp`）：通过 stdio JSON-RPC 2.0 协议让 AI Agent（Claude Desktop / Cursor 等）直接调用 devtoolkit。提供 `generate_skill` 和 `scan_directory` 两个工具
 - **批量目录处理**：传入目录路径时自动递归扫描，每个文件生成独立技能包；`--merge` 合并为一个，`--dir-depth` 控制扫描深度
 - 新增 `scanDirectory` / `expandSources` / `isDirectory` / `isSupportedFile` 编程式 API
 
@@ -41,7 +41,7 @@
 
 ### 修复
 
-- 修复 npm 根入口误指向 CLI，恢复 `import { doc2skill } from 'doc2skill'`
+- 修复 npm 根入口误指向 CLI，恢复 `import { devtoolkit } from 'devtoolkit'`
 - 恢复 `-w / --watch` 参数并增加端口、爬取参数和模板校验
 - 统一 `--local-model`、`OLLAMA_MODEL`、`LMSTUDIO_MODEL` 与 `LOCAL_MODEL_NAME`
 - Web UI 改为仅监听回环地址，禁止读取服务端本地路径
@@ -90,7 +90,7 @@
 
 - 测试增强至 91 个用例（新增 templates / hash 测试）
 - 编程式 API 导出模板和 hash 工具
-- `.doc2skill-cache.json` 缓存增量更新状态
+- `.devtoolkit-cache.json` 缓存增量更新状态
 
 ## [0.4.0] — 2026-07-31
 
@@ -110,10 +110,10 @@
 
 ### 新功能
 
-- **编程式 API**：可作为 Node.js 库使用（`import { doc2skill } from 'doc2skill'`），双入口构建（CLI + lib）
+- **编程式 API**：可作为 Node.js 库使用（`import { devtoolkit } from 'devtoolkit'`），双入口构建（CLI + lib）
 - **dry-run 预览模式**：`--dry-run` 只查看生成结果不写文件
 - **覆盖保护**：文件已存在时拒绝覆盖，`--force` 强制覆盖
-- **配置文件支持**：`.doc2skill.json` 项目级默认值，CLI 参数优先覆盖
+- **配置文件支持**：`.devtoolkit.json` 项目级默认值，CLI 参数优先覆盖
 - **本地 HTML 文件**：`.html` / `.htm` 文件走 cheerio + turndown 正文提取管线
 - **examples 目录**：编程式 API 示例 + CLI 快速参考 + 样例文档
 
@@ -127,7 +127,7 @@
 
 ### 新功能
 
-- **交互式向导**：无参数运行 `npx doc2skill` 进入引导问答，逐步选择来源/类型/模型
+- **交互式向导**：无参数运行 `npx devtoolkit` 进入引导问答，逐步选择来源/类型/模型
 - **多文档合并**：支持传入多个来源，合并提炼为一个技能包
 - **stdout 模式**：`--stdout` 输出到标准输出，便于管道集成
 - **自定义技能名**：`--name` 指定 Codex SKILL.md frontmatter 中的技能名

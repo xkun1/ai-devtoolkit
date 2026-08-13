@@ -79,10 +79,8 @@ export function createProgram(): Command {
   const program = new Command();
 
   program
-    .name('doc2skill')
-    .description(
-      '📄→🤖 将网页/PDF/文档转化为 AI Agent 技能包（Cursor / Codex / Claude）',
-    )
+    .name('devtoolkit')
+    .description('🛠️ 开发者工具箱：AI 技能包生成 · 代码搜索 · 环境迁移')
     .version(PACKAGE_VERSION)
     .argument(
       '[sources...]',
@@ -188,7 +186,7 @@ async function runCommand(
       // 如果同时指定了 --scan-code，先扫描再搜索
       if (options.scanCode) {
         info('╔══════════════════════════════════════╗');
-        info('║   🔍 doc2skill — 代码搜索             ║');
+        info('║   🔍 devtoolkit — 代码搜索             ║');
         info('╚══════════════════════════════════════╝');
         info('');
         await initCodeIndex({ root: searchRoot });
@@ -196,7 +194,7 @@ async function runCommand(
         await searchAndPrint(query, llmConfig, useExplain, searchRoot);
       } else {
         info('╔══════════════════════════════════════╗');
-        info('║   🔍 doc2skill — 代码搜索             ║');
+        info('║   🔍 devtoolkit — 代码搜索             ║');
         info('╚══════════════════════════════════════╝');
         info('');
         info(`🔎 搜索: "${query}"`);
@@ -208,7 +206,7 @@ async function runCommand(
     // --scan-code：扫描初始化后进入交互式搜索
     if (options.scanCode) {
       info('╔══════════════════════════════════════╗');
-      info('║   🔍 doc2skill — 代码搜索             ║');
+      info('║   🔍 devtoolkit — 代码搜索             ║');
       info('╚══════════════════════════════════════╝');
       await startSearchSession(llmConfig, useExplain, searchRoot);
       return;
@@ -348,7 +346,7 @@ async function runCommand(
 
   if (!options.stdout && !options.dryRun) {
     info('╔══════════════════════════════════════╗');
-    info('║   🚀 doc2skill — 文档转技能包        ║');
+    info('║   🚀 devtoolkit — 文档转技能包        ║');
     info('╚══════════════════════════════════════╝');
     info('');
   }

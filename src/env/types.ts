@@ -120,7 +120,7 @@ export type EnvModule =
 export interface ExportOptions extends DetectOptions {
   /** 输出目录（默认 cwd） */
   outputDir?: string;
-  /** 输出文件名前缀（默认 doc2skill-env） */
+  /** 输出文件名前缀（默认 devtoolkit-env） */
   outputPrefix?: string;
   /** 是否生成 setup.sh 安装脚本（默认 true） */
   generateScript?: boolean;

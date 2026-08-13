@@ -179,7 +179,7 @@ describe('Web UI — HTTP 安全边界', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Doc2Skill-Token': 'test-token',
+        'X-DevToolkit-Token': 'test-token',
       },
       body: JSON.stringify({
         source: '/etc/passwd',
@@ -195,7 +195,7 @@ describe('Web UI — HTTP 安全边界', () => {
     const { baseUrl } = await startTestServer();
     const headers = {
       'Content-Type': 'application/json',
-      'X-Doc2Skill-Token': 'test-token',
+      'X-DevToolkit-Token': 'test-token',
     };
     const sourceRes = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
@@ -218,7 +218,7 @@ describe('Web UI — HTTP 安全边界', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Doc2Skill-Token': 'test-token',
+        'X-DevToolkit-Token': 'test-token',
       },
       body: JSON.stringify({ text: 'x'.repeat(100) }),
     });
@@ -228,7 +228,7 @@ describe('Web UI — HTTP 安全边界', () => {
   it('不存在的 ZIP 下载票据返回 404', async () => {
     const { baseUrl } = await startTestServer();
     const res = await fetch(`${baseUrl}/api/download/${'a'.repeat(32)}`, {
-      headers: { 'X-Doc2Skill-Token': 'test-token' },
+      headers: { 'X-DevToolkit-Token': 'test-token' },
     });
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual(

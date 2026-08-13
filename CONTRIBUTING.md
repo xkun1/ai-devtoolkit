@@ -1,12 +1,12 @@
 ## 🤝 参与贡献
 
-感谢你对 doc2skill 的兴趣！以下是如何参与贡献的简明指南。
+感谢你对 devtoolkit 的兴趣！以下是如何参与贡献的简明指南。
 
 ### 🛠 开发环境
 
 ```bash
-git clone https://github.com/xkun1/doc2skill.git
-cd doc2skill
+git clone https://github.com/xkun1/devtoolkit.git
+cd devtoolkit
 npm install
 ```
 

@@ -1,4 +1,4 @@
-# 🚀 doc2skill
+# 🚀 devtoolkit
 
 **简体中文 | [English](README.en.md)**
 
@@ -7,14 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
-[![CI](https://github.com/xkun1/doc2skill/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/doc2skill/actions)
+[![CI](https://github.com/xkun1/devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/devtoolkit/actions)
 
 ---
 
 ## ✨ 它能做什么？
 
 你有一堆 API 文档、SDK 指南、技术规范——每次让 AI 写代码都要手动粘贴。
-**doc2skill** 自动把这些文档提炼成 AI Agent 能直接加载的技能包：
+**devtoolkit** 自动把这些文档提炼成 AI Agent 能直接加载的技能包：
 
 | 输入 | → | 输出 |
 |------|:---:|------|
@@ -29,25 +29,25 @@
 
 ```bash
 # 零安装直接用
-npx doc2skill https://docs.example.com/api --type codex
+npx devtoolkit https://docs.example.com/api --type codex
 
 # 从本地 PDF 生成 Cursor 规则
-npx doc2skill ./sdk-guide.pdf --type cursor
+npx devtoolkit ./sdk-guide.pdf --type cursor
 
 # 从 Markdown 生成 Claude 项目记忆
-npx doc2skill ./CONTRIBUTING.md --type claude
+npx devtoolkit ./CONTRIBUTING.md --type claude
 
 # 多文档合并为一个技能包
-npx doc2skill ./api.md ./sdk.md ./errors.md --type codex
+npx devtoolkit ./api.md ./sdk.md ./errors.md --type codex
 
 # 自定义技能名
-npx doc2skill ./api.md --name my-api-spec
+npx devtoolkit ./api.md --name my-api-spec
 
 # stdout 模式：直接管道给其他工具
-npx doc2skill ./api.md --stdout >> ./SKILL.md
+npx devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # 无参数 → 交互式向导
-npx doc2skill
+npx devtoolkit
 ```
 
 ### 🔍 代码搜索模式（不用打开 IDEA 了！）
@@ -56,25 +56,25 @@ npx doc2skill
 
 ```bash
 # 1. 初始化扫描当前项目（构建索引）
-doc2skill --scan-code
+devtoolkit --scan-code
 
 # 2. 直接搜索（自动加载已有索引）
-doc2skill --search "用户登录验证逻辑"
+devtoolkit --search "用户登录验证逻辑"
 
 # 3. 扫描 + 搜索一条龙
-doc2skill --scan-code --search "分页查询实现"
+devtoolkit --scan-code --search "分页查询实现"
 
 # 4. 进入交互式搜索 REPL（连续搜索）
-doc2skill --scan-code
+devtoolkit --scan-code
 # > 🔍 > 用户认证流程
 # > 🔍 > 分页组件
 # > 🔍 > :q 退出
 
 # 5. 不使用 LLM 解释，仅显示匹配代码
-doc2skill --search "OrderService" --no-explain
+devtoolkit --search "OrderService" --no-explain
 
 # 6. 搜索指定项目目录
-doc2skill --scan-code --search "config" /path/to/project
+devtoolkit --scan-code --search "config" /path/to/project
 ```
 
 **支持的搜索场景**：
@@ -88,7 +88,7 @@ doc2skill --scan-code --search "config" /path/to/project
 
 **支持的语言**：TypeScript / JavaScript / Java / Kotlin / Python / Go / Rust / C# / C++ / PHP / Ruby / Swift / Scala / Dart 等 25+ 种。
 
-> 索引文件 `.doc2skill-index.json` 保存在项目根目录，已自动加入 `.gitignore`。
+> 索引文件 `.devtoolkit-index.json` 保存在项目根目录，已自动加入 `.gitignore`。
 
 
 ### 📦 环境迁移模式（换电脑一键配置）
@@ -97,24 +97,24 @@ doc2skill --scan-code --search "config" /path/to/project
 
 ```bash
 # 导出当前环境配置
-npx doc2skill --env-export
+npx devtoolkit --env-export
 
 # 导出到指定目录
-npx doc2skill --env-export /path/to/output-dir
+npx devtoolkit --env-export /path/to/output-dir
 
 # 预览恢复内容（dry-run，不实际执行）
-npx doc2skill --env-import doc2skill-env.json
+npx devtoolkit --env-import devtoolkit-env.json
 
 # 实际执行恢复
-npx doc2skill --env-import doc2skill-env.json --execute
+npx devtoolkit --env-import devtoolkit-env.json --execute
 ```
 
 **生成的文件**：
 
 | 文件 | 说明 |
 |------|------|
-| `doc2skill-env.json` | 完整环境快照（含所有包列表、配置内容） |
-| `doc2skill-env-setup.sh` | 一键安装脚本（新电脑直接 `bash` 执行） |
+| `devtoolkit-env.json` | 完整环境快照（含所有包列表、配置内容） |
+| `devtoolkit-env-setup.sh` | 一键安装脚本（新电脑直接 `bash` 执行） |
 
 **扫描范围**：
 
@@ -136,10 +136,10 @@ npx doc2skill --env-import doc2skill-env.json --execute
 
 ```bash
 # 启动本地 Web 界面（自动打开浏览器）
-npx doc2skill --ui
+npx devtoolkit --ui
 
 # 自定义端口
-npx doc2skill --ui --port 8080
+npx devtoolkit --ui --port 8080
 ```
 
 在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；Codex `references/` 和 Claude `.claude/rules/` 等多文件目录会完整保留。
@@ -151,20 +151,20 @@ Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传�
 
 ### 🔌 MCP Server 模式
 
-让 doc2skill 成为 AI Agent 的原生工具——通过 MCP 协议，Agent 直接调用文档转技能包能力：
+让 devtoolkit 成为 AI Agent 的原生工具——通过 MCP 协议，Agent 直接调用文档转技能包能力：
 
 ```bash
 # 启动 MCP Server（stdio JSON-RPC）
-npx doc2skill --mcp
+npx devtoolkit --mcp
 ```
 
 **Claude Desktop 配置**（`claude_desktop_config.json`）：
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp"],
+      "args": ["devtoolkit", "--mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "sk-xxx"
       }
@@ -177,9 +177,9 @@ npx doc2skill --mcp
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp"]
+      "args": ["devtoolkit", "--mcp"]
     }
   }
 }
@@ -203,9 +203,9 @@ MCP Server 提供 4 个工具：
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp", "--model", "ollama-local"],
+      "args": ["devtoolkit", "--mcp", "--model", "ollama-local"],
       "env": {
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
@@ -219,10 +219,10 @@ MCP Server 提供 4 个工具：
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
       "args": [
-        "doc2skill", "--mcp",
+        "devtoolkit", "--mcp",
         "--model", "ollama-local",
         "--local-model", "qwen2.5-coder:7b"
       ]
@@ -236,10 +236,10 @@ MCP Server 提供 4 个工具：
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
       "args": [
-        "doc2skill", "--mcp",
+        "devtoolkit", "--mcp",
         "--model", "custom-local",
         "--base-url", "http://localhost:8000/v1",
         "--local-model", "my-model-name"
@@ -262,25 +262,25 @@ MCP Server 提供 4 个工具：
 
 ```bash
 # 爬取整个文档站点（自动发现子页面）
-npx doc2skill https://docs.example.com --crawl --crawl-depth 2
+npx devtoolkit https://docs.example.com --crawl --crawl-depth 2
 
 # 批量处理整个目录（每个文件生成独立技能包）
-npx doc2skill ./docs/ --type codex
+npx devtoolkit ./docs/ --type codex
 
 # 目录合并模式：所有文件合并为一个技能包
-npx doc2skill ./docs/ --type codex --merge
+npx devtoolkit ./docs/ --type codex --merge
 
 # 控制目录扫描深度
-npx doc2skill ./docs/ --type codex --dir-depth 3
+npx devtoolkit ./docs/ --type codex --dir-depth 3
 
 # 监控模式：文档变更后自动刷新技能包
-npx doc2skill ./api.md --watch
+npx devtoolkit ./api.md --watch
 
 # 预览模式：只看结果不写文件
-npx doc2skill ./api.md --dry-run
+npx devtoolkit ./api.md --dry-run
 
 # 兼容旧工作流：生成 SKILL.md / .cursorrules / CLAUDE.md 单文件
-npx doc2skill ./api.md --type cursor --legacy
+npx devtoolkit ./api.md --type cursor --legacy
 ```
 
 超过约 2.4 万字符的输入会按 Markdown 语义完整分块，并执行“逐块抽取 → 分层归并 → 最终合成”；不会再静默截掉文档中间内容。Codex 超长结果自动下沉到 `references/`，Claude 超长结果自动拆到 `.claude/rules/`。
@@ -289,7 +289,7 @@ npx doc2skill ./api.md --type cursor --legacy
 
 ```
 ╔══════════════════════════════════════╗
-║   🚀 doc2skill — 文档转技能包        ║
+║   🚀 devtoolkit — 文档转技能包        ║
 ╚══════════════════════════════════════╝
 
 ⠋ 正在加载文档...
@@ -317,7 +317,7 @@ description: "Stripe API Docs"
 
 ## 🔧 配置 LLM
 
-doc2skill 兼容所有 **OpenAI 协议**的 API。内置常用模型预设：
+devtoolkit 兼容所有 **OpenAI 协议**的 API。内置常用模型预设：
 
 | 模型 | 环境变量 | Base URL |
 |------|---------|----------|
@@ -332,10 +332,10 @@ doc2skill 兼容所有 **OpenAI 协议**的 API。内置常用模型预设：
 ```bash
 # 方式一：环境变量（推荐）
 export DEEPSEEK_API_KEY="sk-xxxxx"
-npx doc2skill https://docs.example.com/api
+npx devtoolkit https://docs.example.com/api
 
 # 方式二：参数指定（或任何 OpenAI 兼容 API）
-npx doc2skill <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
+npx devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
 ```
 
 ### 🦙 本地模型（免费/离线）
@@ -344,16 +344,16 @@ npx doc2skill <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model 
 
 ```bash
 # Ollama（需先安装 ollama 并拉取模型）
-npx doc2skill ./api.md --model ollama-local
+npx devtoolkit ./api.md --model ollama-local
 
 # 自定义 Ollama 模型名（通过环境变量）
-OLLAMA_MODEL=qwen2.5:7b npx doc2skill ./api.md --model ollama-local
+OLLAMA_MODEL=qwen2.5:7b npx devtoolkit ./api.md --model ollama-local
 
 # 也可通过参数明确指定本地服务中的真实模型名
-npx doc2skill ./api.md --model ollama-local --local-model qwen2.5:7b
+npx devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
 
 # LM Studio
-npx doc2skill ./api.md --model lmstudio-local
+npx devtoolkit ./api.md --model lmstudio-local
 ```
 
 参考 `.env.example` 配置环境变量。
@@ -361,7 +361,7 @@ npx doc2skill ./api.md --model lmstudio-local
 ## 📖 CLI 完整参数
 
 ```
-Usage: doc2skill [options] <sources...>
+Usage: devtoolkit [options] <sources...>
 
 Arguments:
   sources              文档来源：URL 或本地文件路径（可多个，将合并为一个技能包）
@@ -395,7 +395,7 @@ Options:
   -h, --help           帮助
 ```
 
-也支持项目级配置文件 `.doc2skill.json`，CLI 参数优先覆盖配置文件值：
+也支持项目级配置文件 `.devtoolkit.json`，CLI 参数优先覆盖配置文件值：
 
 ```json
 {
@@ -461,12 +461,12 @@ npm run build
 
 ## 📦 编程式 API
 
-除了 CLI，doc2skill 也可作为 Node.js 库使用：
+除了 CLI，devtoolkit 也可作为 Node.js 库使用：
 
 ```typescript
-import { doc2skill } from 'doc2skill';
+import { devtoolkit } from 'devtoolkit';
 
-const result = await doc2skill('https://docs.example.com/api', {
+const result = await devtoolkit('https://docs.example.com/api', {
   agentType: 'codex',
   llm: {
     apiKey: process.env.DEEPSEEK_API_KEY,
@@ -484,7 +484,7 @@ console.log(result.stats);         // 分块、LLM 调用与缓存统计
 也支持只加载不提炼：
 
 ```typescript
-import { loadDocument } from 'doc2skill';
+import { loadDocument } from 'devtoolkit';
 
 const doc = await loadDocument('https://example.com');
 console.log(doc.content); // 提取的 Markdown
@@ -495,8 +495,8 @@ console.log(doc.content); // 提取的 Markdown
 ## 🔨 本地开发
 
 ```bash
-git clone https://github.com/xkun1/doc2skill.git
-cd doc2skill
+git clone https://github.com/xkun1/devtoolkit.git
+cd devtoolkit
 npm install
 
 # 开发模式
@@ -521,11 +521,11 @@ npm test
 - [x] stdout 模式（管道集成）
 - [x] 自定义技能名
 - [x] CI（GitHub Actions，多 Node 版本矩阵）
-- [x] 交互式向导（无参数运行 `npx doc2skill` 进入 inquirer 引导）
+- [x] 交互式向导（无参数运行 `npx devtoolkit` 进入 inquirer 引导）
 - [x] 编程式 API（可作为 Node.js 库 import）
 - [x] dry-run 预览模式
 - [x] 覆盖保护（--force）
-- [x] 配置文件（.doc2skill.json 项目级默认值）
+- [x] 配置文件（.devtoolkit.json 项目级默认值）
 - [x] 本地 HTML 文件支持
 - [x] 文档站点爬取（--crawl 自动发现子页面）
 - [x] Token 预估与费用提示

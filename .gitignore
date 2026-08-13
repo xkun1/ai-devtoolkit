@@ -9,4 +9,4 @@ CLAUDE.md
 coverage/
 .DS_Store
 *.tsbuildinfo
-.doc2skill-index.json
+.devtoolkit-index.json

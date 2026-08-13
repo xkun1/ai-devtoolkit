@@ -17,7 +17,7 @@ import type {
   SkillResult,
 } from '../types/index.js';
 
-const CACHE_FILENAME = '.doc2skill-cache.json';
+const CACHE_FILENAME = '.devtoolkit-cache.json';
 const CACHE_VERSION = 2;
 
 export interface FingerprintInput {

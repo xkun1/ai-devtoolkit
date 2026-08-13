@@ -17,7 +17,7 @@ import { scanCodeFiles, extractSymbols } from './scanner.js';
 export const INDEX_VERSION = '1.0.0';
 
 /** 索引文件名 */
-export const INDEX_FILENAME = '.doc2skill-index.json';
+export const INDEX_FILENAME = '.devtoolkit-index.json';
 
 /** 默认分块参数 */
 const DEFAULT_CHUNK_LINES = 80;

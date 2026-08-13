@@ -8,7 +8,7 @@ async function parse(args: string[]): Promise<void> {
     writeOut: vi.fn(),
     writeErr: vi.fn(),
   });
-  await program.parseAsync(['node', 'doc2skill', ...args]);
+  await program.parseAsync(['node', 'devtoolkit', ...args]);
 }
 
 describe('CLI 参数契约', () => {

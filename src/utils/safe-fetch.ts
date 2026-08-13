@@ -54,7 +54,7 @@ async function fetchStep(
         method: 'GET',
         lookup: createPublicLookup(),
         headers: {
-          'User-Agent': 'doc2skill/secure-fetch',
+          'User-Agent': 'devtoolkit/secure-fetch',
           Accept:
             'text/html,application/xhtml+xml,text/plain,text/markdown,application/json;q=0.8',
           'Accept-Encoding': 'identity',

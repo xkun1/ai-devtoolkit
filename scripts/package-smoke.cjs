@@ -14,7 +14,7 @@ const packed = JSON.parse(
       '--json',
       '--ignore-scripts',
       '--cache',
-      join(tmpdir(), 'doc2skill-package-smoke-cache'),
+      join(tmpdir(), 'devtoolkit-package-smoke-cache'),
     ],
     { cwd: root, encoding: 'utf-8' },
   ),
@@ -32,14 +32,14 @@ for (const required of [
 }
 
 const cjs = require(root);
-assert.equal(typeof cjs.doc2skill, 'function', 'CJS 根入口未导出 doc2skill');
+assert.equal(typeof cjs.devtoolkit, 'function', 'CJS 根入口未导出 devtoolkit');
 
-const tempDir = mkdtempSync(join(tmpdir(), 'doc2skill-esm-smoke-'));
+const tempDir = mkdtempSync(join(tmpdir(), 'devtoolkit-esm-smoke-'));
 const esmScript = join(tempDir, 'smoke.mjs');
 writeFileSync(
   esmScript,
-  `import { doc2skill } from ${JSON.stringify(join(root, 'dist/index.mjs'))};\n` +
-    `if (typeof doc2skill !== 'function') process.exit(1);\n`,
+  `import { devtoolkit } from ${JSON.stringify(join(root, 'dist/index.mjs'))};\n` +
+    `if (typeof devtoolkit !== 'function') process.exit(1);\n`,
 );
 execFileSync(process.execPath, [esmScript], { stdio: 'inherit' });
 

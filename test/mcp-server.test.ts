@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const BIN = join(process.cwd(), 'bin', 'cli.js');
-const TMP = join(tmpdir(), `doc2skill-mcp-test-${Date.now()}`);
+const TMP = join(tmpdir(), `devtoolkit-mcp-test-${Date.now()}`);
 
 beforeEach(async () => {
   await mkdir(TMP, { recursive: true });
@@ -78,7 +78,7 @@ describe('MCP Server — 协议握手', () => {
     const init = responses[0];
     expect(init.jsonrpc).toBe('2.0');
     expect(init.id).toBe(1);
-    expect(init.result.serverInfo.name).toBe('doc2skill');
+    expect(init.result.serverInfo.name).toBe('devtoolkit');
     expect(init.result.protocolVersion).toBe('2024-11-05');
     expect(init.result.capabilities.tools).toBeDefined();
   });

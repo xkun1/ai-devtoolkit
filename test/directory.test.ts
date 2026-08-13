@@ -9,7 +9,7 @@ import {
   isDirectory,
 } from '../src/loader/directory.js';
 
-const TMP = join(tmpdir(), `doc2skill-test-${Date.now()}`);
+const TMP = join(tmpdir(), `devtoolkit-test-${Date.now()}`);
 
 beforeEach(async () => {
   await mkdir(TMP, { recursive: true });

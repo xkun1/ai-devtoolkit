@@ -18,7 +18,7 @@ export async function exportEnvironment(
   options: ExportOptions = {},
 ): Promise<ExportResult> {
   const outputDir = options.outputDir || process.cwd();
-  const prefix = options.outputPrefix || 'doc2skill-env';
+  const prefix = options.outputPrefix || 'devtoolkit-env';
   const generateScript = options.generateScript ?? true;
   const generateJson = options.generateJson ?? true;
 
@@ -83,7 +83,7 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
 
   lines.push('#!/usr/bin/env bash');
   lines.push('# ============================================================');
-  lines.push('# doc2skill 环境迁移脚本');
+  lines.push('# devtoolkit 环境迁移脚本');
   lines.push('# 导出时间: ' + snapshot.exportedAt);
   lines.push(
     '# 系统: ' + snapshot.system.platform + '/' + snapshot.system.arch,

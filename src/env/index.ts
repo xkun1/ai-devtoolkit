@@ -60,7 +60,7 @@ export type {
  */
 export async function exportEnv(options: ExportOptions = {}): Promise<void> {
   info('╔══════════════════════════════════════╗');
-  info('║   📦 doc2skill — 环境迁移导出        ║');
+  info('║   📦 devtoolkit — 环境迁移导出        ║');
   info('╚══════════════════════════════════════╝');
   info('');
 
@@ -87,7 +87,7 @@ export async function exportEnv(options: ExportOptions = {}): Promise<void> {
     info('     2. 执行 bash ' + result.scriptPath.split('/').pop());
   }
   if (result.jsonPath) {
-    info('     或: doc2skill --env-import ' + result.jsonPath);
+    info('     或: devtoolkit --env-import ' + result.jsonPath);
   }
   info('');
 }
@@ -100,7 +100,7 @@ export async function importEnv(
   options: ImportOptions = {},
 ): Promise<void> {
   info('╔══════════════════════════════════════╗');
-  info('║   📥 doc2skill — 环境迁移导入        ║');
+  info('║   📥 devtoolkit — 环境迁移导入        ║');
   info('╚══════════════════════════════════════╝');
   info('');
 

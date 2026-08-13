@@ -41,7 +41,7 @@ const AGENT_CHOICES = [
 export async function runWizard(): Promise<WizardResult | null> {
   info('');
   info('  ╔══════════════════════════════════════════╗');
-  info('  ║  🚀 doc2skill 交互式向导                 ║');
+  info('  ║  🚀 devtoolkit 交互式向导                 ║');
   info('  ║  让我们一起把文档变成 AI 技能包！        ║');
   info('  ╚══════════════════════════════════════════╝');
   info('');

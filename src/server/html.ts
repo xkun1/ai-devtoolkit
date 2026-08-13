@@ -4,7 +4,7 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>doc2skill — 文档转 AI 技能包</title>
+<title>devtoolkit — 文档转 AI 技能包</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
@@ -119,7 +119,7 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
 <body>
 <div class="container">
   <header>
-    <h1>📄 → 🤖 <span>doc2skill</span></h1>
+    <h1>📄 → 🤖 <span>devtoolkit</span></h1>
     <p>将任意网页或文档，1秒转化为 AI Agent 技能包</p>
     <p style='font-size:11px;color:var(--text-muted);margin-top:4px'>支持 PDF/DOCX/MD/TXT 上传</p>
   </header>
@@ -217,8 +217,8 @@ export const WEB_UI_HTML = `<!DOCTYPE html>
   </div>
 
   <footer>
-    <a href="https://github.com/xkun1/doc2skill" target="_blank">GitHub</a> ·
-    <a href="https://www.npmjs.com/package/doc2skill" target="_blank">npm</a> ·
+    <a href="https://github.com/xkun1/devtoolkit" target="_blank">GitHub</a> ·
+    <a href="https://www.npmjs.com/package/devtoolkit" target="_blank">npm</a> ·
     MIT License © 2026
   </footer>
 </div>
@@ -231,7 +231,7 @@ let lastAgentType = 'codex';
 let uploadedFile = null; // { name, content, isBinary, mimeType }
 const FILENAMES = { codex: 'SKILL.md', cursor: 'project-rule.mdc', claude: 'CLAUDE.md' };
 const API_HEADERS = {
-  'X-Doc2Skill-Token': document.querySelector('meta[name="doc2skill-session"]')?.content || '',
+  'X-DevToolkit-Token': document.querySelector('meta[name="devtoolkit-session"]')?.content || '',
 };
 
 document.getElementById('detectBtn').addEventListener('click', detectLocalModels);
@@ -534,7 +534,7 @@ async function downloadZip(zip) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'ZIP 下载失败');
     }
-    triggerDownload(await res.blob(), zip.filename || 'doc2skill-package.zip');
+    triggerDownload(await res.blob(), zip.filename || 'devtoolkit-package.zip');
     showStatus('success', '✅ 完整 ZIP 已下载');
   } catch (e) {
     showStatus('error', '❌ ' + e.message);

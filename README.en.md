@@ -1,11 +1,11 @@
-# 🚀 doc2skill
+# 🚀 devtoolkit
 
 > Turn any webpage or PDF into an AI Agent skill pack (Cursor / Codex / Claude) — in seconds!
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
-[![CI](https://github.com/xkun1/doc2skill/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/doc2skill/actions)
+[![CI](https://github.com/xkun1/devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/devtoolkit/actions)
 
 **[简体中文](README.md) | English**
 
@@ -14,7 +14,7 @@
 ## ✨ What Does It Do?
 
 You have a pile of API docs, SDK guides, and technical specs — every time you ask AI to write code, you manually paste them in.
-**doc2skill** automatically distills these documents into skill packs that AI Agents can load directly:
+**devtoolkit** automatically distills these documents into skill packs that AI Agents can load directly:
 
 | Input | → | Output |
 |-------|:---:|-------|
@@ -29,35 +29,35 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 
 ```bash
 # Zero-install, run directly
-npx doc2skill https://docs.example.com/api --type codex
+npx devtoolkit https://docs.example.com/api --type codex
 
 # Generate Cursor rules from a local PDF
-npx doc2skill ./sdk-guide.pdf --type cursor
+npx devtoolkit ./sdk-guide.pdf --type cursor
 
 # Generate Claude project memory from Markdown
-npx doc2skill ./CONTRIBUTING.md --type claude
+npx devtoolkit ./CONTRIBUTING.md --type claude
 
 # Merge multiple documents into one skill pack
-npx doc2skill ./api.md ./sdk.md ./errors.md --type codex
+npx devtoolkit ./api.md ./sdk.md ./errors.md --type codex
 
 # Custom skill name
-npx doc2skill ./api.md --name my-api-spec
+npx devtoolkit ./api.md --name my-api-spec
 
 # stdout mode: pipe directly to other tools
-npx doc2skill ./api.md --stdout >> ./SKILL.md
+npx devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # No arguments → interactive wizard
-npx doc2skill
+npx devtoolkit
 ```
 
 ### 🌐 Web UI Mode
 
 ```bash
 # Launch local web interface (auto-opens browser)
-npx doc2skill --ui
+npx devtoolkit --ui
 
 # Custom port
-npx doc2skill --ui --port 8080
+npx devtoolkit --ui --port 8080
 ```
 
 Paste a URL, choose a template, preview results in real time, and download a complete ZIP skill pack with one click. Codex `references/` and Claude `.claude/rules/` multi-file directories are fully preserved.
@@ -66,20 +66,20 @@ The Web UI only listens on `127.0.0.1` and only accepts public HTTP(S) URLs or b
 
 ### 🔌 MCP Server Mode
 
-Make doc2skill a native tool for AI Agents — via the MCP protocol, Agents can directly invoke document-to-skill capabilities:
+Make devtoolkit a native tool for AI Agents — via the MCP protocol, Agents can directly invoke document-to-skill capabilities:
 
 ```bash
 # Start MCP Server (stdio JSON-RPC)
-npx doc2skill --mcp
+npx devtoolkit --mcp
 ```
 
 **Claude Desktop config** (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp"],
+      "args": ["devtoolkit", "--mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "sk-xxx"
       }
@@ -92,9 +92,9 @@ npx doc2skill --mcp
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp"]
+      "args": ["devtoolkit", "--mcp"]
     }
   }
 }
@@ -116,9 +116,9 @@ Local models require no API Key — specify model info via environment variables
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
-      "args": ["doc2skill", "--mcp", "--model", "ollama-local"],
+      "args": ["devtoolkit", "--mcp", "--model", "ollama-local"],
       "env": {
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
@@ -132,10 +132,10 @@ Local models require no API Key — specify model info via environment variables
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
       "args": [
-        "doc2skill", "--mcp",
+        "devtoolkit", "--mcp",
         "--model", "ollama-local",
         "--local-model", "qwen2.5-coder:7b"
       ]
@@ -149,10 +149,10 @@ Local models require no API Key — specify model info via environment variables
 ```json
 {
   "mcpServers": {
-    "doc2skill": {
+    "devtoolkit": {
       "command": "npx",
       "args": [
-        "doc2skill", "--mcp",
+        "devtoolkit", "--mcp",
         "--model", "custom-local",
         "--base-url", "http://localhost:8000/v1",
         "--local-model", "my-model-name"
@@ -175,25 +175,25 @@ Local models require no API Key — specify model info via environment variables
 
 ```bash
 # Crawl an entire documentation site (auto-discover sub-pages)
-npx doc2skill https://docs.example.com --crawl --crawl-depth 2
+npx devtoolkit https://docs.example.com --crawl --crawl-depth 2
 
 # Batch process an entire directory (one skill pack per file)
-npx doc2skill ./docs/ --type codex
+npx devtoolkit ./docs/ --type codex
 
 # Directory merge mode: combine all files into one skill pack
-npx doc2skill ./docs/ --type codex --merge
+npx devtoolkit ./docs/ --type codex --merge
 
 # Control directory scan depth
-npx doc2skill ./docs/ --type codex --dir-depth 3
+npx devtoolkit ./docs/ --type codex --dir-depth 3
 
 # Watch mode: auto-refresh skill pack on document change
-npx doc2skill ./api.md --watch
+npx devtoolkit ./api.md --watch
 
 # Preview mode: see results without writing files
-npx doc2skill ./api.md --dry-run
+npx devtoolkit ./api.md --dry-run
 
 # Legacy workflow: single-file output (SKILL.md / .cursorrules / CLAUDE.md)
-npx doc2skill ./api.md --type cursor --legacy
+npx devtoolkit ./api.md --type cursor --legacy
 ```
 
 Inputs exceeding ~24K characters are semantically chunked by Markdown structure, then processed through "per-chunk extraction → hierarchical merge → final synthesis." No silent mid-document truncation. Codex overflow automatically sinks to `references/`; Claude overflow splits into `.claude/rules/`.
@@ -202,7 +202,7 @@ Inputs exceeding ~24K characters are semantically chunked by Markdown structure,
 
 ```
 ╔══════════════════════════════════════╗
-║   🚀 doc2skill — Docs → Skill Pack   ║
+║   🚀 devtoolkit — Docs → Skill Pack   ║
 ╚══════════════════════════════════════╝
 
 ⠋ Loading document...
@@ -230,7 +230,7 @@ description: "Stripe API Docs"
 
 ## 🔧 LLM Configuration
 
-doc2skill is compatible with all **OpenAI-protocol** APIs. Built-in model presets:
+devtoolkit is compatible with all **OpenAI-protocol** APIs. Built-in model presets:
 
 | Model | Env Variable | Base URL |
 |-------|-------------|----------|
@@ -245,10 +245,10 @@ doc2skill is compatible with all **OpenAI-protocol** APIs. Built-in model preset
 ```bash
 # Option 1: Environment variable (recommended)
 export DEEPSEEK_API_KEY="sk-xxxxx"
-npx doc2skill https://docs.example.com/api
+npx devtoolkit https://docs.example.com/api
 
 # Option 2: CLI args (or any OpenAI-compatible API)
-npx doc2skill <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
+npx devtoolkit <url> --api-key sk-xxx --base-url https://your-api.com/v1 --model your-model
 ```
 
 ### 🦙 Local Models (Free / Offline)
@@ -257,16 +257,16 @@ Run entirely locally with Ollama or LM Studio — no API Key required:
 
 ```bash
 # Ollama (install ollama and pull a model first)
-npx doc2skill ./api.md --model ollama-local
+npx devtoolkit ./api.md --model ollama-local
 
 # Custom Ollama model name (via environment variable)
-OLLAMA_MODEL=qwen2.5:7b npx doc2skill ./api.md --model ollama-local
+OLLAMA_MODEL=qwen2.5:7b npx devtoolkit ./api.md --model ollama-local
 
 # Explicitly specify the local model name via CLI arg
-npx doc2skill ./api.md --model ollama-local --local-model qwen2.5:7b
+npx devtoolkit ./api.md --model ollama-local --local-model qwen2.5:7b
 
 # LM Studio
-npx doc2skill ./api.md --model lmstudio-local
+npx devtoolkit ./api.md --model lmstudio-local
 ```
 
 See `.env.example` for environment variable configuration.
@@ -274,7 +274,7 @@ See `.env.example` for environment variable configuration.
 ## 📖 CLI Reference
 
 ```
-Usage: doc2skill [options] <sources...>
+Usage: devtoolkit [options] <sources...>
 
 Arguments:
   sources              Document sources: URLs or local file paths (multiple allowed, merged into one skill pack)
@@ -308,7 +308,7 @@ Options:
   -h, --help           Show help
 ```
 
-Also supports project-level config file `.doc2skill.json`. CLI args take precedence:
+Also supports project-level config file `.devtoolkit.json`. CLI args take precedence:
 
 ```json
 {
@@ -374,12 +374,12 @@ Test coverage:
 
 ## 📦 Programmatic API
 
-Beyond the CLI, doc2skill can be used as a Node.js library:
+Beyond the CLI, devtoolkit can be used as a Node.js library:
 
 ```typescript
-import { doc2skill } from 'doc2skill';
+import { devtoolkit } from 'devtoolkit';
 
-const result = await doc2skill('https://docs.example.com/api', {
+const result = await devtoolkit('https://docs.example.com/api', {
   agentType: 'codex',
   llm: {
     apiKey: process.env.DEEPSEEK_API_KEY,
@@ -397,7 +397,7 @@ console.log(result.stats);         // Chunking, LLM calls, and cache stats
 Also supports load-only without extraction:
 
 ```typescript
-import { loadDocument } from 'doc2skill';
+import { loadDocument } from 'devtoolkit';
 
 const doc = await loadDocument('https://example.com');
 console.log(doc.content); // Extracted Markdown
@@ -408,8 +408,8 @@ See the `examples/` directory for complete API documentation.
 ## 🔨 Local Development
 
 ```bash
-git clone https://github.com/xkun1/doc2skill.git
-cd doc2skill
+git clone https://github.com/xkun1/devtoolkit.git
+cd devtoolkit
 npm install
 
 # Development mode
@@ -434,11 +434,11 @@ npm test
 - [x] stdout mode (pipe integration)
 - [x] Custom skill names
 - [x] CI (GitHub Actions, multi-Node version matrix)
-- [x] Interactive wizard (run `npx doc2skill` with no args for inquirer-guided setup)
+- [x] Interactive wizard (run `npx devtoolkit` with no args for inquirer-guided setup)
 - [x] Programmatic API (usable as a Node.js library)
 - [x] dry-run preview mode
 - [x] Overwrite protection (--force)
-- [x] Config file (.doc2skill.json project-level defaults)
+- [x] Config file (.devtoolkit.json project-level defaults)
 - [x] Local HTML file support
 - [x] Documentation site crawling (--crawl auto-discovers sub-pages)
 - [x] Token estimation and cost hints

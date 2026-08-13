@@ -1,13 +1,13 @@
 /**
  * 配置文件加载器
- * 查找顺序：CLI 参数 > 项目根目录 .doc2skill.json > ~/.doc2skill.json > 默认值
+ * 查找顺序：CLI 参数 > 项目根目录 .devtoolkit.json > ~/.devtoolkit.json > 默认值
  */
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentType, OutputMode } from './types/index.js';
 
-export interface Doc2SkillConfig {
+export interface DevToolkitConfig {
   /** 默认 Agent 类型 */
   type?: AgentType;
   /** 默认输出路径 */
@@ -28,7 +28,11 @@ export interface Doc2SkillConfig {
   outputMode?: OutputMode;
 }
 
-const CONFIG_FILES = ['.doc2skill.json', '.doc2skillrc', '.doc2skillrc.json'];
+const CONFIG_FILES = [
+  '.devtoolkit.json',
+  '.devtoolkitrc',
+  '.devtoolkitrc.json',
+];
 
 /**
  * 从配置文件读取默认值
@@ -36,7 +40,7 @@ const CONFIG_FILES = ['.doc2skill.json', '.doc2skillrc', '.doc2skillrc.json'];
  */
 export async function loadConfig(
   cwd: string = process.cwd(),
-): Promise<Doc2SkillConfig> {
+): Promise<DevToolkitConfig> {
   // 1. 项目目录链
   let dir = cwd;
   const dirs: string[] = [];
@@ -72,12 +76,12 @@ export async function loadConfig(
 }
 
 /** 校验配置对象，忽略不认识的字段 */
-function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
+function validateConfig(raw: any, filepath: string): DevToolkitConfig {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`配置文件 ${filepath} 顶层必须是 JSON 对象`);
   }
-  const config: Doc2SkillConfig = {};
-  const validKeys: (keyof Doc2SkillConfig)[] = [
+  const config: DevToolkitConfig = {};
+  const validKeys: (keyof DevToolkitConfig)[] = [
     'type',
     'out',
     'model',
@@ -102,7 +106,7 @@ function validateConfig(raw: any, filepath: string): Doc2SkillConfig {
     );
   }
 
-  const stringKeys: (keyof Doc2SkillConfig)[] = [
+  const stringKeys: (keyof DevToolkitConfig)[] = [
     'out',
     'model',
     'name',

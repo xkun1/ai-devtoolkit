@@ -3,9 +3,9 @@
  *
  * 用法：
  * ```ts
- * import { doc2skill } from 'doc2skill';
+ * import { devtoolkit } from 'devtoolkit';
  *
- * const result = await doc2skill('https://docs.example.com/api', {
+ * const result = await devtoolkit('https://docs.example.com/api', {
  *   agentType: 'codex',
  *   llm: { apiKey: 'sk-xxx', model: 'deepseek-chat' },
  * });
@@ -69,7 +69,7 @@ export { runPipeline } from './pipeline.js';
 /**
  * 一行调用快捷方法 — 等价于 runPipeline，语义更友好
  * ```ts
- * const result = await doc2skill(url, options);
+ * const result = await devtoolkit(url, options);
  * ```
  */
 export {
@@ -82,7 +82,7 @@ export {
 export type { ModelDisplayItem, LocalModelInfo } from './models.js';
 export type { ModelPreset } from './types/index.js';
 
-export { runPipeline as doc2skill } from './pipeline.js';
+export { runPipeline as devtoolkit } from './pipeline.js';
 
 export { startServer, WEB_UI_HTML } from './server.js';
 export type { ServerOptions } from './server.js';

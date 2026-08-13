@@ -21,7 +21,7 @@ export async function explainResults(options: ExplainOptions): Promise<string> {
   const { query, results, projectRoot } = options;
 
   if (results.length === 0) {
-    return '未找到匹配的代码。请尝试用不同的关键词搜索，或先运行 `doc2skill --scan-code` 初始化索引。';
+    return '未找到匹配的代码。请尝试用不同的关键词搜索，或先运行 `devtoolkit --scan-code` 初始化索引。';
   }
 
   // 构建上下文（控制 token 量，最多取前 5 条结果）
@@ -90,7 +90,7 @@ export function formatResultsPlain(
   showContent = true,
 ): string {
   if (results.length === 0) {
-    return '❌ 未找到匹配结果。请尝试其他关键词，或运行 `doc2skill --scan-code` 初始化索引。';
+    return '❌ 未找到匹配结果。请尝试其他关键词，或运行 `devtoolkit --scan-code` 初始化索引。';
   }
 
   const lines: string[] = [];

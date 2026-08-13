@@ -90,7 +90,7 @@ describe('DEFAULT_OUTPUT_PATHS', () => {
 
 describe('loadFromHtml', () => {
   it('从本地 HTML 文件提取正文为 Markdown', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-html-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-html-'));
     const htmlPath = join(dir, 'test.html');
     await writeFile(
       htmlPath,

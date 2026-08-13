@@ -1,19 +1,19 @@
 /**
  * MCP (Model Context Protocol) Server — stdio 模式
  *
- * 让 doc2skill 作为 AI Agent 的原生工具使用。
+ * 让 devtoolkit 作为 AI Agent 的原生工具使用。
  * AI Agent 通过 MCP 协议调用 `generate_skill` 工具，
  * 直接把文档/URL 转化为技能包。
  *
  * 用法:
- *   doc2skill --mcp
+ *   devtoolkit --mcp
  *
  * Claude Desktop / Cursor 等 MCP 客户端配置示例:
  *   {
  *     "mcpServers": {
- *       "doc2skill": {
+ *       "devtoolkit": {
  *         "command": "npx",
- *         "args": ["doc2skill", "--mcp"]
+ *         "args": ["devtoolkit", "--mcp"]
  *       }
  *     }
  *   }
@@ -51,7 +51,7 @@ interface JsonRpcResponse {
 // ── MCP 工具定义 ──
 
 const SERVER_INFO = {
-  name: 'doc2skill',
+  name: 'devtoolkit',
   version: '0.7.0',
 };
 
@@ -235,7 +235,7 @@ export function startMcpServer(options: McpServerOptions = {}): void {
     terminal: false,
   });
 
-  info('doc2skill MCP Server 启动（stdio 模式）');
+  info('devtoolkit MCP Server 启动（stdio 模式）');
 
   rl.on('line', (line: string) => {
     if (!line.trim()) return;
@@ -266,7 +266,7 @@ export function startMcpServer(options: McpServerOptions = {}): void {
   });
 
   rl.on('close', () => {
-    info('doc2skill MCP Server 已关闭');
+    info('devtoolkit MCP Server 已关闭');
     process.exit(0);
   });
 }

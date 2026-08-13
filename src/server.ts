@@ -196,7 +196,7 @@ export function startServer(options: ServerOptions = {}): Server {
     actualPort =
       typeof address === 'object' && address ? address.port : actualPort;
     console.log(`\n  ╔══════════════════════════════════════════╗`);
-    console.log(`  ║  🌐 doc2skill Web UI                     ║`);
+    console.log(`  ║  🌐 devtoolkit Web UI                     ║`);
   });
   // 延迟输出 URL，确保 listen 回调先执行
   setTimeout(() => {
@@ -422,7 +422,7 @@ function serveHTML(res: ServerResponse, sessionToken: string): void {
   res.end(
     WEB_UI_HTML.replace(
       '<head>',
-      `<head>\n<meta name="doc2skill-session" content="${safeToken}">`,
+      `<head>\n<meta name="devtoolkit-session" content="${safeToken}">`,
     ).replaceAll('__DOC2SKILL_NONCE__', safeToken),
   );
 }
@@ -639,7 +639,7 @@ function parseHostHeader(
 }
 
 function hasValidSession(req: IncomingMessage, token: string): boolean {
-  return req.headers['x-doc2skill-token'] === token;
+  return req.headers['x-devtoolkit-token'] === token;
 }
 
 function isLoopbackHost(host: string): boolean {

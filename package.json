@@ -1,7 +1,7 @@
 {
-  "name": "doc2skill",
+  "name": "devtoolkit",
   "version": "0.7.0",
-  "description": "📄→🤖 将任意网页/PDF 文档，1秒转化为 AI Agent 技能包（Cursor / Codex / Claude）",
+  "description": "🛠️ 开发者工具箱：AI 技能包生成 · 代码搜索 · 环境迁移（Cursor / Codex / Claude）",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "doc2skill": "bin/cli.js"
+    "devtoolkit": "bin/cli.js"
   },
   "files": [
     "dist",
@@ -75,13 +75,13 @@
   ],
   "author": "kun",
   "license": "MIT",
-  "homepage": "https://github.com/xkun1/doc2skill",
+  "homepage": "https://github.com/xkun1/devtoolkit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xkun1/doc2skill.git"
+    "url": "git+https://github.com/xkun1/devtoolkit.git"
   },
   "bugs": {
-    "url": "https://github.com/xkun1/doc2skill/issues"
+    "url": "https://github.com/xkun1/devtoolkit/issues"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",

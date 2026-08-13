@@ -9,15 +9,15 @@ import { join } from 'node:path';
 
 describe('loadConfig', () => {
   it('无配置文件时返回空对象', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-nocfg-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-nocfg-'));
     const config = await loadConfig(dir);
     expect(config).toEqual({});
   });
 
-  it('读取 .doc2skill.json', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cfg-'));
+  it('读取 .devtoolkit.json', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-cfg-'));
     await writeFile(
-      join(dir, '.doc2skill.json'),
+      join(dir, '.devtoolkit.json'),
       JSON.stringify({ type: 'cursor', model: 'gpt-4o' }),
     );
     const config = await loadConfig(dir);
@@ -26,9 +26,9 @@ describe('loadConfig', () => {
   });
 
   it('忽略不认识的字段', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-unknown-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-unknown-'));
     await writeFile(
-      join(dir, '.doc2skill.json'),
+      join(dir, '.devtoolkit.json'),
       JSON.stringify({ type: 'claude', unknownField: 'xxx', verbose: true }),
     );
     const config = await loadConfig(dir);
@@ -38,33 +38,33 @@ describe('loadConfig', () => {
   });
 
   it('无效 type 抛错', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-badtype-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-badtype-'));
     await writeFile(
-      join(dir, '.doc2skill.json'),
+      join(dir, '.devtoolkit.json'),
       JSON.stringify({ type: 'invalid' }),
     );
     await expect(loadConfig(dir)).rejects.toThrow('type 无效');
   });
 
   it('顶层不是对象时抛出明确错误', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-badshape-'));
-    await writeFile(join(dir, '.doc2skill.json'), 'null');
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-badshape-'));
+    await writeFile(join(dir, '.devtoolkit.json'), 'null');
     await expect(loadConfig(dir)).rejects.toThrow('顶层必须是 JSON 对象');
   });
 
   it('字段类型错误时拒绝配置', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-badfield-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-badfield-'));
     await writeFile(
-      join(dir, '.doc2skill.json'),
+      join(dir, '.devtoolkit.json'),
       JSON.stringify({ verbose: 'yes' }),
     );
     await expect(loadConfig(dir)).rejects.toThrow('verbose 必须是布尔值');
   });
 
-  it('支持 .doc2skillrc 格式', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-rc-'));
+  it('支持 .devtoolkitrc 格式', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-rc-'));
     await writeFile(
-      join(dir, '.doc2skillrc'),
+      join(dir, '.devtoolkitrc'),
       JSON.stringify({ model: 'gpt-4o-mini', out: './rules.md' }),
     );
     const config = await loadConfig(dir);
@@ -73,25 +73,25 @@ describe('loadConfig', () => {
   });
 
   it('读取并校验 outputMode', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-mode-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-mode-'));
     await writeFile(
-      join(dir, '.doc2skill.json'),
+      join(dir, '.devtoolkit.json'),
       JSON.stringify({ outputMode: 'legacy' }),
     );
     expect((await loadConfig(dir)).outputMode).toBe('legacy');
 
-    const badDir = await mkdtemp(join(tmpdir(), 'doc2skill-badmode-'));
+    const badDir = await mkdtemp(join(tmpdir(), 'devtoolkit-badmode-'));
     await writeFile(
-      join(badDir, '.doc2skill.json'),
+      join(badDir, '.devtoolkit.json'),
       JSON.stringify({ outputMode: 'future' }),
     );
     await expect(loadConfig(badDir)).rejects.toThrow('outputMode 无效');
   });
 
   it('子目录查找会递归到父目录', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'doc2skill-parent-'));
+    const root = await mkdtemp(join(tmpdir(), 'devtoolkit-parent-'));
     await writeFile(
-      join(root, '.doc2skill.json'),
+      join(root, '.devtoolkit.json'),
       JSON.stringify({ type: 'codex' }),
     );
     const subdir = join(root, 'sub', 'dir');

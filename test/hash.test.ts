@@ -33,7 +33,7 @@ describe('contentHash', () => {
 describe('getCachePath', () => {
   it('缓存文件在输出目录', () => {
     const path = getCachePath('./output/SKILL.md');
-    expect(path).toContain('.doc2skill-cache.json');
+    expect(path).toContain('.devtoolkit-cache.json');
     expect(path).toContain('output');
   });
 });

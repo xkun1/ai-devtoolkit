@@ -1,12 +1,12 @@
 /**
- * 编程式 API 示例 — 将 doc2skill 作为库使用
+ * 编程式 API 示例 — 将 devtoolkit 作为库使用
  *
  * 运行：npx tsx examples/programmatic-api.ts
  */
-import { doc2skill } from '../src/lib.js';
+import { devtoolkit } from '../src/lib.js';
 
 async function main() {
-  const result = await doc2skill('./examples/sample-doc.md', {
+  const result = await devtoolkit('./examples/sample-doc.md', {
     agentType: 'codex',
     llm: {
       apiKey: process.env.DEEPSEEK_API_KEY || 'sk-xxx',

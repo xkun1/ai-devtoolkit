@@ -20,7 +20,7 @@ vi.mock('../src/transform/llm.js', () => ({
 describe('Pipeline E2E (mocked LLM)', () => {
   it('完整跑通：本地 MD → load → transform → format → write', async () => {
     // 准备临时 markdown 文件
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-test-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-test-'));
     const mdPath = join(dir, 'test-doc.md');
     await writeFile(
       mdPath,
@@ -47,7 +47,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('cursor 类型正确生成 .cursorrules', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cursor-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-cursor-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -68,7 +68,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('内容过短时报错', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-short-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-short-'));
     const mdPath = join(dir, 'short.md');
     await writeFile(mdPath, 'hi'); // 只有2字符
 
@@ -81,7 +81,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('codex 类型自动注入 frontmatter', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-fm-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-fm-'));
     const mdPath = join(dir, 'my-api-docs.md');
     await writeFile(
       mdPath,
@@ -103,7 +103,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('--name 自定义技能名覆盖默认值', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-name-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-name-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -122,7 +122,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('cursor 类型不注入 frontmatter', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-nofm-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-nofm-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -140,7 +140,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('多 source 合并：两个文件合并提炼', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-multi-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-multi-'));
     const md1 = join(dir, 'part1.md');
     const md2 = join(dir, 'part2.md');
     await writeFile(
@@ -165,7 +165,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('多 source 中任一失败即整体失败', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-partial-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-partial-'));
     const md1 = join(dir, 'exists.md');
     await writeFile(
       md1,
@@ -181,7 +181,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('stdout 模式：不写文件，内容经 stdout 输出', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-stdout-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-stdout-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -215,7 +215,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
     }
   });
   it('dry-run 模式：预览内容，不写文件', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-dryrun-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-dryrun-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -237,7 +237,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('覆盖保护：文件已存在时拒绝写入', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-overwrite-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-overwrite-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -257,7 +257,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('--force 覆盖已存在文件', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-force-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-force-'));
     const mdPath = join(dir, 'doc.md');
     await writeFile(
       mdPath,
@@ -279,7 +279,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('未指定输出路径时使用现代 Codex 技能目录', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-modern-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-modern-'));
     const mdPath = join(dir, 'modern.md');
     await writeFile(
       mdPath,
@@ -303,7 +303,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('增量命中返回真实产物且不再次调用 LLM', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cache-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-cache-'));
     const mdPath = join(dir, 'cached.md');
     const outPath = join(dir, 'SKILL.md');
     await writeFile(
@@ -328,7 +328,7 @@ describe('Pipeline E2E (mocked LLM)', () => {
   });
 
   it('增量模式下模型参数变化会重新调用 LLM', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'doc2skill-cache-model-'));
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-cache-model-'));
     const mdPath = join(dir, 'cached.md');
     const outPath = join(dir, 'SKILL.md');
     await writeFile(
