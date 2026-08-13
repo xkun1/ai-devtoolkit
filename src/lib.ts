@@ -107,6 +107,41 @@ export {
 } from './templates/index.js';
 export type { SkillTemplate } from './templates/index.js';
 
+// ── 代码搜索 API ──
+export {
+  initCodeIndex,
+  searchProjectCode,
+  searchAndPrint,
+  startSearchSession,
+  buildIndex,
+  saveIndex,
+  loadIndex,
+  hasIndex,
+  INDEX_FILENAME,
+  searchCode,
+  CodeSearcher,
+  explainResults,
+  formatResultsPlain,
+  startInteractiveSearch,
+  scanCodeFiles,
+  detectLanguage,
+  isCodeFile,
+  extractSymbols,
+  readCodeFile,
+} from './search/index.js';
+export type {
+  CodeFile,
+  CodeChunk,
+  CodeSymbol,
+  SearchResult as CodeSearchResult,
+  SearchIndex as CodeSearchIndex,
+  SearchOptions as CodeSearchOptions,
+  ScanCodeOptions,
+  LanguageId,
+  ExplainOptions,
+  IndexMeta,
+} from './search/index.js';
+
 export {
   contentHash,
   getCachePath,
@@ -133,3 +168,46 @@ export type {
   DownloadStoreOptions,
   DownloadTicket,
 } from './utils/download-store.js';
+
+// ── 环境迁移 API ──
+export { exportEnv, importEnv } from './env/index.js';
+export {
+  exportEnvironment,
+  generateSetupScript,
+  SNAPSHOT_VERSION,
+} from './env/index.js';
+export {
+  importEnvironment,
+  loadSnapshot,
+  formatImportPreview,
+} from './env/index.js';
+export {
+  detectEnvironment,
+  detectBrew,
+  detectNpmGlobal,
+  detectPip,
+  detectSdks,
+  detectVscodeExtensions,
+  detectMacApps,
+  detectShell,
+  detectGit,
+  detectSsh,
+} from './env/index.js';
+export type {
+  EnvSnapshot,
+  BrewPackages,
+  NpmGlobalPackage,
+  PipPackage,
+  SdkInfo,
+  VscodeExtension,
+  MacApp,
+  ShellConfig,
+  GitConfig,
+  SshConfig,
+  DetectOptions,
+  ExportOptions,
+  ExportResult,
+  ImportOptions,
+  ImportResult,
+  EnvModule,
+} from './env/index.js';

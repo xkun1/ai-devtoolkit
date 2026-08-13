@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Command, InvalidArgumentError } from 'commander';
 import { runPipeline } from './pipeline.js';
 import { isValidAgentType } from './format/index.js';
@@ -8,6 +8,12 @@ import { loadConfig } from './config.js';
 import { startWatch } from './watcher.js';
 import { startServer } from './server.js';
 import { startMcpServer } from './mcp-server.js';
+import {
+  initCodeIndex,
+  searchAndPrint,
+  startSearchSession,
+} from './search/index.js';
+import { exportEnv, importEnv } from './env/index.js';
 import {
   MODEL_PRESETS,
   isLocalModel,
@@ -43,6 +49,12 @@ interface CliOptions {
   mcp?: boolean;
   merge?: boolean;
   dirDepth?: number;
+  scanCode?: boolean;
+  search?: string;
+  noExplain?: boolean;
+  envExport?: boolean;
+  envImport?: string;
+  execute?: boolean;
 }
 
 const PACKAGE_VERSION = readPackageVersion();
@@ -110,6 +122,26 @@ export function createProgram(): Command {
       '目录扫描最大递归深度（1-20，默认 5）',
       (value) => parseInteger(value, 'dir-depth', 1, 20),
     )
+    // ── 代码搜索模式 ──
+    .option(
+      '--scan-code',
+      '扫描当前项目代码并构建搜索索引（之后可用 --search 或交互式搜索）',
+    )
+    .option('--search <query>', '用自然语言搜索项目代码')
+    .option('--no-explain', '搜索结果不使用 LLM 解释（仅显示匹配的代码片段）')
+    // ── 环境迁移 ──
+    .option(
+      '--env-export',
+      '导出当前开发环境配置（Homebrew/npm/pip/SDK/VSCode 等），生成快照和安装脚本',
+    )
+    .option(
+      '--env-import <file>',
+      '从环境快照 JSON 恢复（dry-run 预览，加 --execute 执行安装）',
+    )
+    .option(
+      '--execute',
+      '配合 --env-import 使用：实际执行安装命令（不加则只预览）',
+    )
     .action(runCommand);
 
   return program;
@@ -128,6 +160,77 @@ async function runCommand(
   const model = options.model || cfg.model || 'deepseek-chat';
   const baseUrl = options.baseUrl || cfg.baseUrl;
   const apiKey = options.apiKey || cfg.apiKey;
+
+  // ── 代码搜索模式 ──
+  if (options.scanCode || options.search !== undefined) {
+    const searchRoot = sources.length > 0 ? resolve(sources[0]) : process.cwd();
+
+    // 解析 LLM 配置（用于智能解释）
+    const localModelName = resolveLocalModelName(model, options.localModel);
+    let llmConfig: ReturnType<typeof resolveModel> | undefined;
+    try {
+      llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
+      if (!isLocalModel(model) && !llmConfig.apiKey) {
+        llmConfig = undefined; // 无 API Key 时退化为纯文本模式
+      }
+    } catch {
+      llmConfig = undefined;
+    }
+
+    const useExplain = !options.noExplain && !!llmConfig;
+
+    // --search <query>：单次搜索
+    if (options.search !== undefined) {
+      const query = options.search;
+      if (!query.trim()) {
+        throw new Error('搜索内容不能为空');
+      }
+      // 如果同时指定了 --scan-code，先扫描再搜索
+      if (options.scanCode) {
+        info('╔══════════════════════════════════════╗');
+        info('║   🔍 doc2skill — 代码搜索             ║');
+        info('╚══════════════════════════════════════╝');
+        info('');
+        await initCodeIndex({ root: searchRoot });
+        info(`🔎 搜索: "${query}"`);
+        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
+      } else {
+        info('╔══════════════════════════════════════╗');
+        info('║   🔍 doc2skill — 代码搜索             ║');
+        info('╚══════════════════════════════════════╝');
+        info('');
+        info(`🔎 搜索: "${query}"`);
+        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
+      }
+      return;
+    }
+
+    // --scan-code：扫描初始化后进入交互式搜索
+    if (options.scanCode) {
+      info('╔══════════════════════════════════════╗');
+      info('║   🔍 doc2skill — 代码搜索             ║');
+      info('╚══════════════════════════════════════╝');
+      await startSearchSession(llmConfig, useExplain, searchRoot);
+      return;
+    }
+  }
+
+  // ── 环境迁移 ──
+  if (options.envExport || options.envImport) {
+    setVerbose(options.verbose || false);
+
+    if (options.envExport) {
+      const outputDir =
+        sources.length > 0 ? resolve(sources[0]) : process.cwd();
+      await exportEnv({ outputDir });
+      return;
+    }
+
+    if (options.envImport) {
+      await importEnv(options.envImport, { execute: options.execute || false });
+      return;
+    }
+  }
 
   if (options.ui) {
     if (options.localModel && !isLocalModel(model)) {

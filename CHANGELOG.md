@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+### 新功能
+
+- **🔍 代码搜索模式**（`--scan-code` / `--search`）：扫描任意项目的代码文件，构建本地搜索索引，支持自然语言搜索代码。精准定位文件和行号，不用再打开 IDEA 手动搜索
+  - 支持 25+ 种编程语言自动识别和符号提取（class / function / interface / enum 等）
+  - 基于 TF-IDF + 多路召回（关键词 / 符号名 / 文件路径 / 全文模糊匹配）
+  - 可选 LLM 智能解释搜索结果（中文说明 + 代码导航建议）
+  - 交互式 REPL 模式（连续搜索，支持 `:plain` / `:stats` 等命令）
+  - MCP Server 新增 `scan_code` 和 `search_code` 两个工具
+ - 新增编程式 API：`initCodeIndex` / `searchProjectCode` / `CodeSearcher` / `buildIndex` / `searchCode` 等
+
+- **📦 环境迁移模式**（`--env-export` / `--env-import`）：扫描当前电脑的开发环境，生成 JSON 快照和一键安装脚本，换新电脑时一键恢复全部配置
+  - 扫描范围：Homebrew（formulae + casks）/ npm 全局包 / pip 包 / SDK 运行时 / VSCode 扩展 / macOS 应用 / Shell 配置 / Git 全局配置 / SSH 配置
+  - 生成 `doc2skill-env.json`（完整快照）和 `doc2skill-env-setup.sh`（可执行安装脚本）
+  - `--env-import` 支持 dry-run 预览和 `--execute` 实际执行两种模式
+  - 安全设计：SSH 私钥不自动迁移，仅提示手动处理
+  - 新增编程式 API：`exportEnv` / `importEnv` / `detectEnvironment` / `exportEnvironment` / `importEnvironment` 等
+
 ## [0.7.0] — 2026-08-13
 
 ### 新功能

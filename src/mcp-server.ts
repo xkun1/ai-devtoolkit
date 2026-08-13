@@ -23,6 +23,11 @@ import type { AgentType, SkillResult } from './types/index.js';
 import { runPipeline } from './pipeline.js';
 import { resolveModel, isLocalModel } from './models.js';
 import { info } from './utils/logger.js';
+import {
+  initCodeIndex,
+  searchProjectCode,
+  explainResults,
+} from './search/index.js';
 
 /** 启动时传入的默认配置（CLI 参数），工具调用时可被参数覆盖 */
 let serverDefaults: McpServerOptions = {};
@@ -137,6 +142,42 @@ const SCAN_DIRECTORY_SCHEMA = {
   required: ['directory'],
 };
 
+/** scan_code 工具的 JSON Schema */
+const SCAN_CODE_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    directory: {
+      type: 'string',
+      description: '项目根目录路径（默认当前工作目录）',
+    },
+  },
+  required: [] as const,
+};
+
+/** search_code 工具的 JSON Schema */
+const SEARCH_CODE_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    query: {
+      type: 'string',
+      description: '搜索查询：自然语言关键词、函数名、类名等',
+    },
+    directory: {
+      type: 'string',
+      description: '项目根目录路径（默认当前工作目录）',
+    },
+    limit: {
+      type: 'number',
+      description: '返回结果数量上限（默认 10）',
+    },
+    explain: {
+      type: 'boolean',
+      description: '是否使用 LLM 解释搜索结果（默认 true，需要 API Key）',
+    },
+  },
+  required: ['query'],
+};
+
 const TOOLS = [
   {
     name: 'generate_skill',
@@ -149,6 +190,18 @@ const TOOLS = [
     description:
       '扫描目录，返回所有受支持的文档文件列表（可用于 preview 后再调用 generate_skill）。',
     inputSchema: SCAN_DIRECTORY_SCHEMA,
+  },
+  {
+    name: 'scan_code',
+    description:
+      '扫描项目代码目录并构建搜索索引。首次使用前需调用此工具初始化索引。支持多种编程语言自动识别。',
+    inputSchema: SCAN_CODE_SCHEMA,
+  },
+  {
+    name: 'search_code',
+    description:
+      '用自然语言搜索项目代码。自动加载已有索引（如果不存在则自动扫描）。返回匹配的代码片段、文件路径和行号。可选择使用 LLM 智能解释结果。',
+    inputSchema: SEARCH_CODE_SCHEMA,
   },
 ];
 
@@ -311,6 +364,12 @@ async function handleToolCall(
     case 'scan_directory':
       return handleScanDirectory(args);
 
+    case 'scan_code':
+      return handleScanCode(args);
+
+    case 'search_code':
+      return handleSearchCode(args);
+
     default:
       throw new Error(`未知工具: ${name}`);
   }
@@ -409,6 +468,89 @@ async function handleScanDirectory(
     directory: dirPath,
     fileCount: files.length,
     files,
+  };
+}
+
+/** scan_code 工具实现：扫描项目代码并构建索引 */
+async function handleScanCode(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const directory = (args.directory as string) || process.cwd();
+  const index = await initCodeIndex({ root: directory });
+
+  return {
+    success: true,
+    directory,
+    stats: index.stats,
+  };
+}
+
+/** search_code 工具实现：自然语言搜索代码 */
+async function handleSearchCode(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const query = args.query as string;
+  if (!query) throw new Error('query 参数必填');
+
+  const directory = (args.directory as string) || process.cwd();
+  const limit = (args.limit as number) ?? 10;
+  const useExplain = (args.explain as boolean) ?? true;
+
+  // 搜索（自动加载索引或触发扫描）
+  const { results, index } = await searchProjectCode(
+    query,
+    { limit },
+    directory,
+  );
+
+  // LLM 解释（可选）
+  let explanation: string | undefined;
+  if (useExplain && results.length > 0) {
+    const model =
+      serverDefaults.model || process.env.DOC2SKILL_MODEL || 'deepseek-chat';
+    const apiKey =
+      serverDefaults.apiKey ||
+      process.env.DEEPSEEK_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      '';
+    const baseURL =
+      serverDefaults.baseURL || process.env.DOC2SKILL_BASE_URL || undefined;
+
+    if (isLocalModel(model) || apiKey) {
+      try {
+        const llmConfig = resolveModel(model, {
+          apiKey,
+          baseUrl: baseURL,
+          localModelName: serverDefaults.localModelName,
+        });
+        explanation = await explainResults({
+          llm: llmConfig,
+          query,
+          results,
+          projectRoot: index.projectRoot,
+        });
+      } catch {
+        // LLM 失败不影响纯搜索结果
+      }
+    }
+  }
+
+  // 返回结构化结果
+  return {
+    query,
+    directory,
+    resultCount: results.length,
+    explanation,
+    results: results.map((r) => ({
+      file: r.chunk.file,
+      startLine: r.chunk.startLine,
+      endLine: r.chunk.endLine,
+      language: r.chunk.language,
+      score: Math.round(r.score * 100) / 100,
+      matchedKeywords: r.matchedKeywords,
+      matchedSymbols: r.matchedSymbols,
+      preview: r.chunk.content.split('\n').slice(0, 20).join('\n'),
+    })),
   };
 }
 

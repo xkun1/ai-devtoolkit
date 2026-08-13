@@ -50,6 +50,88 @@ npx doc2skill ./api.md --stdout >> ./SKILL.md
 npx doc2skill
 ```
 
+### 🔍 代码搜索模式（不用打开 IDEA 了！）
+
+在任意项目中初始化一次索引，之后直接用自然语言搜索代码，精准定位到文件和行号：
+
+```bash
+# 1. 初始化扫描当前项目（构建索引）
+doc2skill --scan-code
+
+# 2. 直接搜索（自动加载已有索引）
+doc2skill --search "用户登录验证逻辑"
+
+# 3. 扫描 + 搜索一条龙
+doc2skill --scan-code --search "分页查询实现"
+
+# 4. 进入交互式搜索 REPL（连续搜索）
+doc2skill --scan-code
+# > 🔍 > 用户认证流程
+# > 🔍 > 分页组件
+# > 🔍 > :q 退出
+
+# 5. 不使用 LLM 解释，仅显示匹配代码
+doc2skill --search "OrderService" --no-explain
+
+# 6. 搜索指定项目目录
+doc2skill --scan-code --search "config" /path/to/project
+```
+
+**支持的搜索场景**：
+
+| 搜索内容 | 示例 | 效果 |
+|---------|------|------|
+| 函数/类名 | `--search "UserController"` | 精确匹配符号 |
+| 自然语言 | `--search "用户登录验证"` | 语义+关键词匹配 |
+| 中英文混合 | `--search "pagination 分页"` | 多语言关键词召回 |
+| 功能描述 | `--search "重试机制实现"` | 代码+注释+文档全文搜索 |
+
+**支持的语言**：TypeScript / JavaScript / Java / Kotlin / Python / Go / Rust / C# / C++ / PHP / Ruby / Swift / Scala / Dart 等 25+ 种。
+
+> 索引文件 `.doc2skill-index.json` 保存在项目根目录，已自动加入 `.gitignore`。
+
+
+### 📦 环境迁移模式（换电脑一键配置）
+
+扫描当前电脑的开发环境（Homebrew / npm / pip / SDK / VSCode 扩展 / Git 配置 / Shell 等），生成 JSON 快照和一键安装脚本，换新电脑时直接恢复：
+
+```bash
+# 导出当前环境配置
+npx doc2skill --env-export
+
+# 导出到指定目录
+npx doc2skill --env-export /path/to/output-dir
+
+# 预览恢复内容（dry-run，不实际执行）
+npx doc2skill --env-import doc2skill-env.json
+
+# 实际执行恢复
+npx doc2skill --env-import doc2skill-env.json --execute
+```
+
+**生成的文件**：
+
+| 文件 | 说明 |
+|------|------|
+| `doc2skill-env.json` | 完整环境快照（含所有包列表、配置内容） |
+| `doc2skill-env-setup.sh` | 一键安装脚本（新电脑直接 `bash` 执行） |
+
+**扫描范围**：
+
+| 类别 | 示例 |
+|------|------|
+| Homebrew | formulae + casks |
+| npm 全局包 | `npm install -g` 列表 |
+| pip 包 | `pip3 install` 列表 |
+| SDK / 运行时 | Node / Python / Java / Go / Rust 版本 |
+| VSCode 扩展 | `code --install-extension` 列表 |
+| macOS 应用 | 手动安装提示列表 |
+| Shell 配置 | `.zshrc` / `.bashrc` 等 |
+| Git 配置 | `user.name` / `user.email` / alias 等 |
+| SSH 配置 | `~/.ssh/config`（私钥不自动迁移，仅提示） |
+
+> **安全提示**：SSH 私钥不会自动迁移，需手动复制。Shell 配置文件在安装脚本中仅提示手动处理，实际内容见 JSON 明细。
+
 ### 🌐 Web UI 模式
 
 ```bash
@@ -103,12 +185,14 @@ npx doc2skill --mcp
 }
 ```
 
-MCP Server 提供 2 个工具：
+MCP Server 提供 4 个工具：
 
 | 工具 | 说明 |
 |------|------|
 | `generate_skill` | 将文档/URL 转化为 AI Agent 技能包（支持批量目录） |
 | `scan_directory` | 扫描目录，返回受支持的文档文件列表 |
+| `scan_code` | 扫描项目代码目录并构建搜索索引 |
+| `search_code` | 用自然语言搜索项目代码（返回代码片段+文件行号+LLM解释） |
 
 #### 使用本地模型（Ollama / LM Studio）
 
@@ -303,6 +387,9 @@ Options:
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   --local-model <name> 本地服务中的真实模型名
+  --scan-code          扫描项目代码并构建搜索索引
+  --search <query>     用自然语言搜索项目代码
+  --no-explain         搜索结果不使用 LLM 解释（仅显示代码片段）
   -v, --verbose        显示详细日志
   -V, --version        版本号
   -h, --help           帮助
@@ -452,6 +539,7 @@ npm test
 - [x] 生成结果静态校验与质量评分
 - [x] MCP Server 模式（--mcp 让 AI Agent 原生调用）
 - [x] 批量目录处理（自动扫描目录，--merge 合并为一个）
+- [x] 🔍 代码搜索（`--scan-code` 扫描索引 + `--search` 自然语言搜索 + LLM 智能解释）
 
 ## 📄 License
 
