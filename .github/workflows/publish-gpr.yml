@@ -1,4 +1,4 @@
-name: Publish to GitHub Packages
+name: Publish Packages
 
 on:
   release:
@@ -7,6 +7,7 @@ on:
 
 jobs:
   publish-gpr:
+    name: Publish to GitHub Packages
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,8 +27,29 @@ jobs:
 
       - name: Publish to GitHub Packages
         run: |
-          # GitHub Packages 要求包名带 scope
           sed -i 's/"name": "ai-devtoolkit"/"name": "@xkun1\/ai-devtoolkit"/' package.json
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    name: Publish to npmjs.org
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Publish to npmjs
+        if: env.NPM_TOKEN != ''
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
