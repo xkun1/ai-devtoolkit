@@ -15,6 +15,8 @@ import {
 } from './search/index.js';
 import { exportEnv, importEnv, diffEnv } from './env/index.js';
 import { convertFile, syncRules } from './convert/index.js';
+import { evalSkillFile } from './eval/index.js';
+import { printProjectGraph, printImpactAnalysis } from './graph/index.js';
 import { isLocalModel, resolveModel, resolveLocalModelName } from './models.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
@@ -57,6 +59,9 @@ interface CliOptions {
   sync?: boolean;
   syncFrom?: string;
   syncTo?: string;
+  eval?: string;
+  graph?: boolean;
+  impact?: string;
 }
 
 const PACKAGE_VERSION = readPackageVersion();
@@ -83,7 +88,7 @@ export function createProgram(): Command {
   program
     .name('devtoolkit')
     .description(
-      '🛠️ 开发者工具箱：AI 技能包生成 · 规则互转 · 代码搜索 · 环境迁移',
+      '🛠️ 开发者工具箱：AI 技能包生成 · 规则互转 · 技能评测 · 代码搜索与影响面分析 · 环境迁移',
     )
     .version(PACKAGE_VERSION)
     .argument(
@@ -135,13 +140,23 @@ export function createProgram(): Command {
       '--sync-to <agents>',
       '同步目标 Agent（多个用逗号隔开，如 cursor,claude）',
     )
-    // ── 代码搜索模式 ──
+    // ── 技能效果评测 (Skill Eval) ──
+    .option(
+      '--eval <skillFile>',
+      '自动生成测试集并对指定技能包进行效果与命中度对照评测',
+    )
+    // ── 代码搜索与依赖分析 ──
     .option(
       '--scan-code',
       '扫描当前项目代码并构建搜索索引（之后可用 --search 或交互式搜索）',
     )
     .option('--search <query>', '用自然语言搜索项目代码')
     .option('--no-explain', '搜索结果不使用 LLM 解释（仅显示匹配的代码片段）')
+    .option('--graph', '分析当前项目的代码依赖关系并生成 Mermaid 架构拓扑图')
+    .option(
+      '--impact <file>',
+      '分析修改指定文件所波及的所有直接与间接上游依赖链路',
+    )
     // ── 环境迁移 ──
     .option(
       '--env-export',
@@ -174,6 +189,27 @@ async function runCommand(
   const model = options.model || cfg.model || 'deepseek-chat';
   const baseUrl = options.baseUrl || cfg.baseUrl;
   const apiKey = options.apiKey || cfg.apiKey;
+
+  // ── 技能效果评测 ──
+  if (options.eval) {
+    const localModelName = resolveLocalModelName(model, options.localModel);
+    const llm = resolveModel(model, { apiKey, baseUrl, localModelName });
+    await evalSkillFile(options.eval, { llm, outputDir: options.out });
+    return;
+  }
+
+  // ── 代码架构依赖图谱与影响面分析 ──
+  if (options.graph) {
+    const root = sources.length > 0 ? resolve(sources[0]) : process.cwd();
+    await printProjectGraph({ root });
+    return;
+  }
+
+  if (options.impact) {
+    const root = sources.length > 0 ? resolve(sources[0]) : process.cwd();
+    await printImpactAnalysis(options.impact, { root });
+    return;
+  }
 
   // ── 规则单文件转换 ──
   if (options.convert) {

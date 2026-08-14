@@ -2,6 +2,26 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.9.0] — 2026-08-14
+
+### 新功能
+
+- **📊 技能自动化效果评测 (Skill Eval)**：为任意 AI 技能包自动生成 Benchmark 测试集，执行严格对照评测并输出量化报告
+  - 测试用例自动提炼：根据技能内容智能提取触发问题（Query）、期望关键词（Expected Keywords）、核心结论与评分准则（Rubric）
+  - 对照实验打分：对比带技能规则与无技能基线的模型表现，计算触发命中率、准确率与综合评级（S/A/B/C/D）
+  - 改进建议生成：自动指出技能规则中的模糊表述与易漏点，给出精准优化建议
+  - CLI & MCP 支持：`devtoolkit --eval <skill.md>` 及 MCP 工具 `eval_skill`
+
+- **📈 代码依赖架构图谱与改动影响面分析 (Graph & Impact)**：静态解析项目依赖拓扑，推演改动波及链路
+  - 依赖拓扑图谱：静态扫描 TypeScript、JavaScript、Python 等多语言 import/export 语句，输出 Mermaid 架构拓扑图（`devtoolkit --graph`）
+  - 改动影响面推演：基于反向依赖图谱执行 BFS 拓扑遍历，递归追溯修改指定文件受影响的所有直接与间接上游链路（`devtoolkit --impact <file>`）
+  - 风险评级：根据波及节点深度与广度评估风险级别（Low / Medium / High / Critical）
+
+- **🌐 五合一极简 Web 开发者工作台**：全景化升级 Web 仪表盘
+  - 包含【📄 技能工坊】、【🔄 规则互转】、【🔍 代码搜索】、【📈 架构图谱】、【📦 环境资产】五大面板
+  - 支持在网页中一键评测技能包效果、一键转换/同步项目规则、推演代码影响链路及生成 Mermaid 图谱
+
+
 ## [0.8.0] — 2026-08-14
 
 ### 新功能

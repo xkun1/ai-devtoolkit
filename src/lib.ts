@@ -248,3 +248,36 @@ export type {
   OpenApiEndpoint,
   ParsedOpenApi,
 } from './loader/index.js';
+
+// ── 技能效果评测 (Skill Eval) API ──
+export {
+  generateEvalSuite,
+  generateFallbackCases,
+  runSkillEval,
+  formatEvalReportMarkdown,
+  evalSkillFile,
+} from './eval/index.js';
+export type {
+  EvalCase,
+  EvalSuite,
+  CaseEvalResult,
+  EvalReport,
+  GenerateEvalOptions,
+  RunEvalOptions,
+} from './eval/index.js';
+
+// ── 代码依赖图谱与影响面分析 API ──
+export {
+  buildDependencyGraph,
+  analyzeImpact,
+  formatImpactReport,
+  generateMermaidGraph,
+  printProjectGraph,
+  printImpactAnalysis,
+} from './graph/index.js';
+export type {
+  DependencyGraph,
+  GraphNode,
+  GraphEdge,
+  ImpactAnalysisResult,
+} from './graph/index.js';

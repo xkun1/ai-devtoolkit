@@ -10,7 +10,11 @@ import {
   type ServerResponse,
 } from 'node:http';
 import type { Server } from 'node:http';
+import type { AgentType } from './types/index.js';
 import { randomBytes } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { runPipeline } from './pipeline.js';
 import { extractFromHtml } from './loader/readability.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
@@ -25,6 +29,20 @@ import { fetchPublicText, SafeFetchError } from './utils/safe-fetch.js';
 import { WEB_UI_HTML } from './server/html.js';
 import { createArtifactZip } from './utils/zip.js';
 import { DownloadStore } from './utils/download-store.js';
+
+import {
+  convertRule,
+  parseRule,
+  discoverProjectRules,
+  syncProjectRules,
+} from './convert/index.js';
+import { runSkillEval, formatEvalReportMarkdown } from './eval/index.js';
+import {
+  buildDependencyGraph,
+  analyzeImpact,
+  generateMermaidGraph,
+  formatImpactReport,
+} from './graph/index.js';
 import {
   initCodeIndex,
   searchProjectCode,
@@ -218,6 +236,78 @@ export function createRequestHandler(options: ServerOptions = {}) {
           return;
         }
         await handleEnvDiff(req, res, maxBodyBytes);
+        return;
+      }
+
+      // ─── 规则互转与同步 API ───
+      if (url.pathname === '/api/convert' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleConvert(req, res, maxBodyBytes);
+        return;
+      }
+
+      if (
+        url.pathname === '/api/sync/discover' &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleSyncDiscover(req, res, maxBodyBytes);
+        return;
+      }
+
+      if (url.pathname === '/api/sync' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleSync(req, res, maxBodyBytes);
+        return;
+      }
+
+      // ─── 技能效果评测 API ───
+      if (url.pathname === '/api/eval' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleEval(req, res, defaultLLM, maxBodyBytes);
+        return;
+      }
+
+      // ─── 代码依赖图谱与影响面 API ───
+      if (
+        url.pathname === '/api/graph' &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleGraph(req, res, maxBodyBytes);
+        return;
+      }
+
+      if (url.pathname === '/api/impact' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleImpact(req, res, maxBodyBytes);
+        return;
+      }
+
+      if (url.pathname === '/api/file/read' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleReadFile(req, res, maxBodyBytes);
         return;
       }
 
@@ -922,5 +1012,186 @@ async function handleEnvDiff(
   serveJSON(res, 200, {
     diff,
     preview: formatDiffPreview(diff),
+  });
+}
+
+// ─── 规则互转、技能评测、依赖图谱 API 处理函数 ───
+
+async function handleConvert(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    content?: string;
+    to?: AgentType;
+    name?: string;
+  };
+  if (!body.content || !body.to) {
+    throw new HttpError(400, '缺少 content 或 to 参数');
+  }
+  const parsed = parseRule(body.content);
+  const result = convertRule(parsed, { to: body.to, name: body.name });
+  serveJSON(res, 200, {
+    success: true,
+    from: result.from,
+    to: result.to,
+    artifacts: result.artifacts,
+    preview: result.artifacts[0]?.content || '',
+  });
+}
+
+async function handleSyncDiscover(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body =
+    req.method === 'POST'
+      ? ((await readBody(req, maxBodyBytes)) as { projectRoot?: string })
+      : {};
+  const root = body.projectRoot || process.cwd();
+  const discovered = await discoverProjectRules(root);
+  serveJSON(res, 200, {
+    projectRoot: root,
+    discovered,
+    totalFiles: discovered.reduce((acc, d) => acc + d.files.length, 0),
+  });
+}
+
+async function handleSync(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    projectRoot?: string;
+    from?: AgentType;
+    to?: AgentType[];
+    dryRun?: boolean;
+  };
+  const result = await syncProjectRules({
+    projectRoot: body.projectRoot,
+    from: body.from,
+    to: body.to,
+    dryRun: body.dryRun ?? false,
+  });
+  serveJSON(res, 200, result);
+}
+
+async function handleEval(
+  req: IncomingMessage,
+  res: ServerResponse,
+  defaultLLM: { apiKey: string; baseURL?: string; model: string },
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    skillContent?: string;
+    model?: string;
+    apiKey?: string;
+    baseURL?: string;
+    localModelName?: string;
+  };
+  if (!body.skillContent) throw new HttpError(400, '缺少 skillContent 参数');
+
+  const model = String(body.model || defaultLLM.model);
+  const apiKey = body.apiKey || defaultLLM.apiKey;
+  const baseURL = body.baseURL || defaultLLM.baseURL;
+  const localModelName = body.localModelName;
+
+  let safeLocalBaseUrl = baseURL;
+  if (isLocalModel(model) && baseURL) {
+    try {
+      safeLocalBaseUrl = toOpenAICompatibleBaseUrl(
+        validateLocalServiceUrl(baseURL),
+      );
+    } catch {
+      safeLocalBaseUrl = baseURL;
+    }
+  }
+
+  const llmConfig = resolveModel(model, {
+    apiKey,
+    baseUrl: safeLocalBaseUrl,
+    localModelName,
+  });
+
+  const report = await runSkillEval(body.skillContent, { llm: llmConfig });
+  serveJSON(res, 200, {
+    report,
+    markdown: formatEvalReportMarkdown(report),
+  });
+}
+
+async function handleGraph(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body =
+    req.method === 'POST'
+      ? ((await readBody(req, maxBodyBytes)) as {
+          projectRoot?: string;
+          direction?: 'TD' | 'LR';
+        })
+      : {};
+  const root = body.projectRoot || process.cwd();
+  const graph = await buildDependencyGraph({ root });
+  const mermaid = generateMermaidGraph(graph, {
+    direction: body.direction || 'LR',
+  });
+  serveJSON(res, 200, {
+    graph,
+    mermaid,
+  });
+}
+
+async function handleImpact(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    targetFile?: string;
+    projectRoot?: string;
+  };
+  if (!body.targetFile) throw new HttpError(400, '缺少 targetFile 参数');
+  const root = body.projectRoot || process.cwd();
+  const graph = await buildDependencyGraph({ root });
+  const result = analyzeImpact(graph, body.targetFile);
+  serveJSON(res, 200, {
+    result,
+    report: formatImpactReport(result),
+  });
+}
+
+async function handleReadFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    path?: string;
+    projectRoot?: string;
+  };
+  if (!body.path) throw new HttpError(400, '缺少 path 参数');
+  const root = body.projectRoot || process.cwd();
+
+  const resolvedRoot = resolve(root);
+  const absPath = resolve(root, body.path);
+  if (!absPath.startsWith(resolvedRoot)) {
+    throw new HttpError(403, '禁止跨目录读取文件');
+  }
+  if (!existsSync(absPath)) {
+    throw new HttpError(404, '文件不存在: ' + body.path);
+  }
+
+  const content = await readFile(absPath, 'utf-8');
+  const fileStat = await stat(absPath);
+  serveJSON(res, 200, {
+    path: body.path,
+    content,
+    lines: content.split(String.fromCharCode(10)).length,
+    size: fileStat.size,
   });
 }
