@@ -1,30 +1,27 @@
 /**
- * 环境迁移 — 编排入口
- *
- * 提供环境导出、导入的高层 API。
+ * 环境迁移模块统一入口
  */
 import { resolve } from 'node:path';
-import { exportEnvironment } from './exporter.js';
+import type {
+  DetectOptions,
+  EnvSnapshot,
+  ExportOptions,
+  ExportResult,
+  ImportOptions,
+  ImportResult,
+  EnvDiffResult,
+  BrewPackages,
+  NpmGlobalPackage,
+  PipPackage,
+  SdkInfo,
+  VscodeExtension,
+  MacApp,
+  ShellConfig,
+  GitConfig,
+  SshConfig,
+  EnvModule,
+} from './types.js';
 import {
-  importEnvironment,
-  loadSnapshot,
-  formatImportPreview,
-} from './importer.js';
-import type { ExportOptions, ImportOptions } from './types.js';
-import { info, success, warn } from '../utils/logger.js';
-
-// 重导出
-export {
-  exportEnvironment,
-  generateSetupScript,
-  SNAPSHOT_VERSION,
-} from './exporter.js';
-export {
-  importEnvironment,
-  loadSnapshot,
-  formatImportPreview,
-} from './importer.js';
-export {
   detectEnvironment,
   detectBrew,
   detectNpmGlobal,
@@ -36,8 +33,48 @@ export {
   detectGit,
   detectSsh,
 } from './detector.js';
+import {
+  exportEnvironment,
+  generateSetupScript,
+  SNAPSHOT_VERSION,
+} from './exporter.js';
+import {
+  importEnvironment,
+  loadSnapshot,
+  formatImportPreview,
+  diffEnvironment,
+  formatDiffPreview,
+} from './importer.js';
+import { info, success } from '../utils/logger.js';
+
+export {
+  detectEnvironment,
+  detectBrew,
+  detectNpmGlobal,
+  detectPip,
+  detectSdks,
+  detectVscodeExtensions,
+  detectMacApps,
+  detectShell,
+  detectGit,
+  detectSsh,
+  exportEnvironment,
+  generateSetupScript,
+  SNAPSHOT_VERSION,
+  importEnvironment,
+  loadSnapshot,
+  formatImportPreview,
+  diffEnvironment,
+  formatDiffPreview,
+};
 export type {
+  DetectOptions,
   EnvSnapshot,
+  ExportOptions,
+  ExportResult,
+  ImportOptions,
+  ImportResult,
+  EnvDiffResult,
   BrewPackages,
   NpmGlobalPackage,
   PipPackage,
@@ -47,112 +84,71 @@ export type {
   ShellConfig,
   GitConfig,
   SshConfig,
-  DetectOptions,
-  ExportOptions,
-  ExportResult,
-  ImportOptions,
-  ImportResult,
   EnvModule,
-} from './types.js';
+};
 
 /**
- * 导出环境：扫描 + 生成文件
+ * 导出当前环境（CLI 包装）
  */
-export async function exportEnv(options: ExportOptions = {}): Promise<void> {
-  info('╔══════════════════════════════════════╗');
-  info('║   📦 devtoolkit — 环境迁移导出        ║');
-  info('╚══════════════════════════════════════╝');
-  info('');
-
+export async function exportEnv(
+  options: ExportOptions = {},
+): Promise<ExportResult> {
+  info('🔍 正在扫描当前开发环境...');
   const result = await exportEnvironment(options);
 
-  info('  📊 扫描完成:');
-  for (const [key, count] of Object.entries(result.summary.details)) {
-    info('     ' + key + ': ' + count + ' 项');
-  }
-  info('     总计: ' + result.summary.totalItems + ' 项');
+  success(`环境导出完成！总计扫描 ${result.summary.totalItems} 项配置`);
   info('');
-
+  info('📄 生成的文件:');
   if (result.jsonPath) {
-    success('JSON 明细: ' + result.jsonPath);
+    info(`  - JSON 明细: ${result.jsonPath}`);
   }
   if (result.scriptPath) {
-    success('安装脚本: ' + result.scriptPath);
+    info(`  - 安装脚本: ${result.scriptPath}`);
   }
   info('');
+  info('💡 换新电脑时，可以通过以下方式恢复:');
+  info('   1. 运行安装脚本: bash devtoolkit-env-setup.sh');
+  info('   2. 使用 devtoolkit: devtoolkit --env-import devtoolkit-env.json');
+  info('   3. 比对环境差异: devtoolkit --env-diff devtoolkit-env.json');
 
-  info('  💡 新电脑上恢复方法:');
-  if (result.scriptPath) {
-    info('     1. 复制 ' + result.scriptPath + ' 到新电脑');
-    info('     2. 执行 bash ' + result.scriptPath.split('/').pop());
-  }
-  if (result.jsonPath) {
-    info('     或: devtoolkit --env-import ' + result.jsonPath);
-  }
-  info('');
+  return result;
 }
 
 /**
- * 导入环境：从快照恢复
+ * 导入环境（CLI 包装）
  */
 export async function importEnv(
   snapshotPath: string,
   options: ImportOptions = {},
-): Promise<void> {
-  info('╔══════════════════════════════════════╗');
-  info('║   📥 devtoolkit — 环境迁移导入        ║');
-  info('╚══════════════════════════════════════╝');
-  info('');
-
-  const resolvedPath = resolve(snapshotPath);
-  const snapshot = loadSnapshot(resolvedPath);
-
-  info('  📋 快照信息:');
-  info('     导出时间: ' + snapshot.exportedAt);
-  info(
-    '     来源: ' +
-      snapshot.system.username +
-      '@' +
-      snapshot.system.hostname +
-      ' (' +
-      snapshot.system.platform +
-      ')',
-  );
-  info('');
+): Promise<ImportResult> {
+  const absPath = resolve(snapshotPath);
+  info(`📦 正在加载环境快照: ${absPath}`);
+  const snapshot = loadSnapshot(absPath);
 
   const result = await importEnvironment(snapshot, options);
 
   if (!options.execute) {
-    // dry-run 模式
-    console.log(formatImportPreview(result));
+    info(formatImportPreview(result));
   } else {
-    // 执行模式
-    info('🚀 开始恢复...');
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const r of result.results) {
-      if (r.success) {
-        successCount++;
-      } else {
-        failCount++;
-        warn('✖ ' + r.command.slice(0, 80));
-      }
-    }
-
-    info('');
-    if (successCount > 0) {
-      success('✅ 成功: ' + successCount + ' 条命令');
-    }
-    if (failCount > 0) {
-      warn('⚠️  失败: ' + failCount + ' 条命令');
-    }
-    if (result.skipped.length > 0) {
-      warn('⏭️  跳过: ' + result.skipped.length + ' 项');
-      for (const s of result.skipped) {
-        info('     - ' + s);
-      }
-    }
-    info('');
+    const successCount = result.results.filter((r) => r.success).length;
+    const failCount = result.results.filter((r) => !r.success).length;
+    success(
+      `环境恢复完成！成功执行 ${successCount} 条命令${failCount > 0 ? `，${failCount} 条失败` : ''}`,
+    );
   }
+
+  return result;
+}
+
+/**
+ * 比对环境差异（CLI 包装）
+ */
+export async function diffEnv(snapshotPath: string): Promise<EnvDiffResult> {
+  const absPath = resolve(snapshotPath);
+  info(`🔍 正在比对当前环境与快照: ${absPath}`);
+  const snapshot = loadSnapshot(absPath);
+  const diff = await diffEnvironment(snapshot);
+
+  info(formatDiffPreview(diff));
+  return diff;
 }

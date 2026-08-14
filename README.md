@@ -20,6 +20,7 @@
 |------|:---:|------|
 | 📄 网页 URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
+| ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token） |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
 | 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
 | 📂 批量目录处理 | → | 🤖 每个文件独立技能包（或 `--merge` 合并） |
@@ -48,6 +49,24 @@ npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # 无参数 → 交互式向导
 npx ai-devtoolkit
+```
+
+### 🔄 跨 Agent 规则互转与同步（Cursor / Codex / Claude）
+
+在任意项目中一键将 Cursor 规则、Codex 技能包、Claude 记忆相互转换，或直接全项目同步：
+
+```bash
+# 1. 单文件互转：把 Cursor 规则转为 Codex Skill
+devtoolkit --convert .cursor/rules/api.mdc --type codex
+
+# 2. 把 Claude 记忆转为 Cursor 规则
+devtoolkit --convert CLAUDE.md --type cursor
+
+# 3. 项目一键全量同步（自动检测项目已有规则，同步分发至其他 Agent）
+devtoolkit --sync
+
+# 4. 仅预览同步计划（不写入文件）
+devtoolkit --sync --dry-run
 ```
 
 ### 🔍 代码搜索模式（不用打开 IDEA 了！）

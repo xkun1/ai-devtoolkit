@@ -42,6 +42,8 @@ export interface CodeFile {
   size: number;
   /** 行数 */
   lines: number;
+  /** 最后修改时间戳 (毫秒) */
+  lastModified?: number;
 }
 
 /** 从代码中提取的符号 */

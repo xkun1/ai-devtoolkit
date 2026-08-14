@@ -13,13 +13,9 @@ import {
   searchAndPrint,
   startSearchSession,
 } from './search/index.js';
-import { exportEnv, importEnv } from './env/index.js';
-import {
-  MODEL_PRESETS,
-  isLocalModel,
-  resolveModel,
-  resolveLocalModelName,
-} from './models.js';
+import { exportEnv, importEnv, diffEnv } from './env/index.js';
+import { convertFile, syncRules } from './convert/index.js';
+import { isLocalModel, resolveModel, resolveLocalModelName } from './models.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
 import type { AgentType, OutputMode } from './types/index.js';
@@ -54,7 +50,13 @@ interface CliOptions {
   noExplain?: boolean;
   envExport?: boolean;
   envImport?: string;
+  envDiff?: string;
   execute?: boolean;
+  convert?: string;
+  to?: string;
+  sync?: boolean;
+  syncFrom?: string;
+  syncTo?: string;
 }
 
 const PACKAGE_VERSION = readPackageVersion();
@@ -80,11 +82,13 @@ export function createProgram(): Command {
 
   program
     .name('devtoolkit')
-    .description('🛠️ 开发者工具箱：AI 技能包生成 · 代码搜索 · 环境迁移')
+    .description(
+      '🛠️ 开发者工具箱：AI 技能包生成 · 规则互转 · 代码搜索 · 环境迁移',
+    )
     .version(PACKAGE_VERSION)
     .argument(
       '[sources...]',
-      '文档来源：URL 或本地文件路径（可多个，将合并为一个技能包）。无参数时进入交互式向导。',
+      '文档来源：URL 或本地文件路径（可多个）。无参数时进入交互式向导。',
     )
     .option('-t, --type <type>', '目标 Agent 类型 (codex, cursor, claude)')
     .option('-o, --out <path>', '输出文件路径')
@@ -120,6 +124,17 @@ export function createProgram(): Command {
       '目录扫描最大递归深度（1-20，默认 5）',
       (value) => parseInteger(value, 'dir-depth', 1, 20),
     )
+    // ── 规则互转与同步 ──
+    .option(
+      '--convert <file>',
+      '转换指定的规则文件（结合 -t/--type 指定目标 Agent）',
+    )
+    .option('--sync', '自动发现并同步项目中的全部 Agent 规则')
+    .option('--sync-from <agent>', '同步源 Agent（默认自动检测）')
+    .option(
+      '--sync-to <agents>',
+      '同步目标 Agent（多个用逗号隔开，如 cursor,claude）',
+    )
     // ── 代码搜索模式 ──
     .option(
       '--scan-code',
@@ -136,6 +151,7 @@ export function createProgram(): Command {
       '--env-import <file>',
       '从环境快照 JSON 恢复（dry-run 预览，加 --execute 执行安装）',
     )
+    .option('--env-diff <file>', '比对当前机器与指定环境快照 JSON 的差异')
     .option(
       '--execute',
       '配合 --env-import 使用：实际执行安装命令（不加则只预览）',
@@ -159,17 +175,45 @@ async function runCommand(
   const baseUrl = options.baseUrl || cfg.baseUrl;
   const apiKey = options.apiKey || cfg.apiKey;
 
+  // ── 规则单文件转换 ──
+  if (options.convert) {
+    const targetAgent = (options.type as AgentType) || 'codex';
+    if (!isValidAgentType(targetAgent)) {
+      throw new Error(`无效的目标 Agent: ${targetAgent}`);
+    }
+    await convertFile(options.convert, targetAgent, {
+      name: options.name,
+      outputDir: options.out,
+    });
+    return;
+  }
+
+  // ── 规则全量同步 ──
+  if (options.sync) {
+    const projectRoot =
+      sources.length > 0 ? resolve(sources[0]) : process.cwd();
+    const toAgents = options.syncTo
+      ? (options.syncTo.split(',').map((s) => s.trim()) as AgentType[])
+      : undefined;
+    await syncRules({
+      projectRoot,
+      from: options.syncFrom as AgentType,
+      to: toAgents,
+      dryRun: options.dryRun || false,
+    });
+    return;
+  }
+
   // ── 代码搜索模式 ──
   if (options.scanCode || options.search !== undefined) {
     const searchRoot = sources.length > 0 ? resolve(sources[0]) : process.cwd();
 
-    // 解析 LLM 配置（用于智能解释）
     const localModelName = resolveLocalModelName(model, options.localModel);
     let llmConfig: ReturnType<typeof resolveModel> | undefined;
     try {
       llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
       if (!isLocalModel(model) && !llmConfig.apiKey) {
-        llmConfig = undefined; // 无 API Key 时退化为纯文本模式
+        llmConfig = undefined;
       }
     } catch {
       llmConfig = undefined;
@@ -177,33 +221,23 @@ async function runCommand(
 
     const useExplain = !options.noExplain && !!llmConfig;
 
-    // --search <query>：单次搜索
     if (options.search !== undefined) {
       const query = options.search;
       if (!query.trim()) {
         throw new Error('搜索内容不能为空');
       }
-      // 如果同时指定了 --scan-code，先扫描再搜索
+      info('╔══════════════════════════════════════╗');
+      info('║   🔍 devtoolkit — 代码搜索             ║');
+      info('╚══════════════════════════════════════╝');
+      info('');
       if (options.scanCode) {
-        info('╔══════════════════════════════════════╗');
-        info('║   🔍 devtoolkit — 代码搜索             ║');
-        info('╚══════════════════════════════════════╝');
-        info('');
         await initCodeIndex({ root: searchRoot });
-        info(`🔎 搜索: "${query}"`);
-        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
-      } else {
-        info('╔══════════════════════════════════════╗');
-        info('║   🔍 devtoolkit — 代码搜索             ║');
-        info('╚══════════════════════════════════════╝');
-        info('');
-        info(`🔎 搜索: "${query}"`);
-        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
       }
+      info(`🔎 搜索: "${query}"`);
+      await searchAndPrint(query, llmConfig, useExplain, searchRoot);
       return;
     }
 
-    // --scan-code：扫描初始化后进入交互式搜索
     if (options.scanCode) {
       info('╔══════════════════════════════════════╗');
       info('║   🔍 devtoolkit — 代码搜索             ║');
@@ -214,13 +248,18 @@ async function runCommand(
   }
 
   // ── 环境迁移 ──
-  if (options.envExport || options.envImport) {
+  if (options.envExport || options.envImport || options.envDiff) {
     setVerbose(options.verbose || false);
 
     if (options.envExport) {
       const outputDir =
         sources.length > 0 ? resolve(sources[0]) : process.cwd();
       await exportEnv({ outputDir });
+      return;
+    }
+
+    if (options.envDiff) {
+      await diffEnv(options.envDiff);
       return;
     }
 
@@ -259,115 +298,177 @@ async function runCommand(
       apiKey,
       localModelName: options.localModel,
     });
-    return; // MCP 模式阻塞运行，不会走到这里
-  }
-
-  const agentTypeRaw = options.type || cfg.type || 'codex';
-  const outputPath = options.out || cfg.out;
-  const skillName = options.name || cfg.name;
-  const templateId = options.template || cfg.template;
-  const verbose = options.verbose || cfg.verbose || false;
-  const outputMode: OutputMode =
-    options.legacy || cfg.outputMode === 'legacy' ? 'legacy' : 'modern';
-
-  setVerbose(verbose);
-  setLogToStderr(options.stdout === true);
-
-  if (!sources?.length) {
-    await runInteractiveWizard();
     return;
   }
 
-  if (!isValidAgentType(agentTypeRaw)) {
-    throw new Error(
-      `无效的 Agent 类型: ${agentTypeRaw}（可选: codex, cursor, claude）`,
-    );
+  if (sources.length === 0) {
+    await handleWizardFlow(model, apiKey, baseUrl, options);
+    return;
   }
-  if (templateId && !isValidTemplate(templateId)) {
-    throw new Error(
-      `未知模板: ${templateId}。请使用 --list-templates 查看可用值`,
-    );
+
+  if (options.stdout) {
+    setLogToStderr(true);
   }
-  if (options.localModel && !isLocalModel(model)) {
-    throw new Error('--local-model 只能与本地模型一起使用');
+
+  setVerbose(options.verbose || false);
+
+  if (model === 'custom-local') {
+    const name = resolveLocalModelName(model, options.localModel);
+    if (!name) {
+      throw new Error(
+        '使用 custom-local 时缺少本地模型名，请通过 --local-model 指定',
+      );
+    }
+    if (!baseUrl) {
+      throw new Error('使用 custom-local 时必须通过 --base-url 指定服务地址');
+    }
   }
 
   const localModelName = resolveLocalModelName(model, options.localModel);
-  if (isLocalModel(model) && !localModelName) {
-    const envHint =
-      model === 'ollama-local'
-        ? 'OLLAMA_MODEL'
-        : model === 'lmstudio-local'
-          ? 'LMSTUDIO_MODEL'
-          : 'LOCAL_MODEL_NAME';
+  const llm = resolveModel(model, {
+    apiKey,
+    baseUrl,
+    localModelName,
+  });
+
+  const agentType: AgentType =
+    (options.type as AgentType) || cfg.type || 'codex';
+  if (!isValidAgentType(agentType)) {
     throw new Error(
-      `缺少本地模型名。请使用 --local-model <name> 或设置 ${envHint}`,
+      `无效的 Agent 类型: "${agentType}"，支持: codex, cursor, claude`,
     );
   }
-  if (model === 'custom-local' && !baseUrl) {
-    throw new Error('custom-local 必须通过 --base-url 指定本地服务地址');
+
+  if (options.template && !isValidTemplate(options.template)) {
+    throw new Error(
+      `未知模板: "${options.template}"。使用 --list-templates 查看可用模板`,
+    );
   }
 
-  const llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
-  if (!isLocalModel(model) && !llmConfig.apiKey) {
-    const envVar = MODEL_PRESETS[model]?.envVar || 'OPENAI_API_KEY';
-    throw new Error(`缺少 API Key。请设置 ${envVar}，或通过 --api-key 指定`);
-  }
+  const outputMode: OutputMode = options.legacy ? 'legacy' : 'modern';
 
-  const agentType = agentTypeRaw as AgentType;
   const pipelineOptions = {
     agentType,
-    outputPath,
-    llm: llmConfig,
-    verbose,
-    name: skillName,
-    stdout: options.stdout || false,
-    dryRun: options.dryRun || false,
-    force: options.force || false,
-    crawl: options.crawl || false,
-    crawlDepth: options.crawlDepth,
-    crawlPages: options.crawlPages,
-    template: templateId,
-    incremental: options.update || false,
+    outputPath: options.out,
+    llm,
+    name: options.name,
+    stdout: options.stdout,
+    dryRun: options.dryRun,
+    force: options.force,
+    crawl: options.crawl,
+    crawlMaxDepth: options.crawlDepth,
+    crawlMaxPages: options.crawlPages,
+    template: options.template,
+    incremental: options.update,
     outputMode,
-    mergeDir: options.merge || false,
+    merge: options.merge,
     dirMaxDepth: options.dirDepth,
   };
 
   if (options.watch) {
-    startWatch(sources, {
-      ...pipelineOptions,
-      stdout: false,
-      dryRun: false,
-      force: true,
-    });
+    startWatch(sources, pipelineOptions);
     return;
-  }
-
-  if (!options.stdout && !options.dryRun) {
-    info('╔══════════════════════════════════════╗');
-    info('║   🚀 devtoolkit — 文档转技能包        ║');
-    info('╚══════════════════════════════════════╝');
-    info('');
   }
 
   await runPipeline(sources, pipelineOptions);
 }
 
-async function runInteractiveWizard(): Promise<void> {
+async function handleWizardFlow(
+  model: string,
+  apiKey: string | undefined,
+  baseUrl: string | undefined,
+  options: CliOptions,
+): Promise<void> {
   try {
-    const wizardResult = await runWizard();
-    if (!wizardResult) return;
-    await runPipeline(wizardResult.sources, {
-      agentType: wizardResult.agentType,
-      outputPath: wizardResult.outputPath,
-      llm: wizardResult.llm,
-      name: wizardResult.name,
-      stdout: false,
-      dryRun: false,
-      force: false,
-      outputMode: 'modern',
-    });
+    const wizardAction = await runWizard();
+    if (!wizardAction) return;
+
+    if (wizardAction.mode === 'skill') {
+      const data = wizardAction.data;
+      await runPipeline(data.sources, {
+        agentType: data.agentType,
+        outputPath: data.outputPath,
+        llm: data.llm,
+        name: data.name,
+        stdout: false,
+        dryRun: false,
+        force: false,
+        outputMode: 'modern',
+      });
+      return;
+    }
+
+    if (wizardAction.mode === 'convert') {
+      await convertFile(wizardAction.file, wizardAction.to);
+      return;
+    }
+
+    if (wizardAction.mode === 'sync') {
+      await syncRules({
+        projectRoot: wizardAction.projectRoot,
+        from: wizardAction.from,
+        to: wizardAction.to,
+        dryRun: wizardAction.dryRun,
+      });
+      return;
+    }
+
+    if (wizardAction.mode === 'search') {
+      const localModelName = resolveLocalModelName(model, options.localModel);
+      let llmConfig: ReturnType<typeof resolveModel> | undefined;
+      try {
+        llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
+      } catch {
+        llmConfig = undefined;
+      }
+      if (wizardAction.interactive) {
+        await startSearchSession(
+          llmConfig,
+          !options.noExplain && !!llmConfig,
+          wizardAction.projectRoot,
+        );
+      } else if (wizardAction.query) {
+        await searchAndPrint(
+          wizardAction.query,
+          llmConfig,
+          !options.noExplain && !!llmConfig,
+          wizardAction.projectRoot,
+        );
+      }
+      return;
+    }
+
+    if (wizardAction.mode === 'env') {
+      if (wizardAction.subAction === 'export') {
+        await exportEnv();
+      } else if (wizardAction.subAction === 'diff' && wizardAction.file) {
+        await diffEnv(wizardAction.file);
+      } else if (wizardAction.subAction === 'import' && wizardAction.file) {
+        await importEnv(wizardAction.file, {
+          execute: wizardAction.execute || false,
+        });
+      }
+      return;
+    }
+
+    if (wizardAction.mode === 'ui') {
+      const port = wizardAction.port ?? 3456;
+      const server = startServer({
+        port,
+        apiKey:
+          apiKey ||
+          process.env.DEEPSEEK_API_KEY ||
+          process.env.OPENAI_API_KEY ||
+          '',
+        baseURL: baseUrl,
+        model,
+      });
+      server.once(
+        'listening',
+        () => void openBrowser(`http://127.0.0.1:${port}`),
+      );
+      return;
+    }
   } catch (err: unknown) {
     if (getErrorName(err) === 'ExitPromptError') {
       info('\n  已退出');
@@ -407,7 +508,7 @@ async function openBrowser(url: string): Promise<void> {
     });
     child.unref();
   } catch {
-    // 自动打开失败不影响服务运行。
+    // 自动打开失败不影响服务运行
   }
 }
 

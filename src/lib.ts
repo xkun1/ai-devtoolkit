@@ -211,3 +211,40 @@ export type {
   ImportResult,
   EnvModule,
 } from './env/index.js';
+
+// ── 跨 Agent 规则互转与同步 API ──
+export {
+  convertFile,
+  syncRules,
+  convertRule,
+  parseRule,
+  detectRuleFormat,
+  discoverProjectRules,
+  syncProjectRules,
+} from './convert/index.js';
+export type {
+  ConvertOptions,
+  ConvertResult,
+  ParsedRule,
+  RuleFormat,
+  RuleMetadata,
+  SyncOptions,
+  SyncResult,
+  SyncOperation,
+  DiscoveredRules,
+} from './convert/index.js';
+
+// ── OpenAPI / Swagger 专精加载器 API ──
+export {
+  loadFromOpenApi,
+  isOpenApiSpec,
+  parseOpenApiSpec,
+  renderOpenApiToMarkdown,
+  extractOpenApiFromBuffer,
+} from './loader/index.js';
+export type {
+  OpenApiParameter,
+  OpenApiField,
+  OpenApiEndpoint,
+  ParsedOpenApi,
+} from './loader/index.js';

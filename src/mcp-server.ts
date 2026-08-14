@@ -2,8 +2,7 @@
  * MCP (Model Context Protocol) Server — stdio 模式
  *
  * 让 devtoolkit 作为 AI Agent 的原生工具使用。
- * AI Agent 通过 MCP 协议调用 `generate_skill` 工具，
- * 直接把文档/URL 转化为技能包。
+ * AI Agent 通过 MCP 协议调用 `generate_skill`、`search_code`、`convert_rule`、`sync_rules` 等工具。
  *
  * 用法:
  *   devtoolkit --mcp
@@ -28,8 +27,26 @@ import {
   searchProjectCode,
   explainResults,
 } from './search/index.js';
+import {
+  exportEnvironment,
+  diffEnvironment,
+  loadSnapshot,
+  formatDiffPreview,
+} from './env/index.js';
+import {
+  convertFile,
+  convertRule,
+  parseRule,
+  syncProjectRules,
+} from './convert/index.js';
 
-/** 启动时传入的默认配置（CLI 参数），工具调用时可被参数覆盖 */
+export interface McpServerOptions {
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+  localModelName?: string;
+}
+
 let serverDefaults: McpServerOptions = {};
 
 // ── MCP 协议类型 ──
@@ -59,7 +76,7 @@ const CAPABILITIES = {
   tools: {},
 };
 
-/** generate_skill 工具的 JSON Schema 输入定义 */
+/** generate_skill 工具的 JSON Schema */
 const GENERATE_SKILL_SCHEMA = {
   type: 'object' as const,
   properties: {
@@ -80,39 +97,27 @@ const GENERATE_SKILL_SCHEMA = {
     },
     template: {
       type: 'string',
-      description: '预设模板 ID（如 api-doc / coding-guide / cheatsheet）',
+      description: '预设模板 ID（如 api-reference / best-practices）',
     },
     model: {
       type: 'string',
       description: 'LLM 模型名（默认 deepseek-chat）',
-      enum: [
-        'deepseek-chat',
-        'deepseek-reasoner',
-        'gpt-4o',
-        'gpt-4o-mini',
-        'doubao-pro-32k',
-        'ollama-local',
-        'lmstudio-local',
-        'custom-local',
-      ],
     },
     baseUrl: {
       type: 'string',
-      description: 'LLM API Base URL（覆盖预设）。custom-local 必填',
+      description: 'LLM API Base URL',
     },
     apiKey: {
       type: 'string',
-      description:
-        'API Key（建议用环境变量 DEEPSEEK_API_KEY 或 OPENAI_API_KEY）',
+      description: 'API Key',
     },
     localModelName: {
       type: 'string',
-      description:
-        '本地模型真实名称（如 qwen2.5-coder:7b）。ollama-local/lmstudio-local/custom-local 时必填，也可用环境变量 OLLAMA_MODEL / LMSTUDIO_MODEL / LOCAL_MODEL_NAME',
+      description: '本地模型真实名称',
     },
     outputPath: {
       type: 'string',
-      description: '输出文件路径（不指定则使用默认路径）',
+      description: '输出文件路径',
     },
     force: {
       type: 'boolean',
@@ -126,7 +131,7 @@ const GENERATE_SKILL_SCHEMA = {
   required: ['sources'],
 };
 
-/** 扫描目录工具的 JSON Schema */
+/** scan_directory 工具的 JSON Schema */
 const SCAN_DIRECTORY_SCHEMA = {
   type: 'object' as const,
   properties: {
@@ -160,7 +165,8 @@ const SEARCH_CODE_SCHEMA = {
   properties: {
     query: {
       type: 'string',
-      description: '搜索查询：自然语言关键词、函数名、类名等',
+      description:
+        '搜索查询：自然语言关键词、函数名、类名、path:src 等过滤语法',
     },
     directory: {
       type: 'string',
@@ -172,111 +178,188 @@ const SEARCH_CODE_SCHEMA = {
     },
     explain: {
       type: 'boolean',
-      description: '是否使用 LLM 解释搜索结果（默认 true，需要 API Key）',
+      description: '是否使用 LLM 解释搜索结果（默认 true）',
     },
   },
   required: ['query'],
 };
 
+/** convert_rule 工具的 JSON Schema */
+const CONVERT_RULE_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    ruleContent: {
+      type: 'string',
+      description:
+        '规则原始 Markdown 或带 Frontmatter 的内容（与 rulePath 二选一）',
+    },
+    rulePath: {
+      type: 'string',
+      description: '本地规则文件路径（如 .cursor/rules/api.mdc 或 SKILL.md）',
+    },
+    to: {
+      type: 'string',
+      enum: ['cursor', 'codex', 'claude'],
+      description: '转换目标 Agent 类型',
+    },
+    name: {
+      type: 'string',
+      description: '自定义规则名称',
+    },
+    write: {
+      type: 'boolean',
+      description: '是否直接写入目标路径（默认 false 只返回预览）',
+    },
+  },
+  required: ['to'],
+};
+
+/** sync_rules 工具的 JSON Schema */
+const SYNC_RULES_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    projectRoot: {
+      type: 'string',
+      description: '项目根目录路径（默认当前工作目录）',
+    },
+    from: {
+      type: 'string',
+      enum: ['cursor', 'codex', 'claude', 'auto'],
+      description: '同步源 Agent 规则（默认 auto 自动检测）',
+    },
+    to: {
+      type: 'array',
+      items: { type: 'string', enum: ['cursor', 'codex', 'claude'] },
+      description: '同步目标 Agent 列表（默认同步到其他未配置的全部 Agent）',
+    },
+    dryRun: {
+      type: 'boolean',
+      description: '是否为 dry-run 预览模式（默认 true 不写入文件）',
+    },
+  },
+  required: [] as const,
+};
+
+/** export_env 工具的 JSON Schema */
+const EXPORT_ENV_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    outputDir: {
+      type: 'string',
+      description: '快照与脚本保存目录（默认当前目录）',
+    },
+    outputPrefix: {
+      type: 'string',
+      description: '输出文件名前缀（默认 devtoolkit-env）',
+    },
+  },
+  required: [] as const,
+};
+
+/** diff_env 工具的 JSON Schema */
+const DIFF_ENV_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    snapshotPath: {
+      type: 'string',
+      description: '环境快照 JSON 文件路径',
+    },
+  },
+  required: ['snapshotPath'],
+};
+
+/** 注册给 MCP Client 的工具列表 */
 const TOOLS = [
   {
     name: 'generate_skill',
     description:
-      '将文档（URL/PDF/Markdown/DOCX 等）转化为 AI Agent 技能包。支持批量目录处理。',
+      '将给定的文档 URL 或本地文件转化为 AI Agent（Codex/Cursor/Claude）的高质量技能包 / 规则文件。',
     inputSchema: GENERATE_SKILL_SCHEMA,
   },
   {
     name: 'scan_directory',
     description:
-      '扫描目录，返回所有受支持的文档文件列表（可用于 preview 后再调用 generate_skill）。',
+      '扫描指定目录下的所有可转换文档文件（.md, .pdf, .docx, .html 等），返回文件列表。',
     inputSchema: SCAN_DIRECTORY_SCHEMA,
   },
   {
     name: 'scan_code',
-    description:
-      '扫描项目代码目录并构建搜索索引。首次使用前需调用此工具初始化索引。支持多种编程语言自动识别。',
+    description: '扫描指定项目的代码文件，提取符号和构建本地倒排搜索索引。',
     inputSchema: SCAN_CODE_SCHEMA,
   },
   {
     name: 'search_code',
     description:
-      '用自然语言搜索项目代码。自动加载已有索引（如果不存在则自动扫描）。返回匹配的代码片段、文件路径和行号。可选择使用 LLM 智能解释结果。',
+      '用自然语言搜索项目代码（基于 TF-IDF + 符号/路径多路召回），返回高相关代码片段及智能解释。',
     inputSchema: SEARCH_CODE_SCHEMA,
+  },
+  {
+    name: 'convert_rule',
+    description:
+      '在 Cursor (.mdc)、Codex (SKILL.md)、Claude (CLAUDE.md) 之间双向无损互转规则。',
+    inputSchema: CONVERT_RULE_SCHEMA,
+  },
+  {
+    name: 'sync_rules',
+    description:
+      '自动扫描项目已存在的 Agent 规则，并一键同步分发到其他 Agent 平台（Cursor/Codex/Claude）。',
+    inputSchema: SYNC_RULES_SCHEMA,
+  },
+  {
+    name: 'export_env',
+    description:
+      '扫描当前开发环境（Homebrew / npm / pip / SDK / VSCode 等），生成环境快照 JSON 和一键恢复脚本。',
+    inputSchema: EXPORT_ENV_SCHEMA,
+  },
+  {
+    name: 'diff_env',
+    description:
+      '比对当前机器环境与指定环境快照 JSON 的差异（缺失包、多出包、版本不匹配）。',
+    inputSchema: DIFF_ENV_SCHEMA,
   },
 ];
 
-// ── MCP 协议处理 ──
+// ── MCP Server 核心逻辑 ──
 
-export interface McpServerOptions {
-  /** LLM 模型名（默认从环境变量或 deepseek-chat） */
-  model?: string;
-  /** API Base URL */
-  baseURL?: string;
-  /** API Key */
-  apiKey?: string;
-  /** 本地模型真实名称 */
-  localModelName?: string;
-}
-
-/**
- * 启动 MCP Server（stdio JSON-RPC 2.0）
- * 阻塞式 readline 循环，按行读取请求、写入响应。
- */
 export function startMcpServer(options: McpServerOptions = {}): void {
-  // 启动时传入的配置作为默认值（CLI --model / --base-url 等优先生效）
   serverDefaults = options;
 
-  // MCP stdio：日志走 stderr，stdout 仅用于 JSON-RPC
-  setLogToStderrForMcp();
+  info('🚀 devtoolkit MCP Server 启动中 (stdio 模式)...');
 
   const rl = createInterface({
     input: process.stdin,
-    output: undefined,
+    output: process.stdout,
     terminal: false,
   });
 
-  info('devtoolkit MCP Server 启动（stdio 模式）');
-
   rl.on('line', (line: string) => {
-    if (!line.trim()) return;
+    const trimmed = line.trim();
+    if (!trimmed) return;
 
-    let request: JsonRpcRequest;
     try {
-      request = JSON.parse(line);
+      const request = JSON.parse(trimmed) as JsonRpcRequest;
+      void handleRequest(request);
     } catch {
       sendResponse({
         jsonrpc: '2.0',
         id: null,
-        error: { code: -32700, message: 'Parse error: 无效的 JSON' },
-      });
-      return;
-    }
-
-    handleRequest(request).catch((err) => {
-      sendResponse({
-        jsonrpc: '2.0',
-        id: request.id,
         error: {
-          code: -32603,
-          message: 'Internal error',
-          data: err instanceof Error ? err.message : String(err),
+          code: -32700,
+          message: 'Parse error: invalid JSON',
         },
       });
-    });
+    }
   });
 
   rl.on('close', () => {
-    info('devtoolkit MCP Server 已关闭');
     process.exit(0);
   });
 }
 
-/** 发送 JSON-RPC 响应到 stdout */
 function sendResponse(response: JsonRpcResponse): void {
   process.stdout.write(JSON.stringify(response) + '\n');
 }
 
-/** 路由 MCP 请求 */
 async function handleRequest(request: JsonRpcRequest): Promise<void> {
   const { method, id, params = {} } = request;
 
@@ -294,7 +377,6 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
       break;
 
     case 'notifications/initialized':
-      // 通知无需响应
       break;
 
     case 'tools/list':
@@ -352,30 +434,32 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
   }
 }
 
-/** 处理工具调用 */
 async function handleToolCall(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string | Record<string, unknown>> {
   switch (name) {
     case 'generate_skill':
-      return handleGenerateSkill(args);
-
+      return await handleGenerateSkill(args);
     case 'scan_directory':
-      return handleScanDirectory(args);
-
+      return await handleScanDirectory(args);
     case 'scan_code':
-      return handleScanCode(args);
-
+      return await handleScanCode(args);
     case 'search_code':
-      return handleSearchCode(args);
-
+      return await handleSearchCode(args);
+    case 'convert_rule':
+      return await handleConvertRule(args);
+    case 'sync_rules':
+      return await handleSyncRules(args);
+    case 'export_env':
+      return await handleExportEnv(args);
+    case 'diff_env':
+      return await handleDiffEnv(args);
     default:
       throw new Error(`未知工具: ${name}`);
   }
 }
 
-/** generate_skill 工具实现 */
 async function handleGenerateSkill(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -390,7 +474,6 @@ async function handleGenerateSkill(
   const force = args.force as boolean;
   const dryRun = args.dryRun as boolean;
 
-  // LLM 配置：优先用参数传入的，回退到环境变量
   const model =
     (args.model as string) ||
     serverDefaults.model ||
@@ -453,7 +536,6 @@ async function handleGenerateSkill(
   };
 }
 
-/** scan_directory 工具实现 */
 async function handleScanDirectory(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -471,7 +553,6 @@ async function handleScanDirectory(
   };
 }
 
-/** scan_code 工具实现：扫描项目代码并构建索引 */
 async function handleScanCode(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -485,7 +566,6 @@ async function handleScanCode(
   };
 }
 
-/** search_code 工具实现：自然语言搜索代码 */
 async function handleSearchCode(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -496,32 +576,29 @@ async function handleSearchCode(
   const limit = (args.limit as number) ?? 10;
   const useExplain = (args.explain as boolean) ?? true;
 
-  // 搜索（自动加载索引或触发扫描）
   const { results, index } = await searchProjectCode(
     query,
     { limit },
     directory,
   );
 
-  // LLM 解释（可选）
   let explanation: string | undefined;
   if (useExplain && results.length > 0) {
-    const model =
-      serverDefaults.model || process.env.DOC2SKILL_MODEL || 'deepseek-chat';
+    const model = serverDefaults.model || 'deepseek-chat';
     const apiKey =
       serverDefaults.apiKey ||
       process.env.DEEPSEEK_API_KEY ||
       process.env.OPENAI_API_KEY ||
       '';
-    const baseURL =
-      serverDefaults.baseURL || process.env.DOC2SKILL_BASE_URL || undefined;
+    const baseURL = serverDefaults.baseURL;
+    const localModelName = serverDefaults.localModelName;
 
     if (isLocalModel(model) || apiKey) {
       try {
         const llmConfig = resolveModel(model, {
           apiKey,
           baseUrl: baseURL,
-          localModelName: serverDefaults.localModelName,
+          localModelName,
         });
         explanation = await explainResults({
           llm: llmConfig,
@@ -530,32 +607,115 @@ async function handleSearchCode(
           projectRoot: index.projectRoot,
         });
       } catch {
-        // LLM 失败不影响纯搜索结果
+        // ignore LLM failure
       }
     }
   }
 
-  // 返回结构化结果
   return {
     query,
-    directory,
-    resultCount: results.length,
+    totalMatches: results.length,
     explanation,
     results: results.map((r) => ({
       file: r.chunk.file,
-      startLine: r.chunk.startLine,
-      endLine: r.chunk.endLine,
       language: r.chunk.language,
-      score: Math.round(r.score * 100) / 100,
-      matchedKeywords: r.matchedKeywords,
+      lines: `${r.chunk.startLine}-${r.chunk.endLine}`,
+      score: Number(r.score.toFixed(2)),
       matchedSymbols: r.matchedSymbols,
-      preview: r.chunk.content.split('\n').slice(0, 20).join('\n'),
+      matchedKeywords: r.matchedKeywords,
+      codePreview: r.chunk.content.split('\n').slice(0, 20).join('\n'),
     })),
   };
 }
 
-/** MCP 模式下日志全部走 stderr */
-function setLogToStderrForMcp(): void {
-  // logger 模块内部已经默认写 stderr，这里确保 verbose 不输出到 stdout
-  process.env.DOC2SKILL_MCP = '1';
+async function handleConvertRule(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const toAgent = args.to as AgentType;
+  const rulePath = args.rulePath as string | undefined;
+  const ruleContent = args.ruleContent as string | undefined;
+  const name = args.name as string | undefined;
+  const shouldWrite = args.write === true;
+
+  if (rulePath) {
+    const res = await convertFile(rulePath, toAgent, {
+      name,
+      write: shouldWrite,
+    });
+    return {
+      success: true,
+      from: res.from,
+      to: res.to,
+      artifacts: res.artifacts,
+    };
+  }
+
+  if (ruleContent) {
+    const parsed = parseRule(ruleContent);
+    const res = convertRule(parsed, { to: toAgent, name });
+    return {
+      success: true,
+      from: res.from,
+      to: res.to,
+      artifacts: res.artifacts,
+    };
+  }
+
+  throw new Error('必须提供 rulePath 或 ruleContent 参数');
+}
+
+async function handleSyncRules(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const projectRoot = (args.projectRoot as string) || process.cwd();
+  const fromAgent = args.from as AgentType | 'auto' | undefined;
+  const toAgents = args.to as AgentType[] | undefined;
+  const dryRun = args.dryRun !== false;
+
+  const res = await syncProjectRules({
+    projectRoot,
+    from: fromAgent,
+    to: toAgents,
+    dryRun,
+  });
+
+  return {
+    success: true,
+    dryRun,
+    summary: res.summary,
+    operations: res.operations,
+  };
+}
+
+async function handleExportEnv(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const outputDir = (args.outputDir as string) || process.cwd();
+  const outputPrefix = (args.outputPrefix as string) || 'devtoolkit-env';
+
+  const res = await exportEnvironment({ outputDir, outputPrefix });
+  return {
+    success: true,
+    jsonPath: res.jsonPath,
+    scriptPath: res.scriptPath,
+    summary: res.summary,
+  };
+}
+
+async function handleDiffEnv(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const snapshotPath = args.snapshotPath as string;
+  if (!snapshotPath) throw new Error('snapshotPath 参数必填');
+
+  const snapshot = loadSnapshot(snapshotPath);
+  const diff = await diffEnvironment(snapshot);
+
+  return {
+    snapshotPath,
+    hasDifferences: diff.hasDifferences,
+    summary: diff.summary,
+    preview: formatDiffPreview(diff),
+    diff,
+  };
 }

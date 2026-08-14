@@ -1,7 +1,7 @@
 /**
  * 代码搜索 — 编排入口
  *
- * 提供初始化扫描、搜索、交互模式的高层 API。
+ * 提供初始化扫描、增量更新、搜索、交互模式的高层 API。
  */
 import type {
   ScanCodeOptions,
@@ -25,6 +25,7 @@ import {
 
 export {
   buildIndex,
+  updateIndex,
   saveIndex,
   loadIndex,
   hasIndex,
@@ -38,6 +39,7 @@ export {
   detectLanguage,
   isCodeFile,
   extractSymbols,
+  parseIgnoreFile,
   readCodeFile,
 } from './scanner.js';
 
@@ -57,9 +59,6 @@ export type {
 
 /**
  * 初始化扫描：扫描项目代码并构建索引
- *
- * @param options 扫描选项
- * @returns 构建的索引
  */
 export async function initCodeIndex(
   options: ScanCodeOptions = {},
@@ -79,11 +78,9 @@ export async function initCodeIndex(
     `扫描完成: ${index.stats.totalFiles} 文件 / ${index.stats.totalLines} 行 / ${index.stats.totalChunks} 分块`,
   );
 
-  // 保存索引
   const indexPath = await saveIndex(index, root);
   success(`索引已保存: ${indexPath}`);
 
-  // 打印统计
   info('');
   info('  📊 项目统计:');
   info(`     文件数: ${index.stats.totalFiles}`);
@@ -107,19 +104,13 @@ export async function initCodeIndex(
 }
 
 /**
- * 搜索代码（自动加载索引）
- *
- * @param query 搜索查询
- * @param options 搜索选项
- * @param root 项目根目录
- * @returns 搜索结果列表
+ * 搜索代码（自动加载索引并支持增量检查）
  */
 export async function searchProjectCode(
   query: string,
   options: SearchOptions = {},
   root: string = process.cwd(),
 ): Promise<{ results: SearchResult[]; index: SearchIndex }> {
-  // 尝试加载已有索引
   let index = await loadIndex(root);
 
   if (!index) {
@@ -133,12 +124,6 @@ export async function searchProjectCode(
 
 /**
  * 搜索并输出结果（单次搜索模式）
- *
- * @param query 搜索查询
- * @param llm LLM 配置（可选，用于智能解释）
- * @param useExplain 是否使用 LLM 解释
- * @param root 项目根目录
- * @param options 搜索选项
  */
 export async function searchAndPrint(
   query: string,
@@ -171,17 +156,12 @@ export async function searchAndPrint(
 
 /**
  * 启动交互式搜索（初始化索引后进入 REPL）
- *
- * @param llm LLM 配置（可选）
- * @param useExplain 是否使用 LLM 解释
- * @param root 项目根目录
  */
 export async function startSearchSession(
   llm: LLMConfig | undefined,
   useExplain: boolean,
   root?: string,
 ): Promise<void> {
-  // 加载或创建索引
   let index = await loadIndex(root || process.cwd());
 
   if (!index) {

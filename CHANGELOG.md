@@ -2,9 +2,23 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [0.8.0] — 2026-08-14
 
 ### 新功能
+
+- **⚡️ OpenAPI / Swagger 专精加载器**：一键将 OpenAPI 3.0 / 3.1 与 Swagger 2.0 规范（JSON / YAML / URL）提炼为结构化 API 技能手册
+  - 深度 `$ref` 解引用展开与循环引用防护，消除跨模型嵌套割裂
+  - 接口结构化提炼：按 Tag 模块聚类，精确解析 Method、Path、OperationId、Query/Path/Header 参数、RequestBody Schema 及 2xx 响应字段
+  - 极大降低 Token 消耗：自动剔除冗余模板与无用元数据，相比原始规范节省 80%~90% Token，消除 LLM 幻觉
+  - 全链路自动分发：命令行传入 URL / 本地文件、Web UI 上传均自动检测并启用专精加载器
+  - 新增编程式 API：`loadFromOpenApi` / `isOpenApiSpec` / `parseOpenApiSpec` / `renderOpenApiToMarkdown` / `extractOpenApiFromBuffer`
+
+- **🔄 跨 Agent 规则互转与同步模式**（`--convert` / `--sync`）：在 Cursor、Codex、Claude 规则体系之间实现无损互转与项目全量同步
+  - 自动识别三种 Agent 的规则规范（`.cursor/rules/*.mdc`、`.agents/skills/*/SKILL.md`、`CLAUDE.md` / `.claude/rules/*.md`）
+  - 规则互转（`--convert <file> -t <type>`）：智能解析并规范化生成目标 Agent 专属目录与 Frontmatter
+  - 项目一键全量同步（`--sync` / `--sync-from` / `--sync-to`）：自动探测当前项目所有规则，支持 `--dry-run` 预览
+  - 超长规则渐进披露：转为 Codex 时超长内容自动拆分 `references/details.md`；转为 Claude 时超长规则拆入 `.claude/rules/`
+  - 新增编程式 API：`convertRule` / `discoverProjectRules` / `syncProjectRules` / `parseRule` / `detectRuleFormat`
 
 - **🔍 代码搜索模式**（`--scan-code` / `--search`）：扫描任意项目的代码文件，构建本地搜索索引，支持自然语言搜索代码。精准定位文件和行号，不用再打开 IDEA 手动搜索
   - 支持 25+ 种编程语言自动识别和符号提取（class / function / interface / enum 等）

@@ -23,5 +23,5 @@ export default [
     },
   },
   prettier,
-  { ignores: ['dist/', 'node_modules/', 'bin/'] },
+  { ignores: ['dist/', 'node_modules/', 'bin/', 'scripts/'] },
 ];

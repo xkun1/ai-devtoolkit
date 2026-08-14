@@ -163,3 +163,33 @@ export interface ImportResult {
   /** 跳过的模块 */
   skipped: string[];
 }
+
+/** 环境差异比对项 */
+export interface DiffItem {
+  name: string;
+  expectedVersion?: string;
+  currentVersion?: string;
+}
+
+/** 环境差异比对结果 */
+export interface EnvDiffResult {
+  hasDifferences: boolean;
+  brewFormulae: { missing: string[]; extra: string[] };
+  brewCasks: { missing: string[]; extra: string[] };
+  npmGlobal: {
+    missing: string[];
+    extra: string[];
+    versionMismatch: DiffItem[];
+  };
+  pipPackages: {
+    missing: string[];
+    extra: string[];
+    versionMismatch: DiffItem[];
+  };
+  vscodeExtensions: { missing: string[]; extra: string[] };
+  summary: {
+    totalMissing: number;
+    totalExtra: number;
+    totalMismatch: number;
+  };
+}

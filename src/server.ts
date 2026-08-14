@@ -25,6 +25,16 @@ import { fetchPublicText, SafeFetchError } from './utils/safe-fetch.js';
 import { WEB_UI_HTML } from './server/html.js';
 import { createArtifactZip } from './utils/zip.js';
 import { DownloadStore } from './utils/download-store.js';
+import {
+  initCodeIndex,
+  searchProjectCode,
+  explainResults,
+} from './search/index.js';
+import {
+  detectEnvironment,
+  diffEnvironment,
+  formatDiffPreview,
+} from './env/index.js';
 export { WEB_UI_HTML } from './server/html.js';
 
 export interface ServerOptions {
@@ -45,15 +55,11 @@ export interface ServerOptions {
   downloadTtlMs?: number;
 }
 
-/** 启动 Web UI 服务器 */
-export function startServer(options: ServerOptions = {}): Server {
+/** 创建 Web UI 请求处理器，供 startServer 或直接测试复用 */
+export function createRequestHandler(options: ServerOptions = {}) {
   const port = options.port ?? 3456;
   if (!Number.isInteger(port) || port < 0 || port > 65_535) {
     throw new Error('Web UI 端口必须在 0-65535 之间');
-  }
-  const host = options.host ?? '127.0.0.1';
-  if (!isLoopbackHost(host)) {
-    throw new Error('Web UI 仅允许监听本机回环地址');
   }
   const maxBodyBytes = options.maxBodyBytes ?? 10 * 1024 * 1024;
   const maxRemoteBytes = options.maxRemoteBytes ?? 5 * 1024 * 1024;
@@ -80,7 +86,7 @@ export function startServer(options: ServerOptions = {}): Server {
     model: options.model || 'deepseek-chat',
   };
 
-  const server = createServer(async (req, res) => {
+  const handler = async (req: IncomingMessage, res: ServerResponse) => {
     try {
       applySecurityHeaders(res, sessionToken);
       const requestOrigin = getAllowedOrigin(req, actualPort);
@@ -174,6 +180,47 @@ export function startServer(options: ServerOptions = {}): Server {
         return;
       }
 
+      // ─── 代码搜索 API ───
+      if (url.pathname === '/api/search' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleSearch(req, res, defaultLLM, maxBodyBytes);
+        return;
+      }
+
+      if (url.pathname === '/api/search/index' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleSearchIndex(req, res, maxBodyBytes);
+        return;
+      }
+
+      // ─── 环境资产 API ───
+      if (
+        url.pathname === '/api/env/detect' &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleEnvDetect(req, res);
+        return;
+      }
+
+      if (url.pathname === '/api/env/diff' && req.method === 'POST') {
+        if (!hasValidSession(req, sessionToken)) {
+          serveJSON(res, 403, { error: '无效的 Web UI 会话' });
+          return;
+        }
+        await handleEnvDiff(req, res, maxBodyBytes);
+        return;
+      }
+
       // 404
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not Found' }));
@@ -184,7 +231,28 @@ export function startServer(options: ServerOptions = {}): Server {
           : 500;
       serveJSON(res, status, { error: getErrorMessage(err) });
     }
-  });
+  };
+
+  return {
+    handler,
+    sessionToken,
+    downloads,
+    setActualPort: (p: number) => {
+      actualPort = p;
+    },
+  };
+}
+
+/** 启动 Web UI 服务器 */
+export function startServer(options: ServerOptions = {}): Server {
+  const host = options.host ?? '127.0.0.1';
+  if (!isLoopbackHost(host)) {
+    throw new Error('Web UI 仅允许监听本机回环地址');
+  }
+  const port = options.port ?? 3456;
+  const { handler, downloads, setActualPort } = createRequestHandler(options);
+  let actualPort = port;
+  const server = createServer(handler);
 
   server.headersTimeout = 30_000;
   server.requestTimeout = 5 * 60_000;
@@ -195,6 +263,7 @@ export function startServer(options: ServerOptions = {}): Server {
     const address = server.address();
     actualPort =
       typeof address === 'object' && address ? address.port : actualPort;
+    setActualPort(actualPort);
     console.log(`\n  ╔══════════════════════════════════════════╗`);
     console.log(`  ║  🌐 devtoolkit Web UI                     ║`);
   });
@@ -423,7 +492,9 @@ function serveHTML(res: ServerResponse, sessionToken: string): void {
     WEB_UI_HTML.replace(
       '<head>',
       `<head>\n<meta name="devtoolkit-session" content="${safeToken}">`,
-    ).replaceAll('__DOC2SKILL_NONCE__', safeToken),
+    )
+      .replaceAll('__SESSION_TOKEN__', safeToken)
+      .replaceAll('__DOC2SKILL_NONCE__', safeToken),
   );
 }
 
@@ -732,4 +803,124 @@ function formatBytes(value: number): string {
 
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// ─── 代码搜索与环境资产处理函数 ───
+
+async function handleSearch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  defaultLLM: { apiKey: string; baseURL?: string; model: string },
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    query?: string;
+    directory?: string;
+    limit?: number;
+    explain?: boolean;
+    model?: string;
+    apiKey?: string;
+    baseURL?: string;
+    localModelName?: string;
+  };
+  const query = body.query?.trim();
+  if (!query) {
+    throw new HttpError(400, '搜索内容不能为空');
+  }
+
+  const directory = body.directory?.trim() || process.cwd();
+  const limit = body.limit ?? 10;
+  const useExplain = body.explain ?? false;
+
+  const { results, index } = await searchProjectCode(
+    query,
+    { limit },
+    directory,
+  );
+
+  let explanation: string | undefined;
+  if (useExplain && results.length > 0) {
+    const model = body.model || defaultLLM.model;
+    const apiKey = body.apiKey || defaultLLM.apiKey;
+    const baseURL = body.baseURL || defaultLLM.baseURL;
+    const localModelName = body.localModelName;
+
+    if (isLocalModel(model) || apiKey) {
+      try {
+        const llmConfig = resolveModel(model, {
+          apiKey,
+          baseUrl: baseURL,
+          localModelName,
+        });
+        explanation = await explainResults({
+          llm: llmConfig,
+          query,
+          results,
+          projectRoot: index.projectRoot,
+        });
+      } catch (err: any) {
+        explanation = 'LLM 解释生成失败: ' + err.message;
+      }
+    }
+  }
+
+  serveJSON(res, 200, {
+    query,
+    totalMatches: results.length,
+    stats: index.stats,
+    explanation,
+    results: results.map((r) => ({
+      file: r.chunk.file,
+      language: r.chunk.language,
+      startLine: r.chunk.startLine,
+      endLine: r.chunk.endLine,
+      score: Number(r.score.toFixed(2)),
+      matchedSymbols: r.matchedSymbols,
+      matchedKeywords: r.matchedKeywords,
+      content: r.chunk.content,
+    })),
+  });
+}
+
+async function handleSearchIndex(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    directory?: string;
+  };
+  const directory = body.directory?.trim() || process.cwd();
+  const index = await initCodeIndex({ root: directory });
+  serveJSON(res, 200, {
+    success: true,
+    directory,
+    stats: index.stats,
+  });
+}
+
+async function handleEnvDetect(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const snapshot = await detectEnvironment();
+  serveJSON(res, 200, { snapshot });
+}
+
+async function handleEnvDiff(
+  req: IncomingMessage,
+  res: ServerResponse,
+  maxBodyBytes: number,
+): Promise<void> {
+  const body = (await readBody(req, maxBodyBytes)) as {
+    snapshot?: any;
+  };
+  if (!body.snapshot || typeof body.snapshot !== 'object') {
+    throw new HttpError(400, '缺少快照数据');
+  }
+  const diff = await diffEnvironment(body.snapshot);
+  serveJSON(res, 200, {
+    diff,
+    preview: formatDiffPreview(diff),
+  });
 }

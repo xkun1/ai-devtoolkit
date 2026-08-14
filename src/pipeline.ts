@@ -178,6 +178,24 @@ async function runPipelineSingle(
         } catch {
           // 提取失败就用原文
         }
+      } else {
+        try {
+          const { isOpenApiSpec, parseOpenApiSpec, renderOpenApiToMarkdown } =
+            await import('./loader/openapi.js');
+          if (isOpenApiSpec(processed, fileName)) {
+            const parsed = parseOpenApiSpec(processed);
+            processed = renderOpenApiToMarkdown(parsed);
+            title = parsed.title || title;
+            meta = {
+              format: 'openapi',
+              specType: parsed.specType,
+              specVersion: parsed.version,
+              endpointsCount: String(parsed.endpoints.length),
+            };
+          }
+        } catch {
+          // 保持原文
+        }
       }
     }
 

@@ -50,6 +50,14 @@ function readFileSafe(path: string): string {
   }
 }
 
+/** 过滤敏感凭证（如 token/secret/password/apikey） */
+export function maskSensitive(text: string): string {
+  return text.replace(
+    /((?:token|secret|password|passwd|key|auth|credential|api[_-]?key)\s*[:=]\s*)(['"]?)([^\s'"\n]{6,})\2/gi,
+    '$1$2***MASKED***$2',
+  );
+}
+
 // ── 各模块探测器 ──
 
 /** 探测 Homebrew 包 */
@@ -265,7 +273,11 @@ export function detectShell(home: string = homedir()): ShellConfig | undefined {
   for (const f of configFiles) {
     const filePath = join(home, f);
     if (existsSync(filePath)) {
-      files.push({ name: f, path: filePath, content: readFileSafe(filePath) });
+      files.push({
+        name: f,
+        path: filePath,
+        content: maskSensitive(readFileSafe(filePath)),
+      });
     }
   }
 
@@ -276,15 +288,15 @@ export function detectShell(home: string = homedir()): ShellConfig | undefined {
 export function detectGit(home: string = homedir()): GitConfig | undefined {
   if (!has('git')) return undefined;
 
-  const config = exec('git config --global --list 2>/dev/null');
-  if (!config) return undefined;
+  const rawConfig = exec('git config --global --list 2>/dev/null');
+  if (!rawConfig) return undefined;
 
-  const result: GitConfig = { config };
+  const result: GitConfig = { config: maskSensitive(rawConfig) };
 
   // 全局 gitignore
   const ignoreFile = join(home, '.gitignore_global');
   if (existsSync(ignoreFile)) {
-    result.globalIgnore = readFileSafe(ignoreFile);
+    result.globalIgnore = maskSensitive(readFileSafe(ignoreFile));
   }
 
   return result;

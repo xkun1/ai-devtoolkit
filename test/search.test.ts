@@ -16,6 +16,7 @@ import {
 } from '../src/search/scanner.js';
 import {
   buildIndex,
+  updateIndex,
   saveIndex,
   loadIndex,
   hasIndex,
@@ -346,5 +347,66 @@ describe('explainer', () => {
     const output = formatResultsPlain(results, tmpProject);
     expect(output).toContain('UserController');
     expect(output).toContain('📄');
+  });
+});
+
+describe('代码搜索 — 高级语法与忽略规则增强', () => {
+  it('parseIgnoreFile 正确解析目录与通配符规则', async () => {
+    const { parseIgnoreFile } = await import('../src/search/scanner.js');
+    const parsed = parseIgnoreFile(
+      ['# 注释', 'node_modules/', 'dist', '*.log', 'temp/*'].join('\n'),
+    );
+
+    expect(parsed.dirs.has('node_modules')).toBe(true);
+    expect(parsed.dirs.has('dist')).toBe(true);
+    expect(parsed.patterns.length).toBeGreaterThanOrEqual(2);
+    expect(parsed.patterns.some((p) => p.test('error.log'))).toBe(true);
+    expect(parsed.patterns.some((p) => p.test('temp/cache.json'))).toBe(true);
+  });
+
+  it('CodeSearcher 支持 path: 和 lang: 高级过滤语法', async () => {
+    const index = await buildIndex({ root: tmpProject });
+    const searcher = new CodeSearcher(index);
+
+    // 限定 path
+    const pathResults = searcher.search('login path:controllers');
+    expect(pathResults.length).toBeGreaterThan(0);
+    expect(pathResults.every((r) => r.chunk.file.includes('controllers'))).toBe(
+      true,
+    );
+
+    // 限定 lang
+    const langResults = searcher.search('login lang:typescript');
+    expect(langResults.length).toBeGreaterThan(0);
+    expect(langResults.every((r) => r.chunk.language === 'typescript')).toBe(
+      true,
+    );
+
+    // 限定 kind:class
+    const classResults = searcher.search('UserController kind:class');
+    expect(classResults.length).toBeGreaterThan(0);
+    expect(
+      classResults.some((r) => r.chunk.symbols.includes('UserController')),
+    ).toBe(true);
+  });
+
+  it('updateIndex 增量更新只重扫变动文件', async () => {
+    const initialIndex = await buildIndex({ root: tmpProject });
+    expect(initialIndex.stats.totalFiles).toBeGreaterThan(0);
+
+    // 新增一个文件
+    const newFilePath = join(tmpProject, 'src', 'models', 'Order.ts');
+    writeFileSync(
+      newFilePath,
+      'export class Order { id: string; amount: number; }',
+    );
+
+    const updated = await updateIndex(initialIndex, { root: tmpProject });
+    expect(updated.stats.totalFiles).toBe(initialIndex.stats.totalFiles + 1);
+    expect(updated.files.some((f) => f.path.includes('Order.ts'))).toBe(true);
+
+    const searcher = new CodeSearcher(updated);
+    const results = searcher.search('Order');
+    expect(results.some((r) => r.chunk.content.includes('amount'))).toBe(true);
   });
 });

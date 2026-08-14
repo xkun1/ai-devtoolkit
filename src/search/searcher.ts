@@ -2,6 +2,7 @@
  * 代码搜索引擎
  *
  * 基于 TF-IDF + 多路召回（关键词/符号/路径/模糊匹配）进行搜索。
+ * 支持结构化语法过滤（path:xxx, lang:xxx, kind:xxx）与细粒度中文分词。
  * 不依赖外部服务，纯本地计算。
  */
 import type {
@@ -10,6 +11,13 @@ import type {
   SearchResult,
   CodeChunk,
 } from './types.js';
+
+interface QueryFilters {
+  cleanQuery: string;
+  pathFilter?: string;
+  langFilter?: string;
+  kindFilter?: string;
+}
 
 /** 搜索引擎类 */
 export class CodeSearcher {
@@ -26,6 +34,49 @@ export class CodeSearcher {
     this.chunkCount = index.chunks.length;
   }
 
+  /** 解析查询中的结构化过滤语法 (如 path:src/ lang:ts kind:class) */
+  private parseQueryFilters(rawQuery: string): QueryFilters {
+    let clean = rawQuery;
+    let pathFilter: string | undefined;
+    let langFilter: string | undefined;
+    let kindFilter: string | undefined;
+
+    // path: / file:
+    const pathMatch = clean.match(/(?:path|file):(S+)/i);
+    if (pathMatch) {
+      pathFilter = pathMatch[1].toLowerCase();
+      clean = clean.replace(pathMatch[0], ' ');
+    }
+
+    // lang:
+    const langMatch = clean.match(/lang:(S+)/i);
+    if (langMatch) {
+      const rawLang = langMatch[1].toLowerCase();
+      const langAlias: Record<string, string> = {
+        ts: 'typescript',
+        js: 'javascript',
+        py: 'python',
+        rs: 'rust',
+      };
+      langFilter = langAlias[rawLang] || rawLang;
+      clean = clean.replace(langMatch[0], ' ');
+    }
+
+    // kind:
+    const kindMatch = clean.match(/kind:(S+)/i);
+    if (kindMatch) {
+      kindFilter = kindMatch[1].toLowerCase();
+      clean = clean.replace(kindMatch[0], ' ');
+    }
+
+    return {
+      cleanQuery: clean.trim(),
+      pathFilter,
+      langFilter,
+      kindFilter,
+    };
+  }
+
   /**
    * 搜索代码
    *
@@ -34,6 +85,7 @@ export class CodeSearcher {
    * 2. 符号名匹配（精确/前缀/包含）
    * 3. 文件路径匹配
    * 4. 全文模糊匹配（fallback）
+   * 5. 结构化过滤器筛选（path / lang / kind）
    */
   search(query: string, options: SearchOptions = {}): SearchResult[] {
     const limit = options.limit ?? 10;
@@ -41,7 +93,11 @@ export class CodeSearcher {
     const searchSymbols = options.searchSymbols ?? true;
     const searchFilePath = options.searchFilePath ?? true;
 
-    const queryTokens = this.tokenize(query);
+    const { cleanQuery, pathFilter, langFilter, kindFilter } =
+      this.parseQueryFilters(query);
+    const effectiveQuery = cleanQuery || query;
+
+    const queryTokens = this.tokenize(effectiveQuery);
     if (queryTokens.length === 0 && !query.trim()) return [];
 
     const scoreMap = new Map<
@@ -66,7 +122,7 @@ export class CodeSearcher {
       for (const [indexKey, ids] of Object.entries(this.index.invertedIndex)) {
         if (indexKey === lowerToken) continue;
         if (indexKey.includes(lowerToken) || lowerToken.includes(indexKey)) {
-          const idf = Math.log(1 + this.chunkCount / ids.length) * 0.5; // 模糊匹配降权
+          const idf = Math.log(1 + this.chunkCount / ids.length) * 0.5;
           for (const chunkId of ids) {
             this.addScore(scoreMap, chunkId, idf, indexKey, '');
           }
@@ -78,14 +134,12 @@ export class CodeSearcher {
     if (searchSymbols) {
       for (const token of queryTokens) {
         const lowerToken = token.toLowerCase();
-        // 精确符号匹配
         const symChunkIds = this.index.symbolIndex[lowerToken];
         if (symChunkIds) {
           for (const chunkId of symChunkIds) {
-            this.addScore(scoreMap, chunkId, 2.0, '', lowerToken); // 符号匹配高分
+            this.addScore(scoreMap, chunkId, 2.0, '', lowerToken);
           }
         }
-        // 符号名包含匹配
         for (const [symKey, ids] of Object.entries(this.index.symbolIndex)) {
           if (symKey === lowerToken) continue;
           if (symKey.includes(lowerToken)) {
@@ -110,10 +164,10 @@ export class CodeSearcher {
       }
     }
 
-    // ── 4. 全文 fallback：当倒排索引没有命中时 ──
-    if (scoreMap.size === 0 && query.trim()) {
-      const lowerQuery = query.toLowerCase();
-      const queryWords = lowerQuery.split(/\s+/).filter((w) => w.length >= 2);
+    // ── 4. 全文 fallback ──
+    if (scoreMap.size === 0 && effectiveQuery.trim()) {
+      const lowerQuery = effectiveQuery.toLowerCase();
+      const queryWords = lowerQuery.split(/\s+/).filter((w) => w.length >= 1);
 
       for (const chunk of this.index.chunks) {
         const lowerContent = chunk.content.toLowerCase();
@@ -127,7 +181,7 @@ export class CodeSearcher {
       }
     }
 
-    // ── 归一化 + 排序 ──
+    // ── 过滤与打分 ──
     const maxScore = Math.max(
       ...Array.from(scoreMap.values()).map((v) => v.score),
       0.001,
@@ -135,11 +189,28 @@ export class CodeSearcher {
 
     const results: SearchResult[] = [];
     for (const [chunkId, { score, keywords, symbols }] of scoreMap) {
-      const normalizedScore = score / maxScore;
-      if (normalizedScore < minScore) continue;
-
       const chunk = this.chunkMap.get(chunkId);
       if (!chunk) continue;
+
+      if (pathFilter && !chunk.file.toLowerCase().includes(pathFilter)) {
+        continue;
+      }
+      if (langFilter && chunk.language.toLowerCase() !== langFilter) {
+        continue;
+      }
+      if (kindFilter) {
+        const hasKind = this.index.symbols.some(
+          (s) =>
+            s.file === chunk.file &&
+            s.kind.toLowerCase() === kindFilter &&
+            s.line >= chunk.startLine &&
+            s.line <= chunk.endLine,
+        );
+        if (!hasKind) continue;
+      }
+
+      const normalizedScore = score / maxScore;
+      if (normalizedScore < minScore) continue;
 
       results.push({
         chunk,
@@ -153,7 +224,6 @@ export class CodeSearcher {
     return results.slice(0, limit);
   }
 
-  /** 添加分数到 scoreMap */
   private addScore(
     scoreMap: Map<
       string,
@@ -177,17 +247,14 @@ export class CodeSearcher {
     if (symbol) entry.symbols.add(symbol);
   }
 
-  /** 查询分词（与 indexer 的 extractKeywords 对齐） */
   private tokenize(query: string): string[] {
     const tokens: string[] = [];
 
-    // 英文标识符拆分
     const identifierPattern = /[a-zA-Z_$][a-zA-Z0-9_$]+/g;
     let match: RegExpExecArray | null;
 
     while ((match = identifierPattern.exec(query)) !== null) {
       const word = match[0];
-      // 驼峰拆分
       const parts = word
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
@@ -202,19 +269,23 @@ export class CodeSearcher {
       }
     }
 
-    // 中文分词（按词组）
-    const cjkPattern = /[\u4e00-\u9fff]{2,}/g;
+    const cjkPattern = /[\u4e00-\u9fff]+/g;
     while ((match = cjkPattern.exec(query)) !== null) {
-      tokens.push(match[0]);
+      const cjkWord = match[0];
+      if (cjkWord.length >= 2) {
+        tokens.push(cjkWord);
+        for (let i = 0; i < cjkWord.length - 1; i++) {
+          tokens.push(cjkWord.slice(i, i + 2));
+        }
+      } else if (cjkWord.length === 1) {
+        tokens.push(cjkWord);
+      }
     }
 
-    return tokens;
+    return [...new Set(tokens)];
   }
 }
 
-/**
- * 快捷搜索函数：基于索引和查询返回结果
- */
 export function searchCode(
   index: SearchIndex,
   query: string,

@@ -20,6 +20,7 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 |-------|:---:|-------|
 | 📄 Web URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF Document | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
+| ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens) |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/` (when long) |
 | 📚 Multi-doc Merge | → | 🧩 Fused skill pack after chunked extraction |
 | 📂 Batch Directory | → | 🤖 One skill pack per file (or `--merge` to combine) |
@@ -48,6 +49,24 @@ npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 
 # No arguments → interactive wizard
 npx ai-devtoolkit
+```
+
+### 🔄 Cross-Agent Rule Conversion & Sync (Cursor / Codex / Claude)
+
+Convert rules between Cursor, Codex, and Claude seamlessly in any project:
+
+```bash
+# 1. Single file: Convert Cursor rule to Codex skill
+devtoolkit --convert .cursor/rules/api.mdc --type codex
+
+# 2. Convert Claude memory to Cursor rule
+devtoolkit --convert CLAUDE.md --type cursor
+
+# 3. One-click full-project sync (auto-discovers existing rules and syncs across agents)
+devtoolkit --sync
+
+# 4. Preview sync plan only (dry-run)
+devtoolkit --sync --dry-run
 ```
 
 ### 🌐 Web UI Mode

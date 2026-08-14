@@ -1,9 +1,11 @@
+import { readFile } from 'node:fs/promises';
 import type { LoadedDocument, SourceType } from '../types/index.js';
 import { loadFromUrl } from './url.js';
 import { loadFromPdf } from './pdf.js';
 import { loadFromFile } from './file.js';
 import { loadFromHtml } from './html.js';
 import { loadFromDocx } from './doc.js';
+import { loadFromOpenApi, isOpenApiSpec } from './openapi.js';
 
 /** 判断 source 类型 */
 export function detectSourceType(source: string): SourceType {
@@ -26,10 +28,27 @@ export async function loadDocument(source: string): Promise<LoadedDocument> {
       return loadFromPdf(source);
     case 'html':
       return loadFromHtml(source);
-    default:
+    default: {
       // docx 文件用专用 loader
       if (/\.docx?$/i.test(source)) return loadFromDocx(source);
+
+      // OpenAPI / Swagger 规范检查（JSON / YAML）
+      if (
+        /\.(json|ya?ml)$/i.test(source) ||
+        /(openapi|swagger|api[-_]docs)/i.test(source)
+      ) {
+        try {
+          const raw = await readFile(source, 'utf-8');
+          if (isOpenApiSpec(raw, source)) {
+            return await loadFromOpenApi(source, raw);
+          }
+        } catch {
+          // 不是 OpenAPI 则走普通文件读取
+        }
+      }
+
       return loadFromFile(source, type);
+    }
   }
 }
 
@@ -67,6 +86,19 @@ export function mergeDocuments(docs: LoadedDocument[]): LoadedDocument {
 }
 
 export { loadFromUrl, loadFromPdf, loadFromFile, loadFromHtml, loadFromDocx };
+export {
+  loadFromOpenApi,
+  isOpenApiSpec,
+  parseOpenApiSpec,
+  renderOpenApiToMarkdown,
+  extractOpenApiFromBuffer,
+} from './openapi.js';
+export type {
+  OpenApiParameter,
+  OpenApiField,
+  OpenApiEndpoint,
+  ParsedOpenApi,
+} from './openapi.js';
 export { crawlSite } from './crawler.js';
 export type { CrawlOptions } from './crawler.js';
 export {
