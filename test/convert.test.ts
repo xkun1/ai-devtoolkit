@@ -196,4 +196,19 @@ JWT 必须设置有效期。
     const { existsSync } = await import('node:fs');
     expect(existsSync(codexFile)).toBe(false);
   });
+
+  it('显式指定不存在的源 Agent 时拒绝静默回退', async () => {
+    const cursorRulesDir = join(TMP_DIR, '.cursor', 'rules');
+    await mkdir(cursorRulesDir, { recursive: true });
+    await writeFile(join(cursorRulesDir, 'test.mdc'), '# Cursor Rule');
+
+    await expect(
+      syncProjectRules({
+        projectRoot: TMP_DIR,
+        from: 'codex',
+        to: ['claude'],
+        dryRun: true,
+      }),
+    ).rejects.toThrow('未发现 codex');
+  });
 });

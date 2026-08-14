@@ -8,6 +8,7 @@
  */
 import { extractFromHtml } from './readability.js';
 import type { LoadedDocument } from '../types/index.js';
+import { fetchPublicText } from '../utils/safe-fetch.js';
 
 export interface CrawlOptions {
   /** 最大深度（根页面 = 0） */
@@ -35,6 +36,15 @@ export async function crawlSite(
   const maxDepth = options.maxDepth ?? 2;
   const maxPages = options.maxPages ?? 10;
   const sameOrigin = options.sameOrigin ?? true;
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0 || maxDepth > 10) {
+    throw new Error('maxDepth 必须是 0-10 的整数');
+  }
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1 || maxPages > 500) {
+    throw new Error('maxPages 必须是 1-500 的整数');
+  }
+  if (typeof sameOrigin !== 'boolean') {
+    throw new Error('sameOrigin 必须是布尔值');
+  }
 
   const rootOrigin = new URL(rootUrl).origin;
   const visited = new Set<string>();
@@ -73,7 +83,10 @@ export async function crawlSite(
       if (visited.has(norm)) continue;
 
       // URL 模式过滤
-      if (options.urlPattern && !options.urlPattern.test(norm)) continue;
+      if (options.urlPattern) {
+        options.urlPattern.lastIndex = 0;
+        if (!options.urlPattern.test(norm)) continue;
+      }
 
       queue.push({ url: norm, depth: depth + 1 });
     }
@@ -149,22 +162,9 @@ function normalizeUrl(url: string): string {
 
 /** 抓取 HTML */
 async function fetchHtml(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-    });
-    if (!res.ok) return '';
-    return await res.text();
+    return (await fetchPublicText(url)).body;
   } catch {
     return '';
-  } finally {
-    clearTimeout(timeout);
   }
 }

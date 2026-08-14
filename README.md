@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
-[![CI](https://github.com/xkun1/devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/devtoolkit/actions)
+[![CI](https://github.com/xkun1/ai-devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/ai-devtoolkit/actions)
 
 ---
 
@@ -164,7 +164,7 @@ npx ai-devtoolkit --ui --port 8080
 在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；Codex `references/` 和 Claude `.claude/rules/` 等多文件目录会完整保留。
 
 Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传内容；
-不会读取服务端任意本地路径。上传请求默认限制为 10 MiB，远程文档默认限制为 5 MiB。
+代码搜索、图谱和源码查看仅允许访问启动时固定的项目根目录，符号链接也不能越界。上传请求默认限制为 10 MiB，远程文档默认限制为 5 MiB，源码查看单文件默认限制为 2 MiB。
 
 ### 🚀 进阶用法
 
@@ -183,7 +183,7 @@ npx ai-devtoolkit --mcp
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp"],
+      "args": ["-y", "ai-devtoolkit", "--mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "sk-xxx"
       }
@@ -198,13 +198,13 @@ npx ai-devtoolkit --mcp
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp"]
+      "args": ["-y", "ai-devtoolkit", "--mcp"]
     }
   }
 }
 ```
 
-MCP Server 提供 4 个工具：
+MCP Server 提供 9 个工具；stdio 的 stdout 严格只输出 JSON-RPC，日志写入 stderr：
 
 | 工具 | 说明 |
 |------|------|
@@ -212,6 +212,11 @@ MCP Server 提供 4 个工具：
 | `scan_directory` | 扫描目录，返回受支持的文档文件列表 |
 | `scan_code` | 扫描项目代码目录并构建搜索索引 |
 | `search_code` | 用自然语言搜索项目代码（返回代码片段+文件行号+LLM解释） |
+| `convert_rule` | 在 Cursor / Codex / Claude 规则格式间转换 |
+| `sync_rules` | 预览或同步项目中的 Agent 规则 |
+| `export_env` | 导出开发环境快照与恢复脚本 |
+| `diff_env` | 比对环境快照与当前机器差异 |
+| `eval_skill` | 执行带技能与无技能基线的对照评测 |
 
 #### 使用本地模型（Ollama / LM Studio）
 
@@ -224,7 +229,7 @@ MCP Server 提供 4 个工具：
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp", "--model", "ollama-local"],
+      "args": ["-y", "ai-devtoolkit", "--mcp", "--model", "ollama-local"],
       "env": {
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
@@ -241,7 +246,7 @@ MCP Server 提供 4 个工具：
     "devtoolkit": {
       "command": "npx",
       "args": [
-        "devtoolkit", "--mcp",
+        "-y", "ai-devtoolkit", "--mcp",
         "--model", "ollama-local",
         "--local-model", "qwen2.5-coder:7b"
       ]
@@ -258,7 +263,7 @@ MCP Server 提供 4 个工具：
     "devtoolkit": {
       "command": "npx",
       "args": [
-        "devtoolkit", "--mcp",
+        "-y", "ai-devtoolkit", "--mcp",
         "--model", "custom-local",
         "--base-url", "http://localhost:8000/v1",
         "--local-model", "my-model-name"
@@ -393,11 +398,14 @@ Options:
   --stdout             输出到标准输出而不写文件（便于管道集成）
   --dry-run            预览生成结果，不写入文件
   --force              强制覆盖已存在的输出文件
+  --mcp                启动 MCP Server（stdio JSON-RPC）
   --ui                 启动 Web UI 界面（本地浏览器交互）
   --port <n>           Web UI 端口号（默认 3456）
   --crawl              爬取模式：自动发现并抓取文档站点子页面
   --crawl-depth <n>    爬取最大深度（默认 2）
   --crawl-pages <n>    爬取最大页面数（默认 10）
+  --merge              目录模式下合并所有文件为一个技能包
+  --dir-depth <n>      目录扫描最大递归深度（默认 5）
   -w, --watch          监控模式：文档变更后自动重新生成
   --template <id>      使用预设模板（api-doc / coding-guide / cheatsheet 等）
   --list-templates     列出所有可用模板
@@ -406,9 +414,20 @@ Options:
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   --local-model <name> 本地服务中的真实模型名
+  --convert <file>     转换规则文件（结合 --type 指定目标）
+  --sync               自动发现并同步项目中的 Agent 规则
+  --sync-from <agent>  同步源 Agent（默认 auto）
+  --sync-to <agents>   同步目标 Agent，多个用逗号分隔
+  --eval <skillFile>   对技能包执行自动化对照评测
   --scan-code          扫描项目代码并构建搜索索引
   --search <query>     用自然语言搜索项目代码
   --no-explain         搜索结果不使用 LLM 解释（仅显示代码片段）
+  --graph              生成项目依赖 Mermaid 图谱
+  --impact <file>      分析指定文件的改动影响面
+  --env-export         导出开发环境快照与恢复脚本
+  --env-import <file>  导入环境快照（默认仅预览）
+  --env-diff <file>    比对环境快照与当前机器
+  --execute            实际执行 --env-import 中的安装命令
   -v, --verbose        显示详细日志
   -V, --version        版本号
   -h, --help           帮助
@@ -514,7 +533,7 @@ console.log(doc.content); // 提取的 Markdown
 ## 🔨 本地开发
 
 ```bash
-git clone https://github.com/xkun1/devtoolkit.git
+git clone https://github.com/xkun1/ai-devtoolkit.git
 cd devtoolkit
 npm install
 

@@ -2,6 +2,8 @@
  * 网页正文提取器：fetch HTML → cheerio 清洗 → turndown 转 Markdown
  * 启发式策略：移除噪声标签 → 定位正文容器 → 转换为干净的 Markdown
  */
+import { fetchPublicText } from '../utils/safe-fetch.js';
+
 /** 从 HTML 字符串提取正文（cheerio 清洗 + turndown 转 Markdown） */
 export async function extractFromHtml(html: string): Promise<{
   content: string;
@@ -125,27 +127,9 @@ export async function extractContent(url: string): Promise<{
   };
 }
 
-/** 抓取 HTML，带 UA 伪装和超时 */
+/** 抓取公网 HTML，统一执行 SSRF、重定向、超时与响应体大小校验。 */
 async function fetchHtml(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText} — ${url}`);
-    }
-    return await res.text();
-  } finally {
-    clearTimeout(timeout);
-  }
+  return (await fetchPublicText(url)).body;
 }
 
 /** 启发式：找文本密度最高的块级容器 */

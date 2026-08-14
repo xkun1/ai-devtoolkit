@@ -11,10 +11,11 @@ import {
 } from 'node:http';
 import type { Server } from 'node:http';
 import type { AgentType } from './types/index.js';
+import { isValidAgentType } from './format/index.js';
 import { randomBytes } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { runPipeline } from './pipeline.js';
 import { extractFromHtml } from './loader/readability.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
@@ -71,6 +72,10 @@ export interface ServerOptions {
   sessionToken?: string;
   /** ZIP 下载票据有效期，默认 10 分钟。 */
   downloadTtlMs?: number;
+  /** Web UI 允许访问的项目根目录，默认启动进程的当前目录。 */
+  projectRoot?: string;
+  /** 源码查看器单文件读取上限，默认 2 MiB。 */
+  maxReadableFileBytes?: number;
 }
 
 /** 创建 Web UI 请求处理器，供 startServer 或直接测试复用 */
@@ -82,6 +87,10 @@ export function createRequestHandler(options: ServerOptions = {}) {
   const maxBodyBytes = options.maxBodyBytes ?? 10 * 1024 * 1024;
   const maxRemoteBytes = options.maxRemoteBytes ?? 5 * 1024 * 1024;
   const maxConcurrentGenerations = options.maxConcurrentGenerations ?? 2;
+  const maxReadableFileBytes = options.maxReadableFileBytes ?? 2 * 1024 * 1024;
+  const projectRoot = realpathSync(
+    resolve(options.projectRoot ?? process.cwd()),
+  );
   if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1) {
     throw new Error('maxBodyBytes 必须是正整数');
   }
@@ -93,6 +102,9 @@ export function createRequestHandler(options: ServerOptions = {}) {
     maxConcurrentGenerations < 1
   ) {
     throw new Error('maxConcurrentGenerations 必须是正整数');
+  }
+  if (!Number.isSafeInteger(maxReadableFileBytes) || maxReadableFileBytes < 1) {
+    throw new Error('maxReadableFileBytes 必须是正整数');
   }
   const sessionToken = options.sessionToken || randomBytes(24).toString('hex');
   let actualPort = port;
@@ -204,7 +216,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleSearch(req, res, defaultLLM, maxBodyBytes);
+        await handleSearch(req, res, defaultLLM, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -213,7 +225,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleSearchIndex(req, res, maxBodyBytes);
+        await handleSearchIndex(req, res, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -257,7 +269,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleSyncDiscover(req, res, maxBodyBytes);
+        await handleSyncDiscover(req, res, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -266,7 +278,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleSync(req, res, maxBodyBytes);
+        await handleSync(req, res, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -289,7 +301,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleGraph(req, res, maxBodyBytes);
+        await handleGraph(req, res, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -298,7 +310,7 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleImpact(req, res, maxBodyBytes);
+        await handleImpact(req, res, maxBodyBytes, projectRoot);
         return;
       }
 
@@ -307,7 +319,13 @@ export function createRequestHandler(options: ServerOptions = {}) {
           serveJSON(res, 403, { error: '无效的 Web UI 会话' });
           return;
         }
-        await handleReadFile(req, res, maxBodyBytes);
+        await handleReadFile(
+          req,
+          res,
+          maxBodyBytes,
+          projectRoot,
+          maxReadableFileBytes,
+        );
         return;
       }
 
@@ -379,7 +397,7 @@ async function handleLocalModels(
 ): Promise<void> {
   const body = await readBody(req, maxBodyBytes);
   const { baseUrl } = body;
-  if (!baseUrl) {
+  if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
     serveJSON(res, 400, { error: '缺少 baseUrl 参数' });
     return;
   }
@@ -425,6 +443,28 @@ async function handleGenerate(
     mimeType,
   } = body;
 
+  for (const [label, value, maxLength] of [
+    ['source', source, 10_000],
+    ['agentType', agentType, 100],
+    ['template', template, 100],
+    ['modelName', modelName, 200],
+    ['apiKey', apiKey, 10_000],
+    ['skillName', skillName, 200],
+    ['localBaseUrl', localBaseUrl, 10_000],
+    ['localModelName', localModelName, 200],
+    ['fileContent', fileContent, maxBodyBytes],
+    ['fileName', fileName, 255],
+    ['binaryContent', binaryContent, maxBodyBytes],
+    ['mimeType', mimeType, 200],
+  ] as const) {
+    if (
+      value !== undefined &&
+      (typeof value !== 'string' || value.length > maxLength)
+    ) {
+      throw new HttpError(400, `${label} 参数无效`);
+    }
+  }
+
   // Web UI 不允许读取服务端本地路径，只接受 HTTP(S) URL 或浏览器上传内容。
   const hasUrl = source && source.trim().length > 0;
   const hasFileContent =
@@ -437,9 +477,6 @@ async function handleGenerate(
   }
 
   try {
-    const safeLocalBaseUrl = localBaseUrl
-      ? toOpenAICompatibleBaseUrl(validateLocalServiceUrl(localBaseUrl))
-      : undefined;
     validateGenerateInput({
       agentType,
       template,
@@ -455,12 +492,17 @@ async function handleGenerate(
     if (isLocalModel(selectedModel) && !localModelName) {
       throw new HttpError(400, '缺少本地模型名');
     }
-    if (selectedModel === 'custom-local' && !safeLocalBaseUrl) {
+    const safeBaseUrl = resolveWebModelBaseUrl(
+      selectedModel,
+      localBaseUrl,
+      defaultLLM.baseURL,
+    );
+    if (selectedModel === 'custom-local' && !safeBaseUrl) {
       throw new HttpError(400, 'custom-local 必须指定本地服务地址');
     }
     const llmConfig = resolveModel(modelName || defaultLLM.model, {
       apiKey: apiKey || defaultLLM.apiKey,
-      baseUrl: safeLocalBaseUrl || defaultLLM.baseURL,
+      baseUrl: safeBaseUrl,
       localModelName,
     });
 
@@ -563,7 +605,7 @@ async function handleEstimate(
 ): Promise<void> {
   const body = await readBody(req, maxBodyBytes);
   const { text } = body;
-  if (!text) {
+  if (typeof text !== 'string' || !text) {
     serveJSON(res, 400, { error: '缺少 text 参数' });
     return;
   }
@@ -611,7 +653,16 @@ function serveZip(res: ServerResponse, buffer: Buffer, filename: string): void {
 async function readBody(req: IncomingMessage, limit: number): Promise<any> {
   const buffer = await readRequestBuffer(req, limit);
   const data = buffer.toString('utf-8');
-  return data ? JSON.parse(data) : {};
+  if (!data) return {};
+  try {
+    const parsed: unknown = JSON.parse(data);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new HttpError(400, '请求体必须是 JSON 对象');
+    }
+    return parsed;
+  } catch {
+    throw new HttpError(400, '请求体必须是合法 JSON 对象');
+  }
 }
 
 /**
@@ -765,6 +816,13 @@ function applySecurityHeaders(res: ServerResponse, scriptNonce: string): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=()',
+  );
   res.setHeader(
     'Content-Security-Policy',
     `default-src 'self'; style-src 'unsafe-inline'; script-src 'nonce-${safeNonce}'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`,
@@ -832,6 +890,64 @@ function toOpenAICompatibleBaseUrl(value: string): string {
   const path = url.pathname.replace(/\/+$/, '');
   if (!path || path === '/') url.pathname = '/v1';
   return url.href.replace(/\/$/, '');
+}
+
+function resolveWebModelBaseUrl(
+  model: string,
+  requestedBaseUrl: string | undefined,
+  defaultBaseUrl: string | undefined,
+): string | undefined {
+  if (isLocalModel(model)) {
+    if (requestedBaseUrl) {
+      return toOpenAICompatibleBaseUrl(
+        validateLocalServiceUrl(requestedBaseUrl),
+      );
+    }
+    if (defaultBaseUrl) {
+      try {
+        return toOpenAICompatibleBaseUrl(
+          validateLocalServiceUrl(defaultBaseUrl),
+        );
+      } catch {
+        // 默认配置可能属于云端模型；此时回退到本地模型自身预设。
+      }
+    }
+    return undefined;
+  }
+
+  if (requestedBaseUrl && requestedBaseUrl !== defaultBaseUrl) {
+    throw new HttpError(400, 'Web UI 不允许覆盖云端模型服务地址');
+  }
+  return defaultBaseUrl;
+}
+
+async function resolveProjectPath(
+  projectRoot: string,
+  requestedPath?: unknown,
+): Promise<string> {
+  if (requestedPath !== undefined && typeof requestedPath !== 'string') {
+    throw new HttpError(400, '项目路径必须是字符串');
+  }
+  const requested = requestedPath?.trim() || '.';
+  if (requested.length > 10_000 || requested.includes('\0')) {
+    throw new HttpError(400, '项目路径无效');
+  }
+  const candidate = resolve(projectRoot, requested);
+  let canonicalPath: string;
+  try {
+    canonicalPath = await realpath(candidate);
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      throw new HttpError(404, `路径不存在: ${requested}`);
+    }
+    throw err;
+  }
+
+  const rel = relative(projectRoot, canonicalPath);
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new HttpError(403, '禁止访问项目根目录之外的路径');
+  }
+  return canonicalPath;
 }
 
 function parseUrl(value: unknown, label: string): URL {
@@ -902,6 +1018,7 @@ async function handleSearch(
   res: ServerResponse,
   defaultLLM: { apiKey: string; baseURL?: string; model: string },
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
     query?: string;
@@ -913,13 +1030,38 @@ async function handleSearch(
     baseURL?: string;
     localModelName?: string;
   };
+  if (body.query !== undefined && typeof body.query !== 'string') {
+    throw new HttpError(400, '搜索内容必须是字符串');
+  }
   const query = body.query?.trim();
   if (!query) {
     throw new HttpError(400, '搜索内容不能为空');
   }
+  if (query.length > 10_000) {
+    throw new HttpError(400, '搜索内容过长');
+  }
+  for (const [label, value] of [
+    ['model', body.model],
+    ['apiKey', body.apiKey],
+    ['baseURL', body.baseURL],
+    ['localModelName', body.localModelName],
+  ] as const) {
+    if (
+      value !== undefined &&
+      (typeof value !== 'string' || value.length > 10_000)
+    ) {
+      throw new HttpError(400, `${label} 参数无效`);
+    }
+  }
 
-  const directory = body.directory?.trim() || process.cwd();
+  const directory = await resolveProjectPath(projectRoot, body.directory);
   const limit = body.limit ?? 10;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw new HttpError(400, 'limit 必须是 1-100 的整数');
+  }
+  if (body.explain !== undefined && typeof body.explain !== 'boolean') {
+    throw new HttpError(400, 'explain 必须是布尔值');
+  }
   const useExplain = body.explain ?? false;
 
   const { results, index } = await searchProjectCode(
@@ -932,11 +1074,15 @@ async function handleSearch(
   if (useExplain && results.length > 0) {
     const model = body.model || defaultLLM.model;
     const apiKey = body.apiKey || defaultLLM.apiKey;
-    const baseURL = body.baseURL || defaultLLM.baseURL;
     const localModelName = body.localModelName;
 
     if (isLocalModel(model) || apiKey) {
       try {
+        const baseURL = resolveWebModelBaseUrl(
+          model,
+          body.baseURL,
+          defaultLLM.baseURL,
+        );
         const llmConfig = resolveModel(model, {
           apiKey,
           baseUrl: baseURL,
@@ -949,6 +1095,7 @@ async function handleSearch(
           projectRoot: index.projectRoot,
         });
       } catch (err: any) {
+        if (err instanceof HttpError) throw err;
         explanation = 'LLM 解释生成失败: ' + err.message;
       }
     }
@@ -976,11 +1123,12 @@ async function handleSearchIndex(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
     directory?: string;
   };
-  const directory = body.directory?.trim() || process.cwd();
+  const directory = await resolveProjectPath(projectRoot, body.directory);
   const index = await initCodeIndex({ root: directory });
   serveJSON(res, 200, {
     success: true,
@@ -1008,7 +1156,12 @@ async function handleEnvDiff(
   if (!body.snapshot || typeof body.snapshot !== 'object') {
     throw new HttpError(400, '缺少快照数据');
   }
-  const diff = await diffEnvironment(body.snapshot);
+  let diff: Awaited<ReturnType<typeof diffEnvironment>>;
+  try {
+    diff = await diffEnvironment(body.snapshot);
+  } catch (err) {
+    throw new HttpError(400, `环境快照无效: ${getErrorMessage(err)}`);
+  }
   serveJSON(res, 200, {
     diff,
     preview: formatDiffPreview(diff),
@@ -1027,8 +1180,24 @@ async function handleConvert(
     to?: AgentType;
     name?: string;
   };
-  if (!body.content || !body.to) {
+  if (
+    typeof body.content !== 'string' ||
+    !body.content.trim() ||
+    typeof body.to !== 'string'
+  ) {
     throw new HttpError(400, '缺少 content 或 to 参数');
+  }
+  if (body.content.length > 1024 * 1024) {
+    throw new HttpError(413, '规则内容超过 1 MiB 限制');
+  }
+  if (!isValidAgentType(String(body.to))) {
+    throw new HttpError(400, '无效的目标 Agent 类型');
+  }
+  if (
+    body.name !== undefined &&
+    (typeof body.name !== 'string' || body.name.length > 200)
+  ) {
+    throw new HttpError(400, '规则名称无效或过长');
   }
   const parsed = parseRule(body.content);
   const result = convertRule(parsed, { to: body.to, name: body.name });
@@ -1045,12 +1214,13 @@ async function handleSyncDiscover(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body =
     req.method === 'POST'
       ? ((await readBody(req, maxBodyBytes)) as { projectRoot?: string })
       : {};
-  const root = body.projectRoot || process.cwd();
+  const root = await resolveProjectPath(projectRoot, body.projectRoot);
   const discovered = await discoverProjectRules(root);
   serveJSON(res, 200, {
     projectRoot: root,
@@ -1063,18 +1233,37 @@ async function handleSync(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
     projectRoot?: string;
-    from?: AgentType;
+    from?: AgentType | 'auto';
     to?: AgentType[];
     dryRun?: boolean;
   };
+  if (
+    body.from !== undefined &&
+    !['auto', 'codex', 'cursor', 'claude'].includes(String(body.from))
+  ) {
+    throw new HttpError(400, '无效的同步源 Agent 类型');
+  }
+  if (
+    body.to !== undefined &&
+    (!Array.isArray(body.to) ||
+      body.to.length > 3 ||
+      body.to.some((agent) => !isValidAgentType(String(agent))))
+  ) {
+    throw new HttpError(400, '无效的同步目标 Agent 列表');
+  }
+  if (body.dryRun !== undefined && typeof body.dryRun !== 'boolean') {
+    throw new HttpError(400, 'dryRun 必须是布尔值');
+  }
+  const root = await resolveProjectPath(projectRoot, body.projectRoot);
   const result = await syncProjectRules({
-    projectRoot: body.projectRoot,
+    projectRoot: root,
     from: body.from,
     to: body.to,
-    dryRun: body.dryRun ?? false,
+    dryRun: body.dryRun ?? true,
   });
   serveJSON(res, 200, result);
 }
@@ -1092,29 +1281,45 @@ async function handleEval(
     baseURL?: string;
     localModelName?: string;
   };
-  if (!body.skillContent) throw new HttpError(400, '缺少 skillContent 参数');
-
-  const model = String(body.model || defaultLLM.model);
-  const apiKey = body.apiKey || defaultLLM.apiKey;
-  const baseURL = body.baseURL || defaultLLM.baseURL;
-  const localModelName = body.localModelName;
-
-  let safeLocalBaseUrl = baseURL;
-  if (isLocalModel(model) && baseURL) {
-    try {
-      safeLocalBaseUrl = toOpenAICompatibleBaseUrl(
-        validateLocalServiceUrl(baseURL),
-      );
-    } catch {
-      safeLocalBaseUrl = baseURL;
+  if (typeof body.skillContent !== 'string' || !body.skillContent.trim()) {
+    throw new HttpError(400, '缺少 skillContent 参数');
+  }
+  if (body.skillContent.length > 1024 * 1024) {
+    throw new HttpError(413, '技能内容超过 1 MiB 限制');
+  }
+  for (const [label, value] of [
+    ['model', body.model],
+    ['apiKey', body.apiKey],
+    ['baseURL', body.baseURL],
+    ['localModelName', body.localModelName],
+  ] as const) {
+    if (
+      value !== undefined &&
+      (typeof value !== 'string' || value.length > 10_000)
+    ) {
+      throw new HttpError(400, `${label} 参数无效`);
     }
   }
 
-  const llmConfig = resolveModel(model, {
-    apiKey,
-    baseUrl: safeLocalBaseUrl,
-    localModelName,
-  });
+  const model = String(body.model || defaultLLM.model);
+  const apiKey = body.apiKey || defaultLLM.apiKey;
+  const localModelName = body.localModelName;
+  const safeBaseUrl = resolveWebModelBaseUrl(
+    model,
+    body.baseURL,
+    defaultLLM.baseURL,
+  );
+
+  let llmConfig: ReturnType<typeof resolveModel>;
+  try {
+    llmConfig = resolveModel(model, {
+      apiKey,
+      baseUrl: safeBaseUrl,
+      localModelName,
+    });
+  } catch (err) {
+    throw new HttpError(400, getErrorMessage(err));
+  }
 
   const report = await runSkillEval(body.skillContent, { llm: llmConfig });
   serveJSON(res, 200, {
@@ -1127,6 +1332,7 @@ async function handleGraph(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body =
     req.method === 'POST'
@@ -1135,7 +1341,10 @@ async function handleGraph(
           direction?: 'TD' | 'LR';
         })
       : {};
-  const root = body.projectRoot || process.cwd();
+  if (body.direction !== undefined && !['TD', 'LR'].includes(body.direction)) {
+    throw new HttpError(400, 'direction 仅支持 TD 或 LR');
+  }
+  const root = await resolveProjectPath(projectRoot, body.projectRoot);
   const graph = await buildDependencyGraph({ root });
   const mermaid = generateMermaidGraph(graph, {
     direction: body.direction || 'LR',
@@ -1150,13 +1359,19 @@ async function handleImpact(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
     targetFile?: string;
     projectRoot?: string;
   };
-  if (!body.targetFile) throw new HttpError(400, '缺少 targetFile 参数');
-  const root = body.projectRoot || process.cwd();
+  if (typeof body.targetFile !== 'string' || !body.targetFile.trim()) {
+    throw new HttpError(400, '缺少 targetFile 参数');
+  }
+  if (body.targetFile.length > 10_000) {
+    throw new HttpError(400, 'targetFile 参数过长');
+  }
+  const root = await resolveProjectPath(projectRoot, body.projectRoot);
   const graph = await buildDependencyGraph({ root });
   const result = analyzeImpact(graph, body.targetFile);
   serveJSON(res, 200, {
@@ -1169,25 +1384,24 @@ async function handleReadFile(
   req: IncomingMessage,
   res: ServerResponse,
   maxBodyBytes: number,
+  projectRoot: string,
+  maxReadableFileBytes: number,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
     path?: string;
-    projectRoot?: string;
   };
-  if (!body.path) throw new HttpError(400, '缺少 path 参数');
-  const root = body.projectRoot || process.cwd();
-
-  const resolvedRoot = resolve(root);
-  const absPath = resolve(root, body.path);
-  if (!absPath.startsWith(resolvedRoot)) {
-    throw new HttpError(403, '禁止跨目录读取文件');
+  if (typeof body.path !== 'string' || !body.path.trim()) {
+    throw new HttpError(400, '缺少 path 参数');
   }
-  if (!existsSync(absPath)) {
-    throw new HttpError(404, '文件不存在: ' + body.path);
-  }
-
-  const content = await readFile(absPath, 'utf-8');
+  const absPath = await resolveProjectPath(projectRoot, body.path);
   const fileStat = await stat(absPath);
+  if (!fileStat.isFile()) {
+    throw new HttpError(400, '仅允许读取普通文件');
+  }
+  if (fileStat.size > maxReadableFileBytes) {
+    throw new HttpError(413, '文件超过源码查看大小限制');
+  }
+  const content = await readFile(absPath, 'utf-8');
   serveJSON(res, 200, {
     path: body.path,
     content,

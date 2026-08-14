@@ -4,9 +4,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crawlSite } from '../src/loader/crawler.js';
 
-// mock 全局 fetch
-const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
+const mockFetchPublicText = vi.hoisted(() => vi.fn());
+vi.mock('../src/utils/safe-fetch.js', () => ({
+  fetchPublicText: mockFetchPublicText,
+}));
 
 const makeHtml = (title: string, body: string, links: string[] = []) => {
   const linkTags = links.map((l) => `<a href="${l}">link</a>`).join('');
@@ -18,21 +19,24 @@ const makeHtml = (title: string, body: string, links: string[] = []) => {
 };
 
 beforeEach(() => {
-  mockFetch.mockReset();
+  mockFetchPublicText.mockReset();
 });
+
+function mockHtml(html: string, url = 'https://docs.example.com/') {
+  return {
+    body: html,
+    contentType: 'text/html',
+    finalUrl: url,
+  };
+}
 
 describe('crawlSite', () => {
   it('单页面：无子链接时只返回根页面', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          makeHtml(
-            'Root',
-            'Root page content with enough text for extraction.',
-          ),
-        ),
-    });
+    mockFetchPublicText.mockResolvedValueOnce(
+      mockHtml(
+        makeHtml('Root', 'Root page content with enough text for extraction.'),
+      ),
+    );
 
     const doc = await crawlSite('https://docs.example.com/', { maxDepth: 2 });
     expect(doc.type).toBe('url');
@@ -42,30 +46,28 @@ describe('crawlSite', () => {
 
   it('发现子页面：BFS 遍历同域链接', async () => {
     // 根页面 → 包含指向 /guide 和 /api 的链接
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          makeHtml('Root', 'Root content with enough text.', [
-            'https://docs.example.com/guide',
-            'https://docs.example.com/api',
-          ]),
-        ),
-    });
+    mockFetchPublicText.mockResolvedValueOnce(
+      mockHtml(
+        makeHtml('Root', 'Root content with enough text.', [
+          'https://docs.example.com/guide',
+          'https://docs.example.com/api',
+        ]),
+      ),
+    );
     // /guide 子页面
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          makeHtml('Guide', 'Guide page content with enough text.'),
-        ),
-    });
+    mockFetchPublicText.mockResolvedValueOnce(
+      mockHtml(
+        makeHtml('Guide', 'Guide page content with enough text.'),
+        'https://docs.example.com/guide',
+      ),
+    );
     // /api 子页面
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () =>
-        Promise.resolve(makeHtml('API', 'API page content with enough text.')),
-    });
+    mockFetchPublicText.mockResolvedValueOnce(
+      mockHtml(
+        makeHtml('API', 'API page content with enough text.'),
+        'https://docs.example.com/api',
+      ),
+    );
 
     const doc = await crawlSite('https://docs.example.com/', { maxDepth: 1 });
     expect(doc.meta?.crawledPages).toBe('3');
@@ -75,16 +77,14 @@ describe('crawlSite', () => {
   }, 10000);
 
   it('maxPages 限制页面数量', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          makeHtml('Page', 'Content.', [
-            'https://docs.example.com/p2',
-            'https://docs.example.com/p3',
-          ]),
-        ),
-    });
+    mockFetchPublicText.mockResolvedValue(
+      mockHtml(
+        makeHtml('Page', 'Content.', [
+          'https://docs.example.com/p2',
+          'https://docs.example.com/p3',
+        ]),
+      ),
+    );
 
     const doc = await crawlSite('https://docs.example.com/', {
       maxDepth: 3,
@@ -94,19 +94,27 @@ describe('crawlSite', () => {
   }, 10000);
 
   it('同域限制：不爬取外域链接', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          makeHtml(
-            'Root',
-            'Root content.',
-            ['https://other.com/page'], // 外域链接
-          ),
+    mockFetchPublicText.mockResolvedValueOnce(
+      mockHtml(
+        makeHtml(
+          'Root',
+          'Root content.',
+          ['https://other.com/page'], // 外域链接
         ),
-    });
+      ),
+    );
 
     const doc = await crawlSite('https://docs.example.com/');
     expect(doc.meta?.crawledPages).toBe('1'); // 只有根页面
   }, 10000);
+
+  it('拒绝超出安全范围的爬取参数', async () => {
+    await expect(
+      crawlSite('https://docs.example.com/', { maxDepth: 11 }),
+    ).rejects.toThrow('maxDepth');
+    await expect(
+      crawlSite('https://docs.example.com/', { maxPages: 0 }),
+    ).rejects.toThrow('maxPages');
+    expect(mockFetchPublicText).not.toHaveBeenCalled();
+  });
 });

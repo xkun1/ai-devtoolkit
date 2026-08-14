@@ -29,6 +29,7 @@
     "examples",
     "README.md",
     "README.en.md",
+    ".env.example",
     "LICENSE",
     "CHANGELOG.md"
   ],
@@ -92,7 +93,8 @@
     "openai": "^4.77.0",
     "ora": "^8.1.1",
     "pdf-parse": "^1.1.1",
-    "turndown": "^7.2.0"
+    "turndown": "^7.2.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -3,7 +3,7 @@
  *
  * 运行：npx tsx examples/programmatic-api.ts
  */
-import { devtoolkit } from '../src/lib.js';
+import { devtoolkit } from 'ai-devtoolkit';
 
 async function main() {
   const result = await devtoolkit('./examples/sample-doc.md', {

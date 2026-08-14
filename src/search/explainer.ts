@@ -78,7 +78,11 @@ export async function explainResults(options: ExplainOptions): Promise<string> {
     '## 搜索结果\n' +
     context;
 
-  return callLLM(prompt, options.llm);
+  return callLLM(prompt, options.llm, {
+    systemPrompt:
+      '你是代码导航与架构分析助手。只能依据提供的搜索结果回答，不得编造不存在的文件、符号或调用关系；回答应简洁、可定位。',
+    temperature: 0.1,
+  });
 }
 
 /**

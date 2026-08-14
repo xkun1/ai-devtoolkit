@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runPipeline } from '../src/pipeline.js';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
@@ -276,6 +276,28 @@ describe('Pipeline E2E (mocked LLM)', () => {
     // 文件被覆盖
     const written = await readFile(outPath, 'utf-8');
     expect(written).toContain('Mocked Skill');
+  });
+
+  it('目录批量模式默认保留覆盖保护', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-batch-overwrite-'));
+    const docsDir = join(dir, 'docs');
+    await mkdir(docsDir, { recursive: true });
+    await writeFile(
+      join(docsDir, 'guide.md'),
+      '# Batch Guide\n\nDocumentation with enough content to verify directory overwrite protection remains enabled.',
+    );
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      const options = {
+        agentType: 'codex' as const,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      };
+      await runPipeline(docsDir, options);
+      await expect(runPipeline(docsDir, options)).rejects.toThrow('文件已存在');
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   it('未指定输出路径时使用现代 Codex 技能目录', async () => {

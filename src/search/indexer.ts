@@ -5,7 +5,7 @@
  * 支持全量构建 (buildIndex) 与增量更新 (updateIndex)。
  */
 import { join } from 'node:path';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, access, chmod } from 'node:fs/promises';
 import type {
   CodeChunk,
   CodeSymbol,
@@ -14,6 +14,7 @@ import type {
   SearchIndex,
 } from './types.js';
 import { scanCodeFiles, extractSymbols } from './scanner.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 export const INDEX_VERSION = '1.0.0';
 
@@ -502,8 +503,37 @@ export async function saveIndex(
 ): Promise<string> {
   const indexPath = join(dir, INDEX_FILENAME);
   const data = JSON.stringify(index);
-  await writeFile(indexPath, data, 'utf-8');
+  await ensureIndexIgnored(dir);
+  await writeFileAtomic(indexPath, data);
+  try {
+    await chmod(indexPath, 0o600);
+  } catch {
+    // Windows 等平台可能不支持 POSIX 权限位，不影响索引使用。
+  }
   return indexPath;
+}
+
+async function ensureIndexIgnored(dir: string): Promise<void> {
+  const ignorePath = join(dir, '.gitignore');
+  let content = '';
+  try {
+    content = await readFile(ignorePath, 'utf-8');
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') throw err;
+  }
+  const entries = new Set(
+    content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  if (entries.has(INDEX_FILENAME) || entries.has(`/${INDEX_FILENAME}`)) return;
+
+  const separator = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
+  await writeFileAtomic(
+    ignorePath,
+    `${content}${separator}${INDEX_FILENAME}\n`,
+  );
 }
 
 export async function loadIndex(

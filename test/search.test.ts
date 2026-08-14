@@ -6,6 +6,8 @@ import {
   writeFileSync,
   rmSync,
   existsSync,
+  readFileSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 
@@ -237,6 +239,23 @@ describe('indexer', () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.stats.totalFiles).toBe(index.stats.totalFiles);
     expect(loaded!.chunks.length).toBe(index.chunks.length);
+    expect(readFileSync(join(tmpProject, '.gitignore'), 'utf-8')).toContain(
+      '.devtoolkit-index.json',
+    );
+    if (process.platform !== 'win32') {
+      expect(statSync(savedPath).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it('saveIndex 不重复写入 .gitignore 规则', async () => {
+    const index = await buildIndex({ root: tmpProject });
+    writeFileSync(join(tmpProject, '.gitignore'), 'dist\n');
+    await saveIndex(index, tmpProject);
+    await saveIndex(index, tmpProject);
+    const lines = readFileSync(join(tmpProject, '.gitignore'), 'utf-8')
+      .split(/\r?\n/)
+      .filter((line) => line === '.devtoolkit-index.json');
+    expect(lines).toHaveLength(1);
   });
 
   it('loadIndex 版本不匹配返回 null', async () => {

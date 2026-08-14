@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
+import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 /**
  * server.test.ts — Web UI 服务器核心逻辑测试
@@ -196,6 +199,19 @@ describe('Web UI — HTML 模板验证', () => {
     expect(WEB_UI_HTML).toContain('downloadZip');
     expect(WEB_UI_HTML).toContain('triggerDownload');
   });
+
+  it('动态搜索与环境数据写入 innerHTML 前统一转义', async () => {
+    const { WEB_UI_HTML } = await import('../src/server/html.js');
+    expect(WEB_UI_HTML).toContain('escapeHtml(r.file)');
+    expect(WEB_UI_HTML).toContain('escapeHtml(sys.hostname)');
+    expect(WEB_UI_HTML).toContain('escapeHtml(filePath)');
+  });
+
+  it('项目规则同步先 dry-run 预览并二次确认', async () => {
+    const { WEB_UI_HTML } = await import('../src/server/html.js');
+    expect(WEB_UI_HTML).toContain('JSON.stringify({ dryRun: true })');
+    expect(WEB_UI_HTML).toContain('window.confirm');
+  });
 });
 
 describe('Web UI — HTTP 安全边界', () => {
@@ -209,6 +225,7 @@ describe('Web UI — HTTP 安全边界', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('test-token');
     expect(res.headers.get('x-frame-options')).toBe('DENY');
+    expect(res.headers.get('cache-control')).toContain('no-store');
     expect(res.headers.get('content-security-policy')).toContain(
       "frame-ancestors 'none'",
     );
@@ -266,6 +283,20 @@ describe('Web UI — HTTP 安全边界', () => {
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.error).toContain('URL');
+
+    const invalidType = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/generate',
+        headers: {
+          'content-type': 'application/json',
+          'x-devtoolkit-token': 'test-token',
+        },
+        body: JSON.stringify({ source: { url: 'https://example.com' } }),
+      },
+    );
+    expect(invalidType.status).toBe(400);
   });
 
   it('拒绝私网 SSRF 与非本机模型地址', async () => {
@@ -310,6 +341,189 @@ describe('Web UI — HTTP 安全边界', () => {
       },
     );
     expect(res.status).toBe(413);
+  });
+
+  it('非法 JSON 请求体返回 400', async () => {
+    const res = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/estimate',
+        headers: {
+          'content-type': 'application/json',
+          'x-devtoolkit-token': 'test-token',
+        },
+        body: '{invalid',
+      },
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('合法 JSON');
+
+    const scalar = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/estimate',
+        headers: {
+          'content-type': 'application/json',
+          'x-devtoolkit-token': 'test-token',
+        },
+        body: 'null',
+      },
+    );
+    expect(scalar.status).toBe(400);
+  });
+
+  it('文件读取限制在项目根目录内并阻止符号链接逃逸', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'devtoolkit-web-root-'));
+    const outside = await mkdtemp(join(tmpdir(), 'devtoolkit-web-outside-'));
+    try {
+      await writeFile(join(root, 'inside.ts'), 'export const safe = true;');
+      await writeFile(join(outside, 'secret.txt'), 'secret');
+      await symlink(join(outside, 'secret.txt'), join(root, 'escape-link'));
+
+      const headers = {
+        'content-type': 'application/json',
+        'x-devtoolkit-token': 'test-token',
+      };
+      const valid = await invokeRequest(
+        { projectRoot: root },
+        {
+          method: 'POST',
+          url: '/api/file/read',
+          headers,
+          body: JSON.stringify({ path: 'inside.ts' }),
+        },
+      );
+      expect(valid.status).toBe(200);
+      expect((await valid.json()).content).toContain('safe');
+
+      const traversal = await invokeRequest(
+        { projectRoot: root },
+        {
+          method: 'POST',
+          url: '/api/file/read',
+          headers,
+          body: JSON.stringify({
+            path: `../${basename(outside)}/secret.txt`,
+          }),
+        },
+      );
+      expect(traversal.status).toBe(403);
+
+      const linked = await invokeRequest(
+        { projectRoot: root },
+        {
+          method: 'POST',
+          url: '/api/file/read',
+          headers,
+          body: JSON.stringify({ path: 'escape-link' }),
+        },
+      );
+      expect(linked.status).toBe(403);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('源码查看器拒绝超大文件', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'devtoolkit-web-large-'));
+    try {
+      await writeFile(join(root, 'large.ts'), 'x'.repeat(64));
+      const res = await invokeRequest(
+        { projectRoot: root, maxReadableFileBytes: 32 },
+        {
+          method: 'POST',
+          url: '/api/file/read',
+          headers: {
+            'content-type': 'application/json',
+            'x-devtoolkit-token': 'test-token',
+          },
+          body: JSON.stringify({ path: 'large.ts' }),
+        },
+      );
+      expect(res.status).toBe(413);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('评测接口拒绝云端地址覆盖与私网本地模型地址', async () => {
+    const headers = {
+      'content-type': 'application/json',
+      'x-devtoolkit-token': 'test-token',
+    };
+    const cloud = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/eval',
+        headers,
+        body: JSON.stringify({
+          skillContent: '# skill',
+          model: 'deepseek-chat',
+          apiKey: 'test',
+          baseURL: 'http://169.254.169.254/v1',
+        }),
+      },
+    );
+    expect(cloud.status).toBe(400);
+
+    const local = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/eval',
+        headers,
+        body: JSON.stringify({
+          skillContent: '# skill',
+          model: 'custom-local',
+          localModelName: 'qwen',
+          baseURL: 'http://10.0.0.2:11434',
+        }),
+      },
+    );
+    expect(local.status).toBe(400);
+  });
+
+  it('规则与环境接口拒绝无效运行时参数', async () => {
+    const headers = {
+      'content-type': 'application/json',
+      'x-devtoolkit-token': 'test-token',
+    };
+    const convert = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/convert',
+        headers,
+        body: JSON.stringify({ content: '# Rule', to: 'invalid' }),
+      },
+    );
+    expect(convert.status).toBe(400);
+
+    const env = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/env/diff',
+        headers,
+        body: JSON.stringify({ snapshot: { system: {} } }),
+      },
+    );
+    expect(env.status).toBe(400);
+
+    const sync = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/sync',
+        headers,
+        body: JSON.stringify({ to: ['invalid'] }),
+      },
+    );
+    expect(sync.status).toBe(400);
   });
 
   it('不存在的 ZIP 下载票据返回 404', async () => {

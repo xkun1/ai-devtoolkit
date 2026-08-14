@@ -5,7 +5,7 @@
 ### 🛠 开发环境
 
 ```bash
-git clone https://github.com/xkun1/devtoolkit.git
+git clone https://github.com/xkun1/ai-devtoolkit.git
 cd devtoolkit
 npm install
 ```

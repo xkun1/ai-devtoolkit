@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
-[![CI](https://github.com/xkun1/devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/devtoolkit/actions)
+[![CI](https://github.com/xkun1/ai-devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/ai-devtoolkit/actions)
 
 **[简体中文](README.md) | English**
 
@@ -81,7 +81,7 @@ npx ai-devtoolkit --ui --port 8080
 
 Paste a URL, choose a template, preview results in real time, and download a complete ZIP skill pack with one click. Codex `references/` and Claude `.claude/rules/` multi-file directories are fully preserved.
 
-The Web UI only listens on `127.0.0.1` and only accepts public HTTP(S) URLs or browser-uploaded content. It never reads arbitrary server-side local paths. Upload requests are limited to 10 MiB by default, and remote documents to 5 MiB.
+The Web UI only listens on `127.0.0.1` and only accepts public HTTP(S) URLs or browser-uploaded content. Code search, graph, and source viewing are confined to the project root fixed at startup, including symlink checks. Upload requests default to 10 MiB, remote documents to 5 MiB, and source viewing to 2 MiB per file.
 
 ### 🔌 MCP Server Mode
 
@@ -98,7 +98,7 @@ npx ai-devtoolkit --mcp
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp"],
+      "args": ["-y", "ai-devtoolkit", "--mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "sk-xxx"
       }
@@ -113,18 +113,25 @@ npx ai-devtoolkit --mcp
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp"]
+      "args": ["-y", "ai-devtoolkit", "--mcp"]
     }
   }
 }
 ```
 
-The MCP Server provides 2 tools:
+The MCP Server provides 9 tools. Its stdout is JSON-RPC only; logs are written to stderr:
 
 | Tool | Description |
 |------|-------------|
 | `generate_skill` | Convert documents/URLs into AI Agent skill packs (supports batch directories) |
 | `scan_directory` | Scan a directory and return a list of supported document files |
+| `scan_code` | Build a local project code index |
+| `search_code` | Search code with natural language and optional LLM explanation |
+| `convert_rule` | Convert rules between Cursor, Codex, and Claude formats |
+| `sync_rules` | Preview or synchronize project Agent rules |
+| `export_env` | Export an environment snapshot and restore script |
+| `diff_env` | Compare a snapshot with the current machine |
+| `eval_skill` | Run skill-vs-baseline evaluation |
 
 #### Using Local Models (Ollama / LM Studio)
 
@@ -137,7 +144,7 @@ Local models require no API Key — specify model info via environment variables
   "mcpServers": {
     "devtoolkit": {
       "command": "npx",
-      "args": ["devtoolkit", "--mcp", "--model", "ollama-local"],
+      "args": ["-y", "ai-devtoolkit", "--mcp", "--model", "ollama-local"],
       "env": {
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
@@ -154,7 +161,7 @@ Local models require no API Key — specify model info via environment variables
     "devtoolkit": {
       "command": "npx",
       "args": [
-        "devtoolkit", "--mcp",
+        "-y", "ai-devtoolkit", "--mcp",
         "--model", "ollama-local",
         "--local-model", "qwen2.5-coder:7b"
       ]
@@ -171,7 +178,7 @@ Local models require no API Key — specify model info via environment variables
     "devtoolkit": {
       "command": "npx",
       "args": [
-        "devtoolkit", "--mcp",
+        "-y", "ai-devtoolkit", "--mcp",
         "--model", "custom-local",
         "--base-url", "http://localhost:8000/v1",
         "--local-model", "my-model-name"
@@ -322,6 +329,20 @@ Options:
   --base-url <url>     LLM API Base URL (overrides preset)
   --api-key <key>      API Key (prefer environment variables)
   --local-model <name> Real model name in local service
+  --convert <file>     Convert a rule file to the target Agent format
+  --sync               Discover and synchronize project Agent rules
+  --sync-from <agent>  Source Agent (default: auto)
+  --sync-to <agents>   Comma-separated target Agents
+  --eval <skillFile>   Run automated skill-vs-baseline evaluation
+  --scan-code          Scan project code and build a search index
+  --search <query>     Search project code with natural language
+  --no-explain         Disable LLM explanations for search results
+  --graph              Generate a Mermaid dependency graph
+  --impact <file>      Analyze the change impact of a file
+  --env-export         Export an environment snapshot and restore script
+  --env-import <file>  Import an environment snapshot (preview by default)
+  --env-diff <file>    Compare a snapshot with the current machine
+  --execute            Execute installation commands for --env-import
   -v, --verbose        Show detailed logs
   -V, --version        Print version
   -h, --help           Show help
@@ -427,7 +448,7 @@ See the `examples/` directory for complete API documentation.
 ## 🔨 Local Development
 
 ```bash
-git clone https://github.com/xkun1/devtoolkit.git
+git clone https://github.com/xkun1/ai-devtoolkit.git
 cd devtoolkit
 npm install
 

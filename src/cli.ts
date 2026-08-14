@@ -20,7 +20,7 @@ import { printProjectGraph, printImpactAnalysis } from './graph/index.js';
 import { isLocalModel, resolveModel, resolveLocalModelName } from './models.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
-import type { AgentType, OutputMode } from './types/index.js';
+import type { AgentType, OutputMode, PipelineOptions } from './types/index.js';
 
 interface CliOptions {
   type?: string;
@@ -49,7 +49,7 @@ interface CliOptions {
   dirDepth?: number;
   scanCode?: boolean;
   search?: string;
-  noExplain?: boolean;
+  explain?: boolean;
   envExport?: boolean;
   envImport?: string;
   envDiff?: string;
@@ -189,6 +189,7 @@ async function runCommand(
   const model = options.model || cfg.model || 'deepseek-chat';
   const baseUrl = options.baseUrl || cfg.baseUrl;
   const apiKey = options.apiKey || cfg.apiKey;
+  setVerbose(options.verbose ?? cfg.verbose ?? false);
 
   // ── 技能效果评测 ──
   if (options.eval) {
@@ -228,13 +229,20 @@ async function runCommand(
   if (options.sync) {
     const projectRoot =
       sources.length > 0 ? resolve(sources[0]) : process.cwd();
+    const fromAgent = options.syncFrom || 'auto';
+    if (!['auto', 'codex', 'cursor', 'claude'].includes(fromAgent)) {
+      throw new Error(`无效的同步源 Agent: ${fromAgent}`);
+    }
     const toAgents = options.syncTo
-      ? (options.syncTo.split(',').map((s) => s.trim()) as AgentType[])
+      ? options.syncTo.split(',').map((value) => value.trim())
       : undefined;
+    if (toAgents?.some((agent) => !isValidAgentType(agent))) {
+      throw new Error(`无效的同步目标 Agent: ${options.syncTo}`);
+    }
     await syncRules({
       projectRoot,
-      from: options.syncFrom as AgentType,
-      to: toAgents,
+      from: fromAgent as AgentType | 'auto',
+      to: toAgents as AgentType[] | undefined,
       dryRun: options.dryRun || false,
     });
     return;
@@ -255,7 +263,7 @@ async function runCommand(
       llmConfig = undefined;
     }
 
-    const useExplain = !options.noExplain && !!llmConfig;
+    const useExplain = options.explain !== false && !!llmConfig;
 
     if (options.search !== undefined) {
       const query = options.search;
@@ -285,8 +293,6 @@ async function runCommand(
 
   // ── 环境迁移 ──
   if (options.envExport || options.envImport || options.envDiff) {
-    setVerbose(options.verbose || false);
-
     if (options.envExport) {
       const outputDir =
         sources.length > 0 ? resolve(sources[0]) : process.cwd();
@@ -328,6 +334,17 @@ async function runCommand(
   }
 
   if (options.mcp) {
+    if (model === 'custom-local') {
+      const localName = resolveLocalModelName(model, options.localModel);
+      if (!localName) {
+        throw new Error(
+          '使用 custom-local 时缺少本地模型名，请通过 --local-model 指定',
+        );
+      }
+      if (!baseUrl) {
+        throw new Error('使用 custom-local 时必须通过 --base-url 指定服务地址');
+      }
+    }
     startMcpServer({
       model,
       baseURL: baseUrl,
@@ -345,8 +362,6 @@ async function runCommand(
   if (options.stdout) {
     setLogToStderr(true);
   }
-
-  setVerbose(options.verbose || false);
 
   if (model === 'custom-local') {
     const name = resolveLocalModelName(model, options.localModel);
@@ -375,29 +390,33 @@ async function runCommand(
     );
   }
 
-  if (options.template && !isValidTemplate(options.template)) {
+  const template = options.template ?? cfg.template;
+  if (template && !isValidTemplate(template)) {
     throw new Error(
-      `未知模板: "${options.template}"。使用 --list-templates 查看可用模板`,
+      `未知模板: "${template}"。使用 --list-templates 查看可用模板`,
     );
   }
 
-  const outputMode: OutputMode = options.legacy ? 'legacy' : 'modern';
+  const outputMode: OutputMode = options.legacy
+    ? 'legacy'
+    : (cfg.outputMode ?? 'modern');
 
-  const pipelineOptions = {
+  // 显式约束类型，防止 CLI 字段名漂移后被结构化类型静默忽略。
+  const pipelineOptions: PipelineOptions = {
     agentType,
-    outputPath: options.out,
+    outputPath: options.out ?? cfg.out,
     llm,
-    name: options.name,
+    name: options.name ?? cfg.name,
     stdout: options.stdout,
     dryRun: options.dryRun,
     force: options.force,
     crawl: options.crawl,
-    crawlMaxDepth: options.crawlDepth,
-    crawlMaxPages: options.crawlPages,
-    template: options.template,
+    crawlDepth: options.crawlDepth,
+    crawlPages: options.crawlPages,
+    template,
     incremental: options.update,
     outputMode,
-    merge: options.merge,
+    mergeDir: options.merge,
     dirMaxDepth: options.dirDepth,
   };
 
@@ -460,14 +479,14 @@ async function handleWizardFlow(
       if (wizardAction.interactive) {
         await startSearchSession(
           llmConfig,
-          !options.noExplain && !!llmConfig,
+          options.explain !== false && !!llmConfig,
           wizardAction.projectRoot,
         );
       } else if (wizardAction.query) {
         await searchAndPrint(
           wizardAction.query,
           llmConfig,
-          !options.noExplain && !!llmConfig,
+          options.explain !== false && !!llmConfig,
           wizardAction.projectRoot,
         );
       }

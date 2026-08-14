@@ -10,6 +10,7 @@ import type {
   ImportOptions,
   ImportResult,
   EnvDiffResult,
+  DiffItem,
   BrewPackages,
   NpmGlobalPackage,
   PipPackage,
@@ -46,6 +47,7 @@ import {
   formatDiffPreview,
 } from './importer.js';
 import { info, success } from '../utils/logger.js';
+import { validateEnvSnapshot } from './validate.js';
 
 export {
   detectEnvironment,
@@ -66,6 +68,7 @@ export {
   formatImportPreview,
   diffEnvironment,
   formatDiffPreview,
+  validateEnvSnapshot,
 };
 export type {
   DetectOptions,
@@ -75,6 +78,7 @@ export type {
   ImportOptions,
   ImportResult,
   EnvDiffResult,
+  DiffItem,
   BrewPackages,
   NpmGlobalPackage,
   PipPackage,

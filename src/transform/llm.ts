@@ -4,6 +4,15 @@ import { warn } from '../utils/logger.js';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+const DEFAULT_SYSTEM_PROMPT =
+  'You are a technical documentation analyst. You extract structured, actionable knowledge from raw documents and format it as AI Agent skill instructions. Always respond in the SAME language as the source document. Output ONLY the skill file content, no preamble or explanation.';
+
+export interface CallLLMOptions {
+  /** 覆盖默认的“文档提炼”系统提示词，供搜索解释、评测等不同角色使用。 */
+  systemPrompt?: string;
+  /** 覆盖 LLMConfig.temperature。 */
+  temperature?: number;
+}
 
 /** 判断错误是否可重试：429 限流 / 5xx 服务端错误 / 网络层错误 */
 export function isRetryableError(err: any): boolean {
@@ -36,6 +45,7 @@ function sleep(ms: number): Promise<void> {
 export async function callLLM(
   prompt: string,
   config: LLMConfig,
+  options: CallLLMOptions = {},
 ): Promise<string> {
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -51,12 +61,11 @@ export async function callLLM(
         messages: [
           {
             role: 'system',
-            content:
-              'You are a technical documentation analyst. You extract structured, actionable knowledge from raw documents and format it as AI Agent skill instructions. Always respond in the SAME language as the source document. Output ONLY the skill file content, no preamble or explanation.',
+            content: options.systemPrompt || DEFAULT_SYSTEM_PROMPT,
           },
           { role: 'user', content: prompt },
         ],
-        temperature: config.temperature ?? 0.3,
+        temperature: options.temperature ?? config.temperature ?? 0.3,
         max_completion_tokens: config.maxOutputTokens,
       });
 

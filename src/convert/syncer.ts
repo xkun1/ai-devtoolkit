@@ -138,15 +138,20 @@ export async function syncProjectRules(
 
   // 确定源 Agent 和目标 Agent
   const primarySource = discovered[0];
-  const sourceAgent =
-    options.from && options.from !== 'auto'
-      ? options.from
-      : primarySource.agentType;
-  const targetAgents =
-    options.to || ALL_AGENTS.filter((a) => a !== sourceAgent);
-
-  const rulesToSync =
-    discovered.find((d) => d.agentType === sourceAgent) || primarySource;
+  let rulesToSync = primarySource;
+  if (options.from && options.from !== 'auto') {
+    const requestedSource = discovered.find(
+      (item) => item.agentType === options.from,
+    );
+    if (!requestedSource) {
+      throw new Error(`未发现 ${options.from} 类型的源规则`);
+    }
+    rulesToSync = requestedSource;
+  }
+  const sourceAgent = rulesToSync.agentType;
+  const targetAgents = [
+    ...new Set(options.to || ALL_AGENTS.filter((a) => a !== sourceAgent)),
+  ];
 
   const byAgent: Record<string, number> = {};
   for (const t of targetAgents) byAgent[t] = 0;

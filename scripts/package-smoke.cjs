@@ -27,6 +27,7 @@ for (const required of [
   'dist/index.js',
   'dist/index.mjs',
   'dist/index.d.ts',
+  '.env.example',
 ]) {
   assert(paths.has(required), `发布包缺少 ${required}`);
 }

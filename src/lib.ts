@@ -170,7 +170,7 @@ export type {
 } from './utils/download-store.js';
 
 // ── 环境迁移 API ──
-export { exportEnv, importEnv } from './env/index.js';
+export { exportEnv, importEnv, diffEnv } from './env/index.js';
 export {
   exportEnvironment,
   generateSetupScript,
@@ -180,6 +180,9 @@ export {
   importEnvironment,
   loadSnapshot,
   formatImportPreview,
+  diffEnvironment,
+  formatDiffPreview,
+  validateEnvSnapshot,
 } from './env/index.js';
 export {
   detectEnvironment,
@@ -209,6 +212,8 @@ export type {
   ExportResult,
   ImportOptions,
   ImportResult,
+  EnvDiffResult,
+  DiffItem,
   EnvModule,
 } from './env/index.js';
 

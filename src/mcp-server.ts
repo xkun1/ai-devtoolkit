@@ -5,23 +5,26 @@
  * AI Agent 通过 MCP 协议调用 `generate_skill`、`search_code`、`convert_rule`、`sync_rules` 等工具。
  *
  * 用法:
- *   devtoolkit --mcp
+ *   npx ai-devtoolkit --mcp
  *
  * Claude Desktop / Cursor 等 MCP 客户端配置示例:
  *   {
  *     "mcpServers": {
  *       "devtoolkit": {
  *         "command": "npx",
- *         "args": ["devtoolkit", "--mcp"]
+ *         "args": ["-y", "ai-devtoolkit", "--mcp"]
  *       }
  *     }
  *   }
  */
 import { createInterface } from 'node:readline';
+import { readFile, stat } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentType, SkillResult } from './types/index.js';
 import { runPipeline } from './pipeline.js';
-import { resolveModel, isLocalModel } from './models.js';
-import { info } from './utils/logger.js';
+import { resolveModel, isLocalModel, resolveLocalModelName } from './models.js';
+import { info, setLogToStderr } from './utils/logger.js';
 import {
   initCodeIndex,
   searchProjectCode,
@@ -39,6 +42,10 @@ import {
   parseRule,
   syncProjectRules,
 } from './convert/index.js';
+import { runSkillEval, formatEvalReportMarkdown } from './eval/index.js';
+import { writeFileAtomic } from './utils/atomic-write.js';
+import { isValidAgentType } from './format/index.js';
+import { isValidTemplate } from './templates/index.js';
 
 export interface McpServerOptions {
   model?: string;
@@ -53,7 +60,7 @@ let serverDefaults: McpServerOptions = {};
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
-  id: string | number | null;
+  id?: string | number | null;
   method: string;
   params?: Record<string, unknown>;
 }
@@ -69,7 +76,7 @@ interface JsonRpcResponse {
 
 const SERVER_INFO = {
   name: 'devtoolkit',
-  version: '0.7.0',
+  version: readPackageVersion(),
 };
 
 const CAPABILITIES = {
@@ -83,6 +90,8 @@ const GENERATE_SKILL_SCHEMA = {
     sources: {
       type: 'array',
       items: { type: 'string' },
+      minItems: 1,
+      maxItems: 100,
       description:
         '文档来源列表：URL 或本地文件路径。支持 .md/.pdf/.docx/.html/.txt 等',
     },
@@ -97,7 +106,15 @@ const GENERATE_SKILL_SCHEMA = {
     },
     template: {
       type: 'string',
-      description: '预设模板 ID（如 api-reference / best-practices）',
+      enum: [
+        'default',
+        'api-doc',
+        'coding-guide',
+        'project-rules',
+        'cheatsheet',
+        'sdk-guide',
+      ],
+      description: '预设模板 ID',
     },
     model: {
       type: 'string',
@@ -140,7 +157,9 @@ const SCAN_DIRECTORY_SCHEMA = {
       description: '要扫描的目录路径',
     },
     maxDepth: {
-      type: 'number',
+      type: 'integer',
+      minimum: 1,
+      maximum: 20,
       description: '最大递归深度（默认 5）',
     },
   },
@@ -173,7 +192,9 @@ const SEARCH_CODE_SCHEMA = {
       description: '项目根目录路径（默认当前工作目录）',
     },
     limit: {
-      type: 'number',
+      type: 'integer',
+      minimum: 1,
+      maximum: 100,
       description: '返回结果数量上限（默认 10）',
     },
     explain: {
@@ -206,12 +227,17 @@ const CONVERT_RULE_SCHEMA = {
       type: 'string',
       description: '自定义规则名称',
     },
+    outputDir: {
+      type: 'string',
+      description: '目标规则输出根目录（默认当前目录）',
+    },
     write: {
       type: 'boolean',
       description: '是否直接写入目标路径（默认 false 只返回预览）',
     },
   },
   required: ['to'],
+  oneOf: [{ required: ['ruleContent'] }, { required: ['rulePath'] }],
 };
 
 /** sync_rules 工具的 JSON Schema */
@@ -268,6 +294,39 @@ const DIFF_ENV_SCHEMA = {
   required: ['snapshotPath'],
 };
 
+/** eval_skill 工具的 JSON Schema */
+const EVAL_SKILL_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    skillContent: {
+      type: 'string',
+      description: '待评测的技能正文（与 skillPath 二选一）',
+    },
+    skillPath: {
+      type: 'string',
+      description: '待评测的本地技能文件路径（与 skillContent 二选一）',
+    },
+    model: {
+      type: 'string',
+      description: '评测所用模型（默认继承 MCP Server 配置）',
+    },
+    baseUrl: {
+      type: 'string',
+      description: 'LLM API Base URL',
+    },
+    apiKey: {
+      type: 'string',
+      description: 'API Key',
+    },
+    localModelName: {
+      type: 'string',
+      description: '本地模型真实名称',
+    },
+  },
+  required: [] as const,
+  oneOf: [{ required: ['skillContent'] }, { required: ['skillPath'] }],
+};
+
 /** 注册给 MCP Client 的工具列表 */
 const TOOLS = [
   {
@@ -317,6 +376,12 @@ const TOOLS = [
       '比对当前机器环境与指定环境快照 JSON 的差异（缺失包、多出包、版本不匹配）。',
     inputSchema: DIFF_ENV_SCHEMA,
   },
+  {
+    name: 'eval_skill',
+    description:
+      '对 AI 技能执行带技能与无技能基线对照评测，返回量化报告和改进建议。',
+    inputSchema: EVAL_SKILL_SCHEMA,
+  },
 ];
 
 // ── MCP Server 核心逻辑 ──
@@ -324,6 +389,8 @@ const TOOLS = [
 export function startMcpServer(options: McpServerOptions = {}): void {
   serverDefaults = options;
 
+  // stdio 传输的 stdout 必须只包含 JSON-RPC 消息。
+  setLogToStderr(true);
   info('🚀 devtoolkit MCP Server 启动中 (stdio 模式)...');
 
   const rl = createInterface({
@@ -337,8 +404,27 @@ export function startMcpServer(options: McpServerOptions = {}): void {
     if (!trimmed) return;
 
     try {
-      const request = JSON.parse(trimmed) as JsonRpcRequest;
-      void handleRequest(request);
+      const parsed: unknown = JSON.parse(trimmed);
+      if (!isJsonRpcRequest(parsed)) {
+        sendResponse({
+          jsonrpc: '2.0',
+          id: getRequestId(parsed),
+          error: { code: -32600, message: 'Invalid Request' },
+        });
+        return;
+      }
+      void handleRequest(parsed).catch((err: unknown) => {
+        if (parsed.id === undefined) return;
+        sendResponse({
+          jsonrpc: '2.0',
+          id: parsed.id,
+          error: {
+            code: -32603,
+            message: 'Internal error',
+            data: err instanceof Error ? err.message : String(err),
+          },
+        });
+      });
     } catch {
       sendResponse({
         jsonrpc: '2.0',
@@ -351,9 +437,7 @@ export function startMcpServer(options: McpServerOptions = {}): void {
     }
   });
 
-  rl.on('close', () => {
-    process.exit(0);
-  });
+  // stdin 关闭后让进行中的文件或网络任务自然完成，避免丢失最后一条响应。
 }
 
 function sendResponse(response: JsonRpcResponse): void {
@@ -365,6 +449,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
 
   switch (method) {
     case 'initialize':
+      if (id === undefined) break;
       sendResponse({
         jsonrpc: '2.0',
         id,
@@ -379,7 +464,14 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
     case 'notifications/initialized':
       break;
 
+    case 'ping':
+      if (id !== undefined) {
+        sendResponse({ jsonrpc: '2.0', id, result: {} });
+      }
+      break;
+
     case 'tools/list':
+      if (id === undefined) break;
       sendResponse({
         jsonrpc: '2.0',
         id,
@@ -388,50 +480,104 @@ async function handleRequest(request: JsonRpcRequest): Promise<void> {
       break;
 
     case 'tools/call': {
-      const toolName = params.name as string;
-      const args = (params.arguments as Record<string, unknown>) || {};
+      if (!isRecord(params) || typeof params.name !== 'string') {
+        if (id !== undefined) {
+          sendResponse({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32602, message: 'Invalid params' },
+          });
+        }
+        break;
+      }
+      const toolName = params.name;
+      const rawArgs = params.arguments;
+      if (rawArgs !== undefined && !isRecord(rawArgs)) {
+        if (id !== undefined) {
+          sendResponse({
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32602, message: 'Invalid params' },
+          });
+        }
+        break;
+      }
+      const args = rawArgs || {};
 
       try {
         const result = await handleToolCall(toolName, args);
-        sendResponse({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text:
-                  typeof result === 'string'
-                    ? result
-                    : JSON.stringify(result, null, 2),
-              },
-            ],
-          },
-        });
+        if (id !== undefined) {
+          sendResponse({
+            jsonrpc: '2.0',
+            id,
+            result: {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    typeof result === 'string'
+                      ? result
+                      : JSON.stringify(result, null, 2),
+                },
+              ],
+            },
+          });
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        sendResponse({
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [{ type: 'text', text: `❌ 错误: ${errMsg}` }],
-            isError: true,
-          },
-        });
+        if (id !== undefined) {
+          sendResponse({
+            jsonrpc: '2.0',
+            id,
+            result: {
+              content: [{ type: 'text', text: `❌ 错误: ${errMsg}` }],
+              isError: true,
+            },
+          });
+        }
       }
       break;
     }
 
     default:
-      sendResponse({
-        jsonrpc: '2.0',
-        id,
-        error: {
-          code: -32601,
-          message: `Method not found: ${method}`,
-        },
-      });
+      if (id !== undefined) {
+        sendResponse({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32601,
+            message: `Method not found: ${method}`,
+          },
+        });
+      }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isJsonRpcRequest(value: unknown): value is JsonRpcRequest {
+  if (!isRecord(value) || value.jsonrpc !== '2.0') return false;
+  if (typeof value.method !== 'string' || value.method.length === 0) {
+    return false;
+  }
+  if (
+    value.id !== undefined &&
+    value.id !== null &&
+    typeof value.id !== 'string' &&
+    typeof value.id !== 'number'
+  ) {
+    return false;
+  }
+  return value.params === undefined || isRecord(value.params);
+}
+
+function getRequestId(value: unknown): string | number | null {
+  if (!isRecord(value)) return null;
+  return typeof value.id === 'string' || typeof value.id === 'number'
+    ? value.id
+    : null;
 }
 
 async function handleToolCall(
@@ -455,6 +601,8 @@ async function handleToolCall(
       return await handleExportEnv(args);
     case 'diff_env':
       return await handleDiffEnv(args);
+    case 'eval_skill':
+      return await handleEvalSkill(args);
     default:
       throw new Error(`未知工具: ${name}`);
   }
@@ -464,7 +612,15 @@ async function handleGenerateSkill(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const sources = args.sources as string[];
-  if (!sources || !Array.isArray(sources) || sources.length === 0) {
+  if (
+    !Array.isArray(sources) ||
+    sources.length === 0 ||
+    sources.length > 100 ||
+    sources.some(
+      (source) =>
+        typeof source !== 'string' || !source.trim() || source.length > 10_000,
+    )
+  ) {
     throw new Error('sources 参数必须是非空数组');
   }
 
@@ -473,6 +629,23 @@ async function handleGenerateSkill(
   const template = args.template as string | undefined;
   const force = args.force as boolean;
   const dryRun = args.dryRun as boolean;
+  const outputPath = args.outputPath as string | undefined;
+  if (!isValidAgentType(agentType)) {
+    throw new Error(`无效的 Agent 类型: ${String(agentType)}`);
+  }
+  if (template && !isValidTemplate(template)) {
+    throw new Error(`未知模板: ${template}`);
+  }
+  validateOptionalStrings(args, [
+    'name',
+    'template',
+    'model',
+    'baseUrl',
+    'apiKey',
+    'localModelName',
+    'outputPath',
+  ]);
+  validateOptionalBooleans(args, ['force', 'dryRun']);
 
   const model =
     (args.model as string) ||
@@ -498,6 +671,7 @@ async function handleGenerateSkill(
       '缺少 API Key。请设置 DEEPSEEK_API_KEY 或 OPENAI_API_KEY 环境变量。',
     );
   }
+  validateCustomLocalModel(model, baseURL, localModelName);
 
   const llmConfig = resolveModel(model, {
     apiKey,
@@ -510,6 +684,7 @@ async function handleGenerateSkill(
     llm: llmConfig,
     name: skillName,
     template,
+    outputPath,
     force: force ?? false,
     dryRun: dryRun ?? false,
     stdout: false,
@@ -540,10 +715,15 @@ async function handleScanDirectory(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const { scanDirectory } = await import('./loader/directory.js');
-  const dirPath = args.directory as string;
-  if (!dirPath) throw new Error('directory 参数必填');
+  const dirPath = args.directory;
+  if (typeof dirPath !== 'string' || !dirPath.trim()) {
+    throw new Error('directory 参数必填');
+  }
 
   const maxDepth = (args.maxDepth as number) ?? 5;
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 1 || maxDepth > 20) {
+    throw new Error('maxDepth 必须是 1-20 的整数');
+  }
   const files = await scanDirectory(dirPath, { maxDepth });
 
   return {
@@ -556,6 +736,7 @@ async function handleScanDirectory(
 async function handleScanCode(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  validateOptionalStrings(args, ['directory']);
   const directory = (args.directory as string) || process.cwd();
   const index = await initCodeIndex({ root: directory });
 
@@ -569,11 +750,19 @@ async function handleScanCode(
 async function handleSearchCode(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const query = args.query as string;
-  if (!query) throw new Error('query 参数必填');
+  const query = args.query;
+  if (typeof query !== 'string' || !query.trim()) {
+    throw new Error('query 参数必填');
+  }
+  if (query.length > 10_000) throw new Error('query 参数过长');
 
+  validateOptionalStrings(args, ['directory']);
+  validateOptionalBooleans(args, ['explain']);
   const directory = (args.directory as string) || process.cwd();
   const limit = (args.limit as number) ?? 10;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error('limit 必须是 1-100 的整数');
+  }
   const useExplain = (args.explain as boolean) ?? true;
 
   const { results, index } = await searchProjectCode(
@@ -635,11 +824,27 @@ async function handleConvertRule(
   const rulePath = args.rulePath as string | undefined;
   const ruleContent = args.ruleContent as string | undefined;
   const name = args.name as string | undefined;
+  const outputDir = args.outputDir as string | undefined;
   const shouldWrite = args.write === true;
+  if (!isValidAgentType(String(toAgent))) {
+    throw new Error(`无效的目标 Agent 类型: ${String(toAgent)}`);
+  }
+  validateOptionalStrings(args, ['rulePath', 'name', 'outputDir']);
+  validateOptionalBooleans(args, ['write']);
+  if (
+    ruleContent !== undefined &&
+    (typeof ruleContent !== 'string' || ruleContent.length > 1024 * 1024)
+  ) {
+    throw new Error('ruleContent 参数必须是 1 MiB 以内的字符串');
+  }
+  if (rulePath && ruleContent) {
+    throw new Error('rulePath 与 ruleContent 只能提供一个');
+  }
 
   if (rulePath) {
     const res = await convertFile(rulePath, toAgent, {
       name,
+      outputDir,
       write: shouldWrite,
     });
     return {
@@ -652,7 +857,12 @@ async function handleConvertRule(
 
   if (ruleContent) {
     const parsed = parseRule(ruleContent);
-    const res = convertRule(parsed, { to: toAgent, name });
+    const res = convertRule(parsed, { to: toAgent, name, outputDir });
+    if (shouldWrite) {
+      for (const artifact of res.artifacts) {
+        await writeFileAtomic(artifact.path, artifact.content);
+      }
+    }
     return {
       success: true,
       from: res.from,
@@ -671,6 +881,22 @@ async function handleSyncRules(
   const fromAgent = args.from as AgentType | 'auto' | undefined;
   const toAgents = args.to as AgentType[] | undefined;
   const dryRun = args.dryRun !== false;
+  validateOptionalStrings(args, ['projectRoot', 'from']);
+  validateOptionalBooleans(args, ['dryRun']);
+  if (
+    fromAgent !== undefined &&
+    !['auto', 'codex', 'cursor', 'claude'].includes(String(fromAgent))
+  ) {
+    throw new Error(`无效的同步源 Agent: ${String(fromAgent)}`);
+  }
+  if (
+    toAgents !== undefined &&
+    (!Array.isArray(toAgents) ||
+      toAgents.length > 3 ||
+      toAgents.some((agent) => !isValidAgentType(String(agent))))
+  ) {
+    throw new Error('无效的同步目标 Agent 列表');
+  }
 
   const res = await syncProjectRules({
     projectRoot,
@@ -692,6 +918,7 @@ async function handleExportEnv(
 ): Promise<Record<string, unknown>> {
   const outputDir = (args.outputDir as string) || process.cwd();
   const outputPrefix = (args.outputPrefix as string) || 'devtoolkit-env';
+  validateOptionalStrings(args, ['outputDir', 'outputPrefix']);
 
   const res = await exportEnvironment({ outputDir, outputPrefix });
   return {
@@ -705,8 +932,10 @@ async function handleExportEnv(
 async function handleDiffEnv(
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const snapshotPath = args.snapshotPath as string;
-  if (!snapshotPath) throw new Error('snapshotPath 参数必填');
+  const snapshotPath = args.snapshotPath;
+  if (typeof snapshotPath !== 'string' || !snapshotPath.trim()) {
+    throw new Error('snapshotPath 参数必填');
+  }
 
   const snapshot = loadSnapshot(snapshotPath);
   const diff = await diffEnvironment(snapshot);
@@ -718,4 +947,119 @@ async function handleDiffEnv(
     preview: formatDiffPreview(diff),
     diff,
   };
+}
+
+async function handleEvalSkill(
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const skillPath = args.skillPath as string | undefined;
+  let skillContent = args.skillContent as string | undefined;
+  validateOptionalStrings(args, [
+    'skillPath',
+    'model',
+    'baseUrl',
+    'apiKey',
+    'localModelName',
+  ]);
+  if (
+    skillContent !== undefined &&
+    (typeof skillContent !== 'string' || skillContent.length > 1024 * 1024)
+  ) {
+    throw new Error('skillContent 参数必须是 1 MiB 以内的字符串');
+  }
+  if (skillPath && skillContent) {
+    throw new Error('skillPath 与 skillContent 只能提供一个');
+  }
+  if (!skillContent && skillPath) {
+    if ((await stat(skillPath)).size > 1024 * 1024) {
+      throw new Error('技能文件超过 1 MiB 限制');
+    }
+    skillContent = await readFile(skillPath, 'utf-8');
+  }
+  if (!skillContent?.trim()) {
+    throw new Error('必须提供非空的 skillContent 或 skillPath');
+  }
+
+  const model =
+    (args.model as string) || serverDefaults.model || 'deepseek-chat';
+  const apiKey =
+    (args.apiKey as string) ||
+    serverDefaults.apiKey ||
+    process.env.DEEPSEEK_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    '';
+  const baseURL =
+    (args.baseUrl as string) || serverDefaults.baseURL || undefined;
+  const localModelName =
+    (args.localModelName as string) || serverDefaults.localModelName;
+
+  if (!isLocalModel(model) && !apiKey) {
+    throw new Error(
+      '缺少 API Key。请设置 DEEPSEEK_API_KEY 或 OPENAI_API_KEY 环境变量。',
+    );
+  }
+  validateCustomLocalModel(model, baseURL, localModelName);
+
+  const llm = resolveModel(model, {
+    apiKey,
+    baseUrl: baseURL,
+    localModelName,
+  });
+  const report = await runSkillEval(skillContent, { llm }, skillPath);
+  return {
+    report,
+    markdown: formatEvalReportMarkdown(report),
+  };
+}
+
+function validateOptionalStrings(
+  args: Record<string, unknown>,
+  keys: string[],
+): void {
+  for (const key of keys) {
+    const value = args[key];
+    if (
+      value !== undefined &&
+      (typeof value !== 'string' || value.length > 10_000)
+    ) {
+      throw new Error(`${key} 参数必须是长度不超过 10000 的字符串`);
+    }
+  }
+}
+
+function validateOptionalBooleans(
+  args: Record<string, unknown>,
+  keys: string[],
+): void {
+  for (const key of keys) {
+    if (args[key] !== undefined && typeof args[key] !== 'boolean') {
+      throw new Error(`${key} 参数必须是布尔值`);
+    }
+  }
+}
+
+function validateCustomLocalModel(
+  model: string,
+  baseURL?: string,
+  localModelName?: string,
+): void {
+  if (model !== 'custom-local') return;
+  if (!resolveLocalModelName(model, localModelName)) {
+    throw new Error('custom-local 必须提供 localModelName');
+  }
+  if (!baseURL) {
+    throw new Error('custom-local 必须提供 baseUrl');
+  }
+}
+
+function readPackageVersion(): string {
+  try {
+    const packagePath = join(__dirname, '..', 'package.json');
+    const parsed = JSON.parse(readFileSync(packagePath, 'utf-8')) as {
+      version?: unknown;
+    };
+    return typeof parsed.version === 'string' ? parsed.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
 }

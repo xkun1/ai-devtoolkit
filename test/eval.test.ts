@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
+const mockCallLLM = vi.hoisted(() => vi.fn());
+vi.mock('../src/transform/llm.js', () => ({ callLLM: mockCallLLM }));
 import {
   generateEvalSuite,
   generateFallbackCases,
@@ -24,6 +27,10 @@ const MOCK_LLM = {
   apiKey: 'test-key',
 };
 
+beforeEach(() => {
+  mockCallLLM.mockReset();
+});
+
 describe('技能效果评测 — 用例生成 (generator)', () => {
   it('generateFallbackCases 能确定性生成有效测试集', () => {
     const parsed = parseRule(MOCK_SKILL);
@@ -36,6 +43,7 @@ describe('技能效果评测 — 用例生成 (generator)', () => {
   });
 
   it('generateEvalSuite 在 LLM 异常时优雅降级并输出可用 Suite', async () => {
+    mockCallLLM.mockRejectedValueOnce(new Error('mock unavailable'));
     const suite = await generateEvalSuite(MOCK_SKILL, {
       llm: MOCK_LLM,
       count: 2,
@@ -44,10 +52,51 @@ describe('技能效果评测 — 用例生成 (generator)', () => {
     expect(suite.cases.length).toBeGreaterThanOrEqual(2);
     expect(suite.cases[0].query).toBeDefined();
   });
+
+  it('拒绝异常用例数量并过滤无效 LLM 输出', async () => {
+    await expect(
+      generateEvalSuite(MOCK_SKILL, { llm: MOCK_LLM, count: 0 }),
+    ).rejects.toThrow('1-10');
+
+    mockCallLLM.mockResolvedValueOnce(
+      JSON.stringify([
+        { query: '', expectedKeywords: [], expectedConclusion: '' },
+      ]),
+    );
+    const suite = await generateEvalSuite(MOCK_SKILL, {
+      llm: MOCK_LLM,
+      count: 4,
+    });
+    expect(suite.cases).toHaveLength(4);
+  });
 });
 
 describe('技能效果评测 — 评测执行与报告 (runner)', () => {
   it('runSkillEval 完成对照打分并生成结构化报告', async () => {
+    mockCallLLM.mockImplementation(
+      async (
+        prompt: string,
+        _llm: unknown,
+        options?: { systemPrompt?: string },
+      ) => {
+        if (options?.systemPrompt?.includes('评测裁判')) {
+          expect(prompt).toContain('<with_skill_answer>');
+          expect(prompt).toContain('<baseline_answer>');
+          expect(prompt).toContain('普通基线回答');
+          return JSON.stringify({
+            triggerScore: 120,
+            accuracyScore: 95,
+            baselineAccuracyScore: -8,
+            feedback: '技能回答明确覆盖签名验证。',
+          });
+        }
+        if (options?.systemPrompt?.includes('<skill_rules>')) {
+          return '使用 PaymentIntents，并验证 stripe-signature。';
+        }
+        return '普通基线回答';
+      },
+    );
+
     const report = await runSkillEval(MOCK_SKILL, {
       llm: MOCK_LLM,
       suite: {
@@ -69,10 +118,46 @@ describe('技能效果评测 — 评测执行与报告 (runner)', () => {
     expect(report.overallScore).toBeGreaterThanOrEqual(0);
     expect(['S', 'A', 'B', 'C', 'D']).toContain(report.grade);
     expect(report.caseResults[0].evalCase.id).toBe('c1');
+    expect(report.caseResults[0].triggerScore).toBe(100);
+    expect(report.caseResults[0].accuracyScore).toBe(95);
+    expect(report.caseResults[0].baselineAccuracyScore).toBe(0);
+    expect(report.caseResults[0].improvementScore).toBe(95);
+    expect(report.avgBaselineScore).toBe(0);
+    expect(report.avgImprovementScore).toBe(95);
+    expect(mockCallLLM).toHaveBeenCalledTimes(3);
 
     const markdown = formatEvalReportMarkdown(report);
     expect(markdown).toContain('# 📊 AI 技能自动化评测报告');
     expect(markdown).toContain('stripe-payment-guide');
     expect(markdown).toContain('评测反馈');
+    expect(markdown).toContain('无技能基线');
+    expect(markdown).toContain('+95');
+  });
+
+  it('LLM 全部失败时使用可解释的确定性降级评分', async () => {
+    mockCallLLM.mockRejectedValue(new Error('offline'));
+    const report = await runSkillEval(MOCK_SKILL, {
+      llm: MOCK_LLM,
+      suite: {
+        skillName: 'stripe-payment-guide',
+        createdAt: Date.now(),
+        cases: [
+          {
+            id: 'offline',
+            query: '如何处理？',
+            expectedKeywords: ['stripe-signature'],
+            expectedConclusion: '验证签名',
+          },
+        ],
+      },
+    });
+    expect(report.caseResults[0]).toEqual(
+      expect.objectContaining({
+        triggerScore: 0,
+        accuracyScore: 0,
+        baselineAccuracyScore: 0,
+        improvementScore: 0,
+      }),
+    );
   });
 });

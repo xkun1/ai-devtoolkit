@@ -9,7 +9,7 @@ import type {
   SearchResult,
   SearchIndex,
 } from './types.js';
-import { buildIndex, saveIndex, loadIndex } from './indexer.js';
+import { buildIndex, updateIndex, saveIndex, loadIndex } from './indexer.js';
 import { searchCode } from './searcher.js';
 import { explainResults, formatResultsPlain } from './explainer.js';
 import { startInteractiveSearch } from './interactive.js';
@@ -116,6 +116,12 @@ export async function searchProjectCode(
   if (!index) {
     warn('未找到索引，正在自动扫描...');
     index = await initCodeIndex({ root });
+  } else {
+    const updated = await updateIndex(index, { root });
+    if (updated !== index) {
+      index = updated;
+      await saveIndex(index, root);
+    }
   }
 
   const results = searchCode(index, query, options);
@@ -168,6 +174,11 @@ export async function startSearchSession(
     info('未找到索引，正在初始化扫描...');
     index = await initCodeIndex({ root });
   } else {
+    const updated = await updateIndex(index, { root });
+    if (updated !== index) {
+      index = updated;
+      await saveIndex(index, root || process.cwd());
+    }
     success(
       `已加载索引 (${index.stats.totalFiles} 文件 / ${index.stats.totalChunks} 分块)`,
     );

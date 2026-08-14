@@ -16,6 +16,9 @@ describe('安全远程抓取校验', () => {
       'http://192.168.1.1',
       'http://169.254.169.254/latest/meta-data',
       'http://[::1]',
+      'http://[::127.0.0.1]',
+      'http://[::ffff:127.0.0.1]',
+      'http://[2002:7f00:1::]',
     ]) {
       expect(() => validatePublicHttpUrl(url)).toThrow('私有网络');
     }
@@ -36,5 +39,8 @@ describe('安全远程抓取校验', () => {
     expect(isPublicIp('127.0.0.1')).toBe(false);
     expect(isPublicIp('203.0.113.1')).toBe(false);
     expect(isPublicIp('::1')).toBe(false);
+    expect(isPublicIp('::7f00:1')).toBe(false);
+    expect(isPublicIp('2002:7f00:1::')).toBe(false);
+    expect(isPublicIp('2001:4860:4860::8888')).toBe(true);
   });
 });

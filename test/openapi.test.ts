@@ -308,6 +308,38 @@ describe('OpenAPI / Swagger 专精加载器', () => {
         addPet.requestBody?.fields.some((f) => f.name === 'name' && f.required),
       ).toBe(true);
     });
+
+    it('应使用标准 YAML 语义解析数组、引号与块文本', () => {
+      const parsed = parseOpenApiSpec(`
+openapi: 3.0.3
+info:
+  title: "YAML: 示例 API"
+  description: |
+    第一行
+    第二行
+servers:
+  - url: https://api.example.com/v1
+    description: 生产环境
+paths:
+  /users:
+    get:
+      summary: 查询用户
+      tags: [用户, 查询]
+      responses:
+        "200":
+          description: 成功
+`);
+      expect(parsed.title).toBe('YAML: 示例 API');
+      expect(parsed.description).toContain('第二行');
+      expect(parsed.servers).toEqual(['https://api.example.com/v1 (生产环境)']);
+      expect(parsed.endpoints[0].tag).toBe('用户');
+    });
+
+    it('拒绝缺少规范版本字段的普通 YAML', () => {
+      expect(() =>
+        parseOpenApiSpec('info:\n  title: Not OpenAPI\npaths: {}'),
+      ).toThrow('缺少版本字段');
+    });
   });
 
   describe('Markdown 渲染与 Token 压缩 renderOpenApiToMarkdown', () => {

@@ -56,7 +56,7 @@ async function fetchStep(
         headers: {
           'User-Agent': 'devtoolkit/secure-fetch',
           Accept:
-            'text/html,application/xhtml+xml,text/plain,text/markdown,application/json;q=0.8',
+            'text/html,application/xhtml+xml,text/plain,text/markdown,application/json,application/yaml,application/x-yaml,text/yaml;q=0.8',
           'Accept-Encoding': 'identity',
         },
       },
@@ -175,7 +175,7 @@ function createPublicLookup(): LookupFunction {
         );
         const allowedAddresses = publicAddresses.length
           ? publicAddresses
-          : hasExplicitProxyEnvironment()
+          : allowProxyMappedBenchmarkIp()
             ? proxyMappedAddresses
             : [];
         if (!allowedAddresses.length) {
@@ -227,14 +227,26 @@ export function isPublicIp(address: string): boolean {
     return !(
       lower === '::' ||
       lower === '::1' ||
+      lower.startsWith('::') ||
+      lower.startsWith('64:ff9b:') ||
+      lower.startsWith('100::') ||
       lower.startsWith('fc') ||
       lower.startsWith('fd') ||
       lower.startsWith('fe8') ||
       lower.startsWith('fe9') ||
       lower.startsWith('fea') ||
       lower.startsWith('feb') ||
+      lower.startsWith('fec') ||
+      lower.startsWith('fed') ||
+      lower.startsWith('fee') ||
+      lower.startsWith('fef') ||
       lower.startsWith('ff') ||
-      lower.startsWith('2001:db8:')
+      lower.startsWith('2001::') ||
+      lower.startsWith('2001:2:') ||
+      lower.startsWith('2001:10:') ||
+      lower.startsWith('2001:20:') ||
+      lower.startsWith('2001:db8:') ||
+      lower.startsWith('2002:')
     );
   }
   return false;
@@ -242,7 +254,8 @@ export function isPublicIp(address: string): boolean {
 
 /**
  * 某些受管环境会把公网 DNS 映射到 RFC 2544 的 198.18.0.0/15，
- * 仅在显式 HTTP(S)_PROXY 环境中允许该映射；普通本机环境仍拒绝此保留网段。
+ * 仅在显式开启 DEVTOOLKIT_ALLOW_PROXY_MAPPED_IP=1 且配置代理时允许该映射；
+ * 默认始终拒绝此保留网段，避免仅设置 HTTP_PROXY 就削弱 SSRF 边界。
  */
 function isProxyMappedBenchmarkIp(address: string): boolean {
   const host = normalizeHost(address);
@@ -251,12 +264,15 @@ function isProxyMappedBenchmarkIp(address: string): boolean {
   return a === 198 && (b === 18 || b === 19);
 }
 
-function hasExplicitProxyEnvironment(): boolean {
-  return Boolean(
-    process.env.HTTPS_PROXY ||
-    process.env.HTTP_PROXY ||
-    process.env.https_proxy ||
-    process.env.http_proxy,
+function allowProxyMappedBenchmarkIp(): boolean {
+  return (
+    process.env.DEVTOOLKIT_ALLOW_PROXY_MAPPED_IP === '1' &&
+    Boolean(
+      process.env.HTTPS_PROXY ||
+      process.env.HTTP_PROXY ||
+      process.env.https_proxy ||
+      process.env.http_proxy,
+    )
   );
 }
 

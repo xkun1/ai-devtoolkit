@@ -6,10 +6,12 @@
  * 2. setup.sh 安装脚本（可直接执行）
  */
 import { join } from 'node:path';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import type { EnvSnapshot, ExportOptions, ExportResult } from './types.js';
 import { detectEnvironment } from './detector.js';
+import { validateEnvSnapshot } from './validate.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 export const SNAPSHOT_VERSION = '1.0.0';
 
@@ -19,6 +21,13 @@ export async function exportEnvironment(
 ): Promise<ExportResult> {
   const outputDir = options.outputDir || process.cwd();
   const prefix = options.outputPrefix || 'devtoolkit-env';
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(prefix) ||
+    prefix === '.' ||
+    prefix === '..'
+  ) {
+    throw new Error('outputPrefix 只能包含字母、数字、点、下划线和连字符');
+  }
   const generateScript = options.generateScript ?? true;
   const generateJson = options.generateJson ?? true;
 
@@ -37,7 +46,7 @@ export async function exportEnvironment(
   // 3. 生成 JSON 明细
   if (generateJson) {
     jsonPath = join(outputDir, prefix + '.json');
-    await writeFile(jsonPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+    await writeFileAtomic(jsonPath, JSON.stringify(snapshot, null, 2), 0o600);
     files.push(jsonPath);
   }
 
@@ -45,10 +54,7 @@ export async function exportEnvironment(
   if (generateScript) {
     scriptPath = join(outputDir, prefix + '-setup.sh');
     const script = generateSetupScript(snapshot);
-    await writeFile(scriptPath, script, 'utf-8');
-    // 设置可执行权限
-    const { chmod } = await import('node:fs/promises');
-    await chmod(scriptPath, 0o755);
+    await writeFileAtomic(scriptPath, script, 0o700);
     files.push(scriptPath);
   }
 
@@ -79,6 +85,7 @@ export async function exportEnvironment(
 
 /** 生成 setup.sh 安装脚本 */
 export function generateSetupScript(snapshot: EnvSnapshot): string {
+  validateEnvSnapshot(snapshot);
   const lines: string[] = [];
 
   lines.push('#!/usr/bin/env bash');
@@ -117,7 +124,9 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
           snapshot.brew.formulae.length +
           ' 个)..."',
       );
-      lines.push('brew install ' + snapshot.brew.formulae.join(' '));
+      lines.push(
+        formatShellCommand('brew', ['install', ...snapshot.brew.formulae]),
+      );
       lines.push('');
     }
 
@@ -127,7 +136,13 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
           snapshot.brew.casks.length +
           ' 个)..."',
       );
-      lines.push('brew install --cask ' + snapshot.brew.casks.join(' '));
+      lines.push(
+        formatShellCommand('brew', [
+          'install',
+          '--cask',
+          ...snapshot.brew.casks,
+        ]),
+      );
       lines.push('');
     }
   }
@@ -140,7 +155,7 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
       .map((p) => p.name);
     if (names.length > 0) {
       lines.push('echo "📦 安装 npm 全局包 (' + names.length + ' 个)..."');
-      lines.push('npm install -g ' + names.join(' '));
+      lines.push(formatShellCommand('npm', ['install', '-g', ...names]));
       lines.push('');
     }
   }
@@ -154,8 +169,10 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
       lines.push('# ── pip 包 ──');
       lines.push('echo "🐍 安装 pip 包 (' + filtered.length + ' 个)..."');
       lines.push(
-        'pip3 install ' +
-          filtered.map((p) => p.name + '==' + p.version).join(' '),
+        formatShellCommand('pip3', [
+          'install',
+          ...filtered.map((p) => p.name + '==' + p.version),
+        ]),
       );
       lines.push('');
     }
@@ -167,7 +184,10 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
     lines.push('# ── VSCode 扩展 ──');
     lines.push('echo "🖥️  安装 VSCode 扩展 (' + uniqueExts.length + ' 个)..."');
     for (const id of uniqueExts) {
-      lines.push('code --install-extension ' + id + ' 2>/dev/null || true');
+      lines.push(
+        formatShellCommand('code', ['--install-extension', id]) +
+          ' 2>/dev/null || true',
+      );
     }
     lines.push('');
   }
@@ -194,7 +214,13 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
       if (parts.length >= 2) {
         const key = parts[0].trim();
         const value = parts.slice(1).join('=').trim();
-        lines.push('git config --global ' + key + ' "' + value + '"');
+        if (value.includes('***MASKED***')) {
+          lines.push('# 已跳过敏感 Git 配置 ' + key + '（需手动填写）');
+          continue;
+        }
+        lines.push(
+          formatShellCommand('git', ['config', '--global', '--', key, value]),
+        );
       }
     }
     lines.push('');
@@ -216,7 +242,7 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
       lines.push('# ── macOS 应用（手动安装）──');
       lines.push('echo "📱 以下应用需要手动安装:"');
       for (const app of manualApps) {
-        lines.push('echo "  - ' + app.name + '"');
+        lines.push(formatShellCommand('echo', ['  - ' + app.name]));
       }
       lines.push('');
     }
@@ -230,4 +256,13 @@ export function generateSetupScript(snapshot: EnvSnapshot): string {
   lines.push('');
 
   return lines.join('\n');
+}
+
+function formatShellCommand(executable: string, args: string[]): string {
+  return [executable, ...args].map(quoteShellArg).join(' ');
+}
+
+function quoteShellArg(value: string): string {
+  if (/^[A-Za-z0-9@%_+=:,./-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }

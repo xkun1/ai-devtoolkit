@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, rm, readFile, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { detectEnvironment, maskSensitive } from '../src/env/detector.js';
@@ -125,7 +125,7 @@ describe('环境迁移 — 快照导出与脚本生成', () => {
     expect(script).toContain('npm install -g typescript pnpm');
     expect(script).toContain('pip3 install requests==2.31.0 pytest==8.0.0');
     expect(script).toContain('code --install-extension dbaeumer.vscode-eslint');
-    expect(script).toContain('git config --global user.name "Tester"');
+    expect(script).toContain('git config --global -- user.name Tester');
     expect(script).toContain('SSH 私钥');
   });
 });
@@ -154,6 +154,56 @@ describe('环境迁移 — 导入与 Diff 比对', () => {
     const preview = formatImportPreview(res);
     expect(preview).toContain('dry-run 模式');
     expect(preview).toContain('brew install');
+  });
+
+  it('拒绝快照命令注入与脚本换行注入', async () => {
+    const maliciousPackage = structuredClone(MOCK_SNAPSHOT);
+    maliciousPackage.npmGlobal = [
+      { name: 'safe;touch-pwned', version: '1.0.0' },
+    ];
+    await expect(
+      importEnvironment(maliciousPackage, { execute: false }),
+    ).rejects.toThrow('npmGlobal');
+
+    const maliciousHeader = structuredClone(MOCK_SNAPSHOT);
+    maliciousHeader.system.hostname = 'safe\necho pwned';
+    expect(() => generateSetupScript(maliciousHeader)).toThrow(
+      'system.hostname',
+    );
+
+    const maliciousGit = structuredClone(MOCK_SNAPSHOT);
+    maliciousGit.git = { config: '--remove-section=value' };
+    expect(() => generateSetupScript(maliciousGit)).toThrow('git.config');
+  });
+
+  it('不会把已脱敏的 Git 凭据写回配置', async () => {
+    const masked = structuredClone(MOCK_SNAPSHOT);
+    masked.git = {
+      config: 'user.name=Tester\ncredential.token=***MASKED***',
+    };
+    const script = generateSetupScript(masked);
+    expect(script).toContain('已跳过敏感 Git 配置 credential.token');
+    expect(script).not.toContain('git config --global -- credential.token');
+
+    const imported = await importEnvironment(masked, { execute: false });
+    expect(imported.commands).toContain(
+      '# 跳过敏感 Git 配置 credential.token（需手动填写）',
+    );
+  });
+
+  it('导出的快照与脚本使用最小文件权限', async () => {
+    const res = await exportEnvironment({
+      outputDir: TMP_DIR,
+      outputPrefix: 'private-env',
+      modules: ['sdks'],
+    });
+    if (process.platform !== 'win32') {
+      expect((await stat(res.jsonPath!)).mode & 0o777).toBe(0o600);
+      expect((await stat(res.scriptPath!)).mode & 0o777).toBe(0o700);
+    }
+    await expect(
+      exportEnvironment({ outputDir: TMP_DIR, outputPrefix: '../escape' }),
+    ).rejects.toThrow('outputPrefix');
   });
 
   it('diffEnvironment 正确比对差异', async () => {

@@ -4,7 +4,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const BIN = join(process.cwd(), 'bin', 'cli.js');
+const CLI_SOURCE = join(process.cwd(), 'src', 'cli.ts');
 const TMP = join(tmpdir(), `devtoolkit-mcp-test-${Date.now()}`);
 
 beforeEach(async () => {
@@ -23,12 +23,17 @@ async function mcpExchange(
   env: Record<string, string> = {},
 ): Promise<any[]> {
   return new Promise((resolve, reject) => {
-    const child = spawn('node', [BIN, '--mcp'], {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', CLI_SOURCE, '--mcp'],
+      {
+        env: { ...process.env, ...env },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
 
     const responses: any[] = [];
+    const invalidStdoutLines: string[] = [];
     let stderr = '';
 
     child.stdout.setEncoding('utf-8');
@@ -45,12 +50,24 @@ async function mcpExchange(
         try {
           responses.push(JSON.parse(line));
         } catch {
-          // 非 JSON 行（如日志），跳过
+          invalidStdoutLines.push(line);
         }
       }
     });
 
-    child.on('close', () => {
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`MCP 进程异常退出 (${code}): ${stderr}`));
+        return;
+      }
+      if (invalidStdoutLines.length > 0) {
+        reject(
+          new Error(
+            `MCP stdout 包含非 JSON-RPC 内容: ${invalidStdoutLines.join(' | ')}\nstderr: ${stderr}`,
+          ),
+        );
+        return;
+      }
       resolve(responses);
     });
 
@@ -79,13 +96,21 @@ describe('MCP Server — 协议握手', () => {
     expect(init.jsonrpc).toBe('2.0');
     expect(init.id).toBe(1);
     expect(init.result.serverInfo.name).toBe('devtoolkit');
+    expect(init.result.serverInfo.version).toBe('0.9.0');
     expect(init.result.protocolVersion).toBe('2024-11-05');
     expect(init.result.capabilities.tools).toBeDefined();
+  });
+
+  it('支持 MCP ping 保活请求', async () => {
+    const responses = await mcpExchange([
+      '{"jsonrpc":"2.0","id":2,"method":"ping","params":{}}',
+    ]);
+    expect(responses[0]).toEqual({ jsonrpc: '2.0', id: 2, result: {} });
   });
 });
 
 describe('MCP Server — tools/list', () => {
-  it('返回 generate_skill 和 scan_directory 两个工具', async () => {
+  it('返回完整工具集与有效输入契约', async () => {
     const responses = await mcpExchange([
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}',
       '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
@@ -96,6 +121,18 @@ describe('MCP Server — tools/list', () => {
     const toolNames = toolsList.result.tools.map((t: any) => t.name);
     expect(toolNames).toContain('generate_skill');
     expect(toolNames).toContain('scan_directory');
+    expect(toolNames).toContain('eval_skill');
+    expect(toolNames).toEqual(
+      expect.arrayContaining([
+        'scan_code',
+        'search_code',
+        'convert_rule',
+        'sync_rules',
+        'export_env',
+        'diff_env',
+      ]),
+    );
+    expect(new Set(toolNames).size).toBe(9);
 
     // 验证 generate_skill 有正确的 inputSchema
     const genSkill = toolsList.result.tools.find(
@@ -154,6 +191,30 @@ describe('MCP Server — 错误处理', () => {
     const parseError = responses[0];
     expect(parseError.error).toBeDefined();
     expect(parseError.error.code).toBe(-32700);
+  });
+
+  it('无效 JSON-RPC 请求返回 -32600 且不会导致进程崩溃', async () => {
+    const responses = await mcpExchange([
+      'null',
+      '{"jsonrpc":"2.0","id":7,"method":123}',
+    ]);
+
+    expect(responses).toHaveLength(2);
+    expect(responses[0].error.code).toBe(-32600);
+    expect(responses[1].id).toBe(7);
+    expect(responses[1].error.code).toBe(-32600);
+  });
+
+  it('tools/call 参数结构错误返回 -32602', async () => {
+    const responses = await mcpExchange([
+      '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":[]}',
+    ]);
+    expect(responses[0].error.code).toBe(-32600);
+
+    const invalidArgs = await mcpExchange([
+      '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"scan_code","arguments":[]}}',
+    ]);
+    expect(invalidArgs[0].error.code).toBe(-32602);
   });
 
   it('generate_skill 缺少 sources 参数时返回错误', async () => {

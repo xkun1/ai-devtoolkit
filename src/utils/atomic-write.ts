@@ -6,12 +6,13 @@ import { dirname } from 'node:path';
 export async function writeFileAtomic(
   path: string,
   content: string,
+  mode?: number,
 ): Promise<void> {
   const dir = dirname(path);
   await mkdir(dir, { recursive: true });
   const tempPath = `${path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
   try {
-    await writeFile(tempPath, content, 'utf-8');
+    await writeFile(tempPath, content, { encoding: 'utf-8', mode });
     await rename(tempPath, path);
   } finally {
     await unlink(tempPath).catch(() => undefined);

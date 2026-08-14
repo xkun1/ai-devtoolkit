@@ -4,8 +4,8 @@
  * 从环境快照 JSON 中恢复开发环境。
  * 支持 dry-run 模式（默认）和实际执行模式。
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import type {
   EnvSnapshot,
   EnvModule,
@@ -15,14 +15,18 @@ import type {
   DiffItem,
 } from './types.js';
 import { detectEnvironment } from './detector.js';
+import { validateEnvSnapshot } from './validate.js';
+
+const MAX_SNAPSHOT_BYTES = 20 * 1024 * 1024;
 
 /** 安全执行命令 */
 function exec(
-  cmd: string,
+  executable: string,
+  args: string[],
   timeoutMs = 60000,
 ): { success: boolean; output: string } {
   try {
-    const output = execSync(cmd, {
+    const output = execFileSync(executable, args, {
       encoding: 'utf-8',
       timeout: timeoutMs,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -40,7 +44,7 @@ function exec(
 
 function has(cmd: string): boolean {
   try {
-    execSync('command -v ' + cmd + ' 2>/dev/null', {
+    execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', [cmd], {
       encoding: 'utf-8',
       stdio: 'pipe',
     });
@@ -57,12 +61,12 @@ export function loadSnapshot(filePath: string): EnvSnapshot {
   if (!existsSync(filePath)) {
     throw new Error('快照文件不存在: ' + filePath);
   }
-  const raw = readFileSync(filePath, 'utf-8');
-  const snapshot = JSON.parse(raw) as EnvSnapshot;
-
-  if (!snapshot.version || !snapshot.system) {
-    throw new Error('无效的快照文件格式');
+  if (statSync(filePath).size > MAX_SNAPSHOT_BYTES) {
+    throw new Error('快照文件超过 20 MiB 限制');
   }
+  const raw = readFileSync(filePath, 'utf-8');
+  const snapshot: unknown = JSON.parse(raw);
+  validateEnvSnapshot(snapshot);
 
   return snapshot;
 }
@@ -77,6 +81,7 @@ export async function importEnvironment(
   snapshot: EnvSnapshot,
   options: ImportOptions = {},
 ): Promise<ImportResult> {
+  validateEnvSnapshot(snapshot);
   const execute = options.execute ?? false;
   const enabledModules = options.modules;
 
@@ -87,35 +92,46 @@ export async function importEnvironment(
   const results: { command: string; success: boolean; output: string }[] = [];
   const skipped: string[] = [];
 
+  const schedule = (
+    executable: string,
+    args: string[],
+    missingLabel: string,
+    timeoutMs: number,
+  ) => {
+    const command = formatCommand(executable, args);
+    commands.push(command);
+    if (!execute) return;
+    if (!has(executable)) {
+      if (!skipped.includes(missingLabel)) skipped.push(missingLabel);
+      return;
+    }
+    results.push({
+      command,
+      ...exec(executable, args, timeoutMs),
+    });
+  };
+
   // ── Homebrew ──
   if (isEnabled('brew') && snapshot.brew) {
     const formulae = snapshot.brew.formulae;
     const casks = snapshot.brew.casks;
 
     if (formulae.length > 0) {
-      const cmd = 'brew install ' + formulae.join(' ');
-      commands.push(cmd);
-      if (execute && has('brew')) {
-        results.push({
-          command: cmd,
-          ...exec(cmd, options.brewTimeout || 300000),
-        });
-      } else if (execute && !has('brew')) {
-        skipped.push('brew (Homebrew 未安装)');
-      }
+      schedule(
+        'brew',
+        ['install', ...formulae],
+        'brew (Homebrew 未安装)',
+        options.brewTimeout || 300000,
+      );
     }
 
     if (casks.length > 0) {
-      const cmd = 'brew install --cask ' + casks.join(' ');
-      commands.push(cmd);
-      if (execute && has('brew')) {
-        results.push({
-          command: cmd,
-          ...exec(cmd, options.brewTimeout || 300000),
-        });
-      } else if (execute && !has('brew')) {
-        skipped.push('brew-cask (Homebrew 未安装)');
-      }
+      schedule(
+        'brew',
+        ['install', '--cask', ...casks],
+        'brew-cask (Homebrew 未安装)',
+        options.brewTimeout || 300000,
+      );
     }
   }
 
@@ -125,13 +141,12 @@ export async function importEnvironment(
       .filter((p) => !['npm', 'corepack'].includes(p.name))
       .map((p) => p.name);
     if (names.length > 0) {
-      const cmd = 'npm install -g ' + names.join(' ');
-      commands.push(cmd);
-      if (execute && has('npm')) {
-        results.push({ command: cmd, ...exec(cmd, 120000) });
-      } else if (execute && !has('npm')) {
-        skipped.push('npm (Node.js 未安装)');
-      }
+      schedule(
+        'npm',
+        ['install', '-g', ...names],
+        'npm (Node.js 未安装)',
+        120000,
+      );
     }
   }
 
@@ -145,15 +160,14 @@ export async function importEnvironment(
       (p) => !['pip', 'setuptools', 'wheel', 'pkg-resources'].includes(p.name),
     );
     if (filtered.length > 0) {
-      const cmd =
-        'pip3 install ' +
-        filtered.map((p) => p.name + '==' + p.version).join(' ');
-      commands.push(cmd);
-      if (execute && (has('pip3') || has('pip'))) {
-        results.push({ command: cmd, ...exec(cmd, 120000) });
-      } else if (execute) {
-        skipped.push('pip (Python/pip 未安装)');
-      }
+      const pipExecutable =
+        execute && !has('pip3') && has('pip') ? 'pip' : 'pip3';
+      schedule(
+        pipExecutable,
+        ['install', ...filtered.map((p) => p.name + '==' + p.version)],
+        'pip (Python/pip 未安装)',
+        120000,
+      );
     }
   }
 
@@ -164,15 +178,12 @@ export async function importEnvironment(
     snapshot.vscodeExtensions.length > 0
   ) {
     for (const ext of snapshot.vscodeExtensions) {
-      const cmd = 'code --install-extension ' + ext.id;
-      commands.push(cmd);
-      if (execute && has('code')) {
-        results.push({ command: cmd, ...exec(cmd, 30000) });
-      } else if (execute && !has('code')) {
-        if (!skipped.includes('vscode (VSCode CLI 未安装)')) {
-          skipped.push('vscode (VSCode CLI 未安装)');
-        }
-      }
+      schedule(
+        'code',
+        ['--install-extension', ext.id],
+        'vscode (VSCode CLI 未安装)',
+        30000,
+      );
     }
   }
 
@@ -184,11 +195,20 @@ export async function importEnvironment(
       if (parts.length >= 2) {
         const key = parts[0].trim();
         const value = parts.slice(1).join('=').trim();
-        const cmd = 'git config --global ' + key + ' "' + value + '"';
-        commands.push(cmd);
-        if (execute && has('git')) {
-          results.push({ command: cmd, ...exec(cmd, 5000) });
+        if (!isSafeGitKey(key)) {
+          throw new Error(`快照包含不安全的 Git 配置键: ${key}`);
         }
+        if (value.includes('***MASKED***')) {
+          commands.push(`# 跳过敏感 Git 配置 ${key}（需手动填写）`);
+          if (execute) skipped.push(`git:${key} (敏感值需手动填写)`);
+          continue;
+        }
+        schedule(
+          'git',
+          ['config', '--global', '--', key, value],
+          'git (Git 未安装)',
+          5000,
+        );
       }
     }
   }
@@ -213,6 +233,24 @@ export async function importEnvironment(
   }
 
   return { commands, results, skipped };
+}
+
+function formatCommand(executable: string, args: string[]): string {
+  return [executable, ...args].map(quoteForDisplay).join(' ');
+}
+
+function isSafeGitKey(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !value.startsWith('-') &&
+    !value.includes('=') &&
+    ![...value].some((char) => char.charCodeAt(0) <= 0x20)
+  );
+}
+
+function quoteForDisplay(value: string): string {
+  if (/^[A-Za-z0-9@%_+=:,./-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 /**
@@ -256,6 +294,8 @@ export async function diffEnvironment(
   snapshot: EnvSnapshot,
   current?: EnvSnapshot,
 ): Promise<EnvDiffResult> {
+  validateEnvSnapshot(snapshot);
+  if (current) validateEnvSnapshot(current);
   const cur = current || (await detectEnvironment());
 
   // 1. Homebrew Formulae

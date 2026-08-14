@@ -6,6 +6,8 @@
  */
 import { readFile } from 'node:fs/promises';
 import type { LoadedDocument } from '../types/index.js';
+import { fetchPublicText } from '../utils/safe-fetch.js';
+import { parse as parseYaml } from 'yaml';
 
 export interface OpenApiParameter {
   name: string;
@@ -145,8 +147,11 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
   const rawString = typeof raw === 'string' ? raw : JSON.stringify(raw);
   const spec = typeof raw === 'string' ? parseYamlOrJson(raw) : raw;
 
-  if (!spec || typeof spec !== 'object') {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
     throw new Error('无效的 OpenAPI / Swagger 数据结构');
+  }
+  if (typeof spec.openapi !== 'string' && typeof spec.swagger !== 'string') {
+    throw new Error('OpenAPI / Swagger 规范缺少版本字段');
   }
 
   const specType: 'openapi' | 'swagger' = spec.swagger ? 'swagger' : 'openapi';
@@ -625,135 +630,17 @@ function parseYamlOrJson(raw: string): any {
     }
   }
 
-  return parseBasicYaml(raw);
-}
-
-/** 简单的轻量级 YAML 递归解析器 */
-function parseBasicYaml(yamlStr: string): any {
-  const lines = yamlStr.split(/\r?\n/);
-  let idx = 0;
-
-  function parseBlock(currentIndent: number): any {
-    let result: any = null;
-    let isArray = false;
-
-    while (idx < lines.length) {
-      const line = lines[idx];
-      const trimmed = line.trim();
-
-      if (!trimmed || trimmed.startsWith('#')) {
-        idx++;
-        continue;
-      }
-
-      const indent = line.search(/\S/);
-      if (indent < currentIndent) {
-        break;
-      }
-
-      if (trimmed.startsWith('-')) {
-        if (result === null) {
-          result = [];
-          isArray = true;
-        } else if (!isArray) {
-          break;
-        }
-
-        const afterDash = trimmed.slice(1).trim();
-        idx++;
-
-        if (afterDash === '') {
-          const itemVal = parseBlock(indent + 2);
-          result.push(itemVal);
-        } else if (afterDash.includes(':')) {
-          const colonIdx = afterDash.indexOf(':');
-          const k = afterDash
-            .slice(0, colonIdx)
-            .trim()
-            .replace(/^['"]|['"]$/g, '');
-          const rawV = afterDash.slice(colonIdx + 1).trim();
-          const itemObj: Record<string, any> = {};
-
-          if (rawV === '') {
-            itemObj[k] = parseBlock(indent + 2);
-          } else {
-            itemObj[k] = parseScalar(rawV);
-          }
-          result.push(itemObj);
-        } else {
-          result.push(parseScalar(afterDash));
-        }
-        continue;
-      }
-
-      const colonIdx = trimmed.indexOf(':');
-      if (colonIdx !== -1) {
-        if (result === null) {
-          result = {};
-          isArray = false;
-        } else if (isArray) {
-          break;
-        }
-
-        const key = trimmed
-          .slice(0, colonIdx)
-          .trim()
-          .replace(/^['"]|['"]$/g, '');
-        const valStr = trimmed.slice(colonIdx + 1).trim();
-        idx++;
-
-        if (valStr === '' || valStr === '|' || valStr === '>') {
-          if (idx < lines.length) {
-            const nextLine = lines[idx];
-            const nextIndent = nextLine.search(/\S/);
-            if (nextIndent > indent) {
-              if (valStr === '|' || valStr === '>') {
-                const multiline: string[] = [];
-                while (idx < lines.length) {
-                  const mLine = lines[idx];
-                  const mIndent = mLine.search(/\S/);
-                  if (mLine.trim() && mIndent <= indent) break;
-                  multiline.push(mLine.slice(indent + 2));
-                  idx++;
-                }
-                result[key] = multiline.join('\n').trim();
-              } else {
-                result[key] = parseBlock(nextIndent);
-              }
-            } else {
-              result[key] = null;
-            }
-          } else {
-            result[key] = null;
-          }
-        } else {
-          result[key] = parseScalar(valStr);
-        }
-        continue;
-      }
-
-      idx++;
-    }
-
-    return result || {};
+  try {
+    return parseYaml(raw, {
+      maxAliasCount: 100,
+      uniqueKeys: true,
+    });
+  } catch (err: unknown) {
+    throw new Error(
+      `OpenAPI YAML 解析失败: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
   }
-
-  function parseScalar(val: string): any {
-    const v = val.trim();
-    if (v === 'true' || v === 'yes') return true;
-    if (v === 'false' || v === 'no') return false;
-    if (v === 'null' || v === '~') return null;
-    if (/^-?\d+$/.test(v)) return parseInt(v, 10);
-    if (/^-?\d+\.\d+$/.test(v)) return parseFloat(v);
-    if (v.startsWith('[') && v.endsWith(']')) {
-      const inner = v.slice(1, -1).trim();
-      if (!inner) return [];
-      return inner.split(',').map((s) => parseScalar(s.trim()));
-    }
-    return v.replace(/^['"](.*)['"]$/, '$1');
-  }
-
-  return parseBlock(0);
 }
 
 /** 统一的 OpenAPI / Swagger 加载入口（支持 URL 与本地路径） */
@@ -765,25 +652,7 @@ export async function loadFromOpenApi(
 
   if (!rawContent) {
     if (/^https?:\/\//i.test(source)) {
-      const res = await fetch(source, {
-        headers: {
-          Accept:
-            'application/json, application/yaml, application/x-yaml, text/yaml, text/plain, */*',
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ai-devtoolkit',
-        },
-      });
-      if (!res.ok) {
-        throw new Error(
-          '下载 OpenAPI 规范失败: HTTP ' +
-            res.status +
-            ' ' +
-            res.statusText +
-            ' — ' +
-            source,
-        );
-      }
-      rawContent = await res.text();
+      rawContent = (await fetchPublicText(source)).body;
     } else {
       rawContent = await readFile(source, 'utf-8');
     }

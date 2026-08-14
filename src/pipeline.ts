@@ -68,7 +68,6 @@ export async function runPipeline(
       info(`  [${i + 1}/${files.length}] 处理: ${files[i]}`);
       const result = await runPipelineSingle(files[i], {
         ...options,
-        force: true,
         mergeDir: false,
       });
       results.push(result);

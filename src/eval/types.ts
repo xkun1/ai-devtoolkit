@@ -35,6 +35,10 @@ export interface CaseEvalResult {
   triggerScore: number;
   /** 技能遵循度与准确率打分 (0-100) */
   accuracyScore: number;
+  /** 无技能基线准确率打分 (0-100) */
+  baselineAccuracyScore: number;
+  /** 技能相对基线的准确率提升，可为负数 */
+  improvementScore: number;
   /** 综合评分 (0-100) */
   overallScore: number;
   /** 评测分析与优化建议 */
@@ -53,6 +57,10 @@ export interface EvalReport {
   avgTriggerScore: number;
   /** 平均准确得分 (0-100) */
   avgAccuracyScore: number;
+  /** 平均无技能基线得分 (0-100) */
+  avgBaselineScore: number;
+  /** 平均技能增益，可为负数 */
+  avgImprovementScore: number;
   /** 综合得分 (0-100) */
   overallScore: number;
   /** 评级：S / A / B / C / D */
@@ -72,6 +80,10 @@ export interface GenerateEvalOptions {
 /** 运行评测的选项 */
 export interface RunEvalOptions {
   llm: LLMConfig;
+  /** 可选独立裁判模型；默认使用 llm。 */
+  judgeLlm?: LLMConfig;
   suite?: EvalSuite;
   outputDir?: string;
+  /** 用例并发数，默认 2，最大 4。 */
+  concurrency?: number;
 }
