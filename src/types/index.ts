@@ -3,7 +3,8 @@ export type AgentType = 'codex' | 'cursor' | 'claude';
 /** 输出格式：modern 使用各 Agent 当前推荐目录结构，legacy 保留旧版单文件。 */
 export type OutputMode = 'modern' | 'legacy';
 
-export type SourceType = 'url' | 'pdf' | 'html' | 'markdown' | 'text';
+export type SourceType =
+  'url' | 'pdf' | 'html' | 'markdown' | 'text' | 'openapi' | 'postman';
 
 /** 加载后的统一文档结构 */
 export interface LoadedDocument {
@@ -21,7 +22,7 @@ export interface LLMConfig {
   baseURL?: string;
   model: string;
   temperature?: number;
-  /** 单次模型响应的最大 token 数；不设时由提供方决定。 */
+  /** 单次模型响应的最大 token 数；默认 8192。 */
   maxOutputTokens?: number;
 }
 
@@ -116,6 +117,18 @@ export interface PipelineOptions {
   mergeDir?: boolean;
   /** 目录扫描最大递归深度（默认 5） */
   dirMaxDepth?: number;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
+  /** 单次 LLM 调用超时，默认 120 秒。 */
+  llmTimeoutMs?: number;
+  /** 单次 LLM 响应字符上限，默认 1 MiB。 */
+  maxOutputChars?: number;
+  /** 单次技能生成允许的最大 LLM 调用数，默认 100。 */
+  maxLLMCalls?: number;
+  /** 目录批处理并发数，默认 2，最大 8。 */
+  batchConcurrency?: number;
+  /** 目录批处理文件数上限，默认 100。 */
+  maxBatchFiles?: number;
 }
 
 /** 预加载的文档内容（Web UI 文件上传用，跳过 loader 直接传入内容） */

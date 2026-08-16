@@ -35,11 +35,15 @@ describe('CLI 参数契约', () => {
     mocks.loadConfig.mockResolvedValue({});
   });
 
-  it('注册 --watch、--local-model 与 --legacy', () => {
+  it('注册长任务资源控制参数', () => {
     const help = createProgram().helpInformation();
     expect(help).toContain('--watch');
     expect(help).toContain('--local-model');
     expect(help).toContain('--legacy');
+    expect(help).toContain('--llm-timeout');
+    expect(help).toContain('--max-output-tokens');
+    expect(help).toContain('--batch-concurrency');
+    expect(help).toContain('--eval-max-cases');
   });
 
   it('拒绝非法端口', async () => {
@@ -114,6 +118,32 @@ describe('CLI 参数契约', () => {
     );
   });
 
+  it('正确映射超时、Token 与批处理上限', async () => {
+    await parse([
+      'examples/sample-doc.md',
+      '--api-key',
+      'test',
+      '--llm-timeout',
+      '45000',
+      '--max-output-tokens',
+      '4096',
+      '--batch-concurrency',
+      '4',
+      '--max-batch-files',
+      '30',
+    ]);
+
+    expect(mocks.runPipeline).toHaveBeenCalledWith(
+      ['examples/sample-doc.md'],
+      expect.objectContaining({
+        llm: expect.objectContaining({ maxOutputTokens: 4096 }),
+        llmTimeoutMs: 45000,
+        batchConcurrency: 4,
+        maxBatchFiles: 30,
+      }),
+    );
+  });
+
   it('配置文件默认值会传入 Pipeline，CLI 参数保持最高优先级', async () => {
     mocks.loadConfig.mockResolvedValue({
       out: 'config-output',
@@ -121,6 +151,10 @@ describe('CLI 参数契约', () => {
       template: 'api-doc',
       outputMode: 'legacy',
       type: 'cursor',
+      llmTimeoutMs: 30000,
+      maxOutputTokens: 2048,
+      batchConcurrency: 3,
+      maxBatchFiles: 40,
     });
 
     await parse([
@@ -141,6 +175,10 @@ describe('CLI 参数契约', () => {
         name: 'cli-name',
         template: 'api-doc',
         outputMode: 'legacy',
+        llm: expect.objectContaining({ maxOutputTokens: 2048 }),
+        llmTimeoutMs: 30000,
+        batchConcurrency: 3,
+        maxBatchFiles: 40,
       }),
     );
   });

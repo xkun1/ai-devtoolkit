@@ -30,12 +30,18 @@ import {
   info,
 } from './utils/logger.js';
 import { estimateTokens, estimateCost, formatCost } from './utils/token.js';
+import { ResourceLimitError, throwIfAborted } from './utils/abort.js';
+
+const DEFAULT_BATCH_CONCURRENCY = 2;
+const DEFAULT_MAX_BATCH_FILES = 100;
+let outputWriteQueue: Promise<void> = Promise.resolve();
 
 /** 核心管线：sources → load → merge → transform → format → output */
 export async function runPipeline(
   sources: string | string[],
   options: PipelineOptions,
 ): Promise<SkillResult> {
+  throwIfAborted(options.signal, '技能生成');
   const sourceList = Array.isArray(sources) ? sources : [sources];
 
   // ── 目录批量模式 ──
@@ -43,11 +49,30 @@ export async function runPipeline(
   const hasDirectory = hadDir.some(Boolean);
 
   if (hasDirectory) {
-    const { files } = await expandSources(sourceList, {
-      maxDepth: options.dirMaxDepth,
-    });
+    const maxBatchFiles = normalizeMaxBatchFiles(options.maxBatchFiles);
+    let files: string[];
+    try {
+      ({ files } = await expandSources(sourceList, {
+        maxDepth: options.dirMaxDepth,
+        maxFiles: maxBatchFiles,
+        signal: options.signal,
+      }));
+    } catch (error) {
+      if (error instanceof ResourceLimitError) {
+        throw new ResourceLimitError(
+          `目录文档数量超过 ${maxBatchFiles} 个批处理上限`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     if (files.length === 0) {
       throw new Error('目录中未找到受支持的文档文件');
+    }
+    if (files.length > maxBatchFiles) {
+      throw new ResourceLimitError(
+        `目录包含 ${files.length} 个文档，超过 ${maxBatchFiles} 个批处理上限`,
+      );
     }
 
     // --merge 模式：展开目录后合并为一个技能包
@@ -63,16 +88,23 @@ export async function runPipeline(
     info(`  📁 共 ${files.length} 个文档待处理`);
     info('');
 
-    const results: SkillResult[] = [];
-    for (let i = 0; i < files.length; i++) {
-      info(`  [${i + 1}/${files.length}] 处理: ${files[i]}`);
-      const result = await runPipelineSingle(files[i], {
-        ...options,
-        mergeDir: false,
-      });
-      results.push(result);
-      info('');
-    }
+    const concurrency = normalizeBatchConcurrency(options.batchConcurrency);
+    info(`  ⚙️ 受控并发: ${concurrency}`);
+    const results = await mapWithConcurrency(
+      files,
+      concurrency,
+      async (file, index) => {
+        throwIfAborted(options.signal, '目录批处理');
+        info(`  [${index + 1}/${files.length}] 处理: ${file}`);
+        const result = await runPipelineSingle(file, {
+          ...options,
+          mergeDir: false,
+        });
+        info('');
+        return result;
+      },
+      options.signal,
+    );
 
     info('  ─────────────────────────────────');
     info(`  ✅ 批量完成: ${results.length} 个技能包已生成`);
@@ -89,6 +121,7 @@ async function runPipelineSingle(
   sources: string | string[],
   options: PipelineOptions,
 ): Promise<SkillResult> {
+  throwIfAborted(options.signal, '技能生成');
   const sourceList = Array.isArray(sources) ? sources : [sources];
 
   // Step 1: 加载（crawl 模式或常规加载）
@@ -221,6 +254,7 @@ async function runPipelineSingle(
       doc = await crawlSite(sourceList[0], {
         maxDepth: options.crawlDepth,
         maxPages: options.crawlPages,
+        signal: options.signal,
       });
       debug(
         `爬取完成: ${doc.meta?.crawledPages} 页, ${doc.content.length} 字符`,
@@ -240,7 +274,7 @@ async function runPipelineSingle(
         : '正在加载文档...',
     );
     try {
-      const docs = await loadDocuments(sourceList);
+      const docs = await loadDocuments(sourceList, { signal: options.signal });
       doc = mergeDocuments(docs);
       debug(`文档类型: ${doc.type}, 长度: ${doc.content.length} 字符`);
     } catch (err: any) {
@@ -251,6 +285,8 @@ async function runPipelineSingle(
       `加载完成: ${doc.title || doc.source} (${doc.content.length} 字符)`,
     );
   }
+
+  throwIfAborted(options.signal, '技能生成');
 
   // SPA 空壳检测（URL 加载时）
   if (doc.type === 'url') {
@@ -329,6 +365,12 @@ async function runPipelineSingle(
       options.agentType,
       options.name,
       template,
+      {
+        signal: options.signal,
+        llmTimeoutMs: options.llmTimeoutMs,
+        maxOutputChars: options.maxOutputChars,
+        maxLLMCalls: options.maxLLMCalls,
+      },
     );
     debug(`LLM 输出长度: ${transformed.content.length} 字符`);
   } catch (err: any) {
@@ -350,6 +392,7 @@ async function runPipelineSingle(
   });
   result.stats = { ...transformed.stats, cacheHit: false };
   result.quality = assertValidSkillResult(result);
+  throwIfAborted(options.signal, '技能生成');
 
   if (options.stdout) {
     // stdout 模式：纯内容输出，便于管道（日志已在 stderr）
@@ -380,29 +423,32 @@ async function runPipelineSingle(
     },
   ];
 
-  // 覆盖保护：任一目标文件已存在且未指定 --force 时拒绝覆盖。
-  if (!options.force) {
-    for (const artifact of artifacts) {
-      try {
-        await access(artifact.path);
-        throw new Error(
-          `文件已存在: ${artifact.path}\n  使用 --force 覆盖，或 --out 指定其他路径`,
-        );
-      } catch (err: any) {
-        if (err.message?.startsWith('文件已存在')) throw err;
-        if (err.code !== 'ENOENT') throw err;
+  await withOutputWriteLock(async () => {
+    // 覆盖保护与写入必须在同一临界区，避免并发批处理发生检查后覆盖竞态。
+    if (!options.force) {
+      for (const artifact of artifacts) {
+        try {
+          await access(artifact.path);
+          throw new Error(
+            `文件已存在: ${artifact.path}\n  使用 --force 覆盖，或 --out 指定其他路径`,
+          );
+        } catch (err: any) {
+          if (err.message?.startsWith('文件已存在')) throw err;
+          if (err.code !== 'ENOENT') throw err;
+        }
       }
     }
-  }
 
-  for (const artifact of artifacts) {
-    await writeFileAtomic(artifact.path, artifact.content);
-    success(`已生成: ${artifact.path}`);
-  }
-  // 所有产物写完后再原子更新缓存。
-  if (options.incremental) {
-    saveGeneratedResult(cachePath, cacheKey, fingerprint, result);
-  }
+    for (const artifact of artifacts) {
+      throwIfAborted(options.signal, '技能生成');
+      await writeFileAtomic(artifact.path, artifact.content);
+      success(`已生成: ${artifact.path}`);
+    }
+    // 所有产物写完后再原子更新缓存。
+    if (options.incremental) {
+      saveGeneratedResult(cachePath, cacheKey, fingerprint, result);
+    }
+  });
 
   info('');
   info(`  🎯 Agent: ${options.agentType}`);
@@ -411,6 +457,74 @@ async function runPipelineSingle(
   info('');
 
   return result;
+}
+
+function normalizeBatchConcurrency(value?: number): number {
+  const normalized = value ?? DEFAULT_BATCH_CONCURRENCY;
+  if (!Number.isSafeInteger(normalized) || normalized < 1 || normalized > 8) {
+    throw new RangeError('batchConcurrency 必须是 1-8 的整数');
+  }
+  return normalized;
+}
+
+function normalizeMaxBatchFiles(value?: number): number {
+  const normalized = value ?? DEFAULT_MAX_BATCH_FILES;
+  if (
+    !Number.isSafeInteger(normalized) ||
+    normalized < 1 ||
+    normalized > 10_000
+  ) {
+    throw new RangeError('maxBatchFiles 必须是 1-10000 的整数');
+  }
+  return normalized;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed) {
+      throwIfAborted(signal, '目录批处理');
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await mapper(items[index], index);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker(),
+  );
+  const settled = await Promise.allSettled(workers);
+  const rejected = settled.find(
+    (item): item is PromiseRejectedResult => item.status === 'rejected',
+  );
+  if (rejected) throw rejected.reason;
+  return results;
+}
+
+async function withOutputWriteLock<T>(task: () => Promise<T>): Promise<T> {
+  const previous = outputWriteQueue;
+  let release!: () => void;
+  outputWriteQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+  }
 }
 
 /**

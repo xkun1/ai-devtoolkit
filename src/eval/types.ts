@@ -75,6 +75,12 @@ export interface EvalReport {
 export interface GenerateEvalOptions {
   llm: LLMConfig;
   count?: number;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
+  /** 单次 LLM 调用超时。 */
+  timeoutMs?: number;
+  /** 单次 LLM 响应字符上限。 */
+  maxOutputChars?: number;
 }
 
 /** 运行评测的选项 */
@@ -86,4 +92,16 @@ export interface RunEvalOptions {
   outputDir?: string;
   /** 用例并发数，默认 2，最大 4。 */
   concurrency?: number;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
+  /** 单次 LLM 调用超时，默认 120 秒。 */
+  timeoutMs?: number;
+  /** 最多评测用例数，默认 20。 */
+  maxCases?: number;
+  /** 整次评测允许的最大 LLM 调用数，默认 61。 */
+  maxLLMCalls?: number;
+  /** 单次 LLM 响应字符上限，默认 1 MiB。 */
+  maxOutputChars?: number;
+  /** 技能正文字符上限，默认 1 MiB。 */
+  maxSkillChars?: number;
 }

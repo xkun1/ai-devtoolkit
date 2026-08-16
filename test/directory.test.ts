@@ -81,6 +81,22 @@ describe('scanDirectory', () => {
     expect(filesDepth1.some((f) => f.endsWith('shallow.md'))).toBe(true);
     expect(filesDepth1.some((f) => f.endsWith('deep.md'))).toBe(false);
   });
+
+  it('达到 maxFiles 时提前终止并报告资源上限', async () => {
+    await writeFile(join(TMP, 'a.md'), '# A');
+    await writeFile(join(TMP, 'b.md'), '# B');
+    await expect(scanDirectory(TMP, { maxFiles: 1 })).rejects.toThrow(
+      '超过 1 个上限',
+    );
+  });
+
+  it('预先取消时不扫描目录', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('取消目录扫描'));
+    await expect(
+      scanDirectory(TMP, { signal: controller.signal }),
+    ).rejects.toThrow('取消目录扫描');
+  });
 });
 
 describe('expandSources', () => {

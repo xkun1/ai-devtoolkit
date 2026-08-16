@@ -65,7 +65,11 @@ async function invokeRequest(
   let statusCode = 200;
 
   const res = new ServerResponse(req);
-  res.writeHead = function (code: number, ...args: any[]) {
+  res.writeHead = function (
+    this: ServerResponse,
+    code: number,
+    ...args: any[]
+  ) {
     statusCode = code;
     for (const arg of args) {
       if (typeof arg === 'object' && arg !== null) {
@@ -87,7 +91,7 @@ async function invokeRequest(
   };
 
   const endPromise = new Promise<void>((resolve) => {
-    res.end = function (chunk?: any) {
+    res.end = function (this: ServerResponse, chunk?: any) {
       if (chunk) {
         responseBody += Buffer.isBuffer(chunk)
           ? chunk.toString('utf-8')
@@ -215,6 +219,15 @@ describe('Web UI — HTML 模板验证', () => {
 });
 
 describe('Web UI — HTTP 安全边界', () => {
+  it('拒绝越界的长任务资源配置', () => {
+    expect(() => createRequestHandler({ requestTimeoutMs: 0 })).toThrow(
+      'requestTimeoutMs',
+    );
+    expect(() => createRequestHandler({ maxOutputTokens: 131_073 })).toThrow(
+      'maxOutputTokens',
+    );
+  });
+
   it('仅允许监听回环地址', () => {
     expect(() => startServer({ host: '0.0.0.0' })).toThrow('回环地址');
   });

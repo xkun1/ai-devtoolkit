@@ -65,6 +65,47 @@ describe('callLLM 重试行为', () => {
     const content = await promise;
     expect(content).toBe('# Skill Content');
     expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockCreate.mock.calls[0][0].max_tokens).toBe(8192);
+    expect(mockCreate.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('上游取消后不发起模型请求', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('用户取消'));
+
+    await expect(
+      callLLM('prompt', config, { signal: controller.signal }),
+    ).rejects.toThrow('用户取消');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('整次调用超时后中止挂起请求', async () => {
+    mockCreate.mockImplementation(
+      (_body: unknown, request: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener(
+            'abort',
+            () => reject(request.signal.reason),
+            { once: true },
+          );
+        }),
+    );
+    const promise = callLLM('prompt', config, { timeoutMs: 50 }).catch(
+      (error) => error,
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    const error = await promise;
+    expect(error.name).toBe('TimeoutError');
+    expect(error.message).toContain('50ms');
+  });
+
+  it('拒绝超过响应字符上限的模型输出', async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: '123456' } }],
+    });
+    await expect(
+      callLLM('prompt', config, { maxOutputChars: 5 }),
+    ).rejects.toThrow('5 字符');
   });
 
   it('429 后重试成功：共调用 2 次', async () => {

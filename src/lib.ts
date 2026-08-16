@@ -37,6 +37,7 @@ export {
   loadFromFile,
   loadFromHtml,
 } from './loader/index.js';
+export type { LoadOptions } from './loader/index.js';
 
 export {
   transformToSkill,
@@ -47,6 +48,14 @@ export {
   DEFAULT_CHUNK_CHARS,
 } from './transform/index.js';
 export type { TransformOptions, TransformResult } from './transform/index.js';
+export type { CallLLMOptions } from './transform/llm.js';
+
+export {
+  OperationAbortedError,
+  OperationTimeoutError,
+  ResourceLimitError,
+  isAbortError,
+} from './utils/abort.js';
 
 export {
   formatResult,
@@ -241,6 +250,11 @@ export type {
 
 // ── OpenAPI / Swagger 专精加载器 API ──
 export {
+  loadFromPostman,
+  isPostmanCollection,
+  parsePostmanCollection,
+  renderPostmanToMarkdown,
+  extractPostmanFromBuffer,
   loadFromOpenApi,
   isOpenApiSpec,
   parseOpenApiSpec,

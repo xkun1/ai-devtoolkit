@@ -3,6 +3,11 @@
  * 全局唯一数据源：CLI / Wizard / Web UI 共用
  */
 import type { ModelPreset } from './types/index.js';
+import {
+  createAbortScope,
+  throwIfAborted,
+  toAbortError,
+} from './utils/abort.js';
 
 export const MODEL_PRESETS: Record<string, ModelPreset> = {
   'deepseek-chat': {
@@ -203,7 +208,9 @@ function normalizeLocalBaseURL(value?: string): string | undefined {
 export async function detectLocalModels(
   baseURL: string,
   timeoutMs = 5000,
+  signal?: AbortSignal,
 ): Promise<LocalModelInfo[]> {
+  throwIfAborted(signal, '本地模型探测');
   const base = (baseURL || '').trim().replace(/\/+$/, '');
   if (!base) return [];
 
@@ -220,18 +227,21 @@ export async function detectLocalModels(
   candidates.push(`${base}/api/tags`);
 
   for (const url of candidates) {
+    const scope = createAbortScope(signal, timeoutMs, '本地模型探测');
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
+      const res = await fetch(url, { signal: scope.signal });
       if (!res.ok) continue;
       const data: any = await res.json();
 
       const models = parseModelList(data);
       if (models.length > 0) return models;
     } catch {
+      if (signal?.aborted) {
+        throw toAbortError(signal.reason, '本地模型探测已取消');
+      }
       // 连接失败/超时，尝试下一个候选路径
+    } finally {
+      scope.dispose();
     }
   }
 

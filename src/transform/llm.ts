@@ -1,9 +1,19 @@
 import OpenAI from 'openai';
 import type { LLMConfig } from '../types/index.js';
 import { warn } from '../utils/logger.js';
+import {
+  ResourceLimitError,
+  abortableSleep,
+  createAbortScope,
+  throwIfAborted,
+  toAbortError,
+} from '../utils/abort.js';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+export const DEFAULT_LLM_TIMEOUT_MS = 120_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 8_192;
+export const DEFAULT_MAX_OUTPUT_CHARS = 1024 * 1024;
 const DEFAULT_SYSTEM_PROMPT =
   'You are a technical documentation analyst. You extract structured, actionable knowledge from raw documents and format it as AI Agent skill instructions. Always respond in the SAME language as the source document. Output ONLY the skill file content, no preamble or explanation.';
 
@@ -12,6 +22,12 @@ export interface CallLLMOptions {
   systemPrompt?: string;
   /** 覆盖 LLMConfig.temperature。 */
   temperature?: number;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
+  /** 整次调用（含重试）的超时，默认 120 秒。 */
+  timeoutMs?: number;
+  /** 响应文本字符上限，默认 1 MiB。 */
+  maxOutputChars?: number;
 }
 
 /** 判断错误是否可重试：429 限流 / 5xx 服务端错误 / 网络层错误 */
@@ -33,10 +49,6 @@ export function isRetryableError(err: any): boolean {
   );
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * 统一 LLM 调用层
  * 兼容所有 OpenAI 协议兼容的 API：OpenAI / DeepSeek / 火山方舟 Ark / 本地模型
@@ -47,53 +59,87 @@ export async function callLLM(
   config: LLMConfig,
   options: CallLLMOptions = {},
 ): Promise<string> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
+  const maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
+  if (!Number.isSafeInteger(maxOutputChars) || maxOutputChars < 1) {
+    throw new RangeError('maxOutputChars 必须是正整数');
+  }
+  const maxOutputTokens = config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  if (
+    !Number.isSafeInteger(maxOutputTokens) ||
+    maxOutputTokens < 1 ||
+    maxOutputTokens > 131_072
+  ) {
+    throw new RangeError('maxOutputTokens 必须是 1-131072 的整数');
+  }
+
+  const scope = createAbortScope(options.signal, timeoutMs, 'LLM 调用');
   const client = new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
     maxRetries: 0, // 关闭 SDK 内置重试，由本层统一控制
   });
 
-  let lastError: any;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await client.chat.completions.create({
-        model: config.model,
-        messages: [
+  let lastError: unknown;
+  try {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        throwIfAborted(scope.signal, 'LLM 调用');
+        const res = await client.chat.completions.create(
           {
-            role: 'system',
-            content: options.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+            model: config.model,
+            messages: [
+              {
+                role: 'system',
+                content: options.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+              },
+              { role: 'user', content: prompt },
+            ],
+            temperature: options.temperature ?? config.temperature ?? 0.3,
+            // max_tokens 是 DeepSeek、Ark 与多数本地 OpenAI 兼容服务的共同参数。
+            max_tokens: maxOutputTokens,
           },
-          { role: 'user', content: prompt },
-        ],
-        temperature: options.temperature ?? config.temperature ?? 0.3,
-        max_completion_tokens: config.maxOutputTokens,
-      });
-
-      const content = extractContent(res);
-      if (!content) {
-        throw new Error(
-          'LLM 返回空内容或格式异常（返回片段: ' +
-            JSON.stringify(res).slice(0, 300) +
-            '）',
+          { signal: scope.signal },
         );
+
+        const content = extractContent(res);
+        if (!content) {
+          throw new Error(
+            'LLM 返回空内容或格式异常（返回片段: ' +
+              JSON.stringify(res).slice(0, 300) +
+              '）',
+          );
+        }
+        const normalized = content.trim();
+        if (normalized.length > maxOutputChars) {
+          throw new ResourceLimitError(
+            `LLM 响应超过 ${maxOutputChars} 字符限制`,
+          );
+        }
+        return normalized;
+      } catch (err: unknown) {
+        if (scope.signal.aborted) {
+          throw toAbortError(scope.signal.reason, 'LLM 调用已取消');
+        }
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+        // 空内容与资源上限错误不重试（重试无益）
+        const retryable =
+          !(err instanceof ResourceLimitError) && isRetryableError(err);
+        if (!retryable || attempt === MAX_RETRIES) {
+          throw err;
+        }
+        const delay = BASE_DELAY_MS * 2 ** attempt;
+        warn(
+          `LLM 调用失败（${message}），${delay / 1000}s 后重试 (${attempt + 1}/${MAX_RETRIES})...`,
+        );
+        await abortableSleep(delay, scope.signal);
       }
-      return content.trim();
-    } catch (err: any) {
-      lastError = err;
-      // 空内容错误不重试（模型行为问题，重试无益）
-      const retryable =
-        err.message !== 'LLM 返回空内容' && isRetryableError(err);
-      if (!retryable || attempt === MAX_RETRIES) {
-        throw err;
-      }
-      const delay = BASE_DELAY_MS * 2 ** attempt;
-      warn(
-        `LLM 调用失败（${err.message}），${delay / 1000}s 后重试 (${attempt + 1}/${MAX_RETRIES})...`,
-      );
-      await sleep(delay);
     }
+    throw lastError;
+  } finally {
+    scope.dispose();
   }
-  throw lastError;
 }
 
 /**

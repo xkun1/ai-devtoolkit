@@ -9,18 +9,36 @@ import { searchCode } from './searcher.js';
 import { explainResults, formatResultsPlain } from './explainer.js';
 import type { LLMConfig } from '../types/index.js';
 import { info, warn } from '../utils/logger.js';
+import {
+  ResourceLimitError,
+  isAbortError,
+  throwIfAborted,
+} from '../utils/abort.js';
 
 export interface InteractiveOptions {
   index: SearchIndex;
   llm?: LLMConfig;
   useExplain: boolean;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  maxOutputChars?: number;
+  /** 自定义输入输出流，便于嵌入宿主进程与自动化测试。 */
+  input?: NodeJS.ReadableStream;
+  output?: NodeJS.WritableStream;
 }
 
 /**
  * 启动交互式搜索 REPL
  */
-export function startInteractiveSearch(options: InteractiveOptions): void {
+export function startInteractiveSearch(
+  options: InteractiveOptions,
+): Promise<void> {
   const { index, llm, useExplain } = options;
+  throwIfAborted(options.signal, '交互式代码搜索');
+  const sessionController = new AbortController();
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, sessionController.signal])
+    : sessionController.signal;
 
   info('');
   info('╔══════════════════════════════════════════╗');
@@ -39,10 +57,14 @@ export function startInteractiveSearch(options: InteractiveOptions): void {
   }
 
   const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
+    input: options.input ?? process.stdin,
+    output: options.output ?? process.stdout,
     prompt: '🔍 > ',
   });
+  let closed = false;
+  let busy = false;
+  const onAbort = () => rl.close();
+  signal.addEventListener('abort', onAbort, { once: true });
 
   rl.prompt();
 
@@ -79,33 +101,62 @@ export function startInteractiveSearch(options: InteractiveOptions): void {
       return;
     }
 
-    // 执行搜索
-    const results = searchCode(index, query, { limit: 10 });
-
-    if (plainMode || !llm) {
-      console.log(formatResultsPlain(results, index.projectRoot));
+    if (busy) {
+      warn('上一条搜索仍在处理中，请稍候');
       rl.prompt();
-    } else {
-      // LLM 解释模式
-      info('🤖 正在分析...');
-      try {
+      return;
+    }
+    busy = true;
+    let fallbackOutput: string | undefined;
+
+    try {
+      throwIfAborted(signal, '交互式代码搜索');
+      // 执行搜索
+      const results = searchCode(index, query, { limit: 10 });
+      fallbackOutput = formatResultsPlain(results, index.projectRoot);
+
+      if (plainMode || !llm) {
+        console.log(fallbackOutput);
+      } else {
+        // LLM 解释模式
+        info('🤖 正在分析...');
         const explanation = await explainResults({
           llm,
           query,
           results,
           projectRoot: index.projectRoot,
+          signal,
+          timeoutMs: options.timeoutMs,
+          maxOutputChars: options.maxOutputChars,
         });
         console.log('\n' + explanation);
-      } catch (err: any) {
-        warn(`LLM 解释失败: ${err.message}，回退到纯文本模式`);
-        console.log(formatResultsPlain(results, index.projectRoot));
       }
-      rl.prompt();
+    } catch (err: any) {
+      if (isAbortError(err)) {
+        rl.close();
+        return;
+      }
+      if (err instanceof ResourceLimitError) {
+        warn(`LLM 解释受资源限制: ${err.message}`);
+      } else {
+        warn(`LLM 解释失败: ${err.message}，回退到纯文本模式`);
+      }
+      if (fallbackOutput) console.log(fallbackOutput);
+    } finally {
+      busy = false;
+      if (!closed) rl.prompt();
     }
   });
 
-  rl.on('close', () => {
-    info('\n👋 已退出搜索');
-    process.exit(0);
+  return new Promise((resolve) => {
+    rl.once('close', () => {
+      closed = true;
+      signal.removeEventListener('abort', onAbort);
+      if (!sessionController.signal.aborted) {
+        sessionController.abort(new Error('交互式代码搜索已关闭'));
+      }
+      info('\n👋 已退出搜索');
+      resolve();
+    });
   });
 }

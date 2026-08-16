@@ -26,6 +26,14 @@ export interface DevToolkitConfig {
   template?: string;
   /** 输出结构：modern（默认）或 legacy。 */
   outputMode?: OutputMode;
+  /** 单次 LLM 调用超时毫秒数。 */
+  llmTimeoutMs?: number;
+  /** 单次模型响应 Token 上限。 */
+  maxOutputTokens?: number;
+  /** 目录批处理并发数。 */
+  batchConcurrency?: number;
+  /** 目录批处理文件数上限。 */
+  maxBatchFiles?: number;
 }
 
 const CONFIG_FILES = [
@@ -91,6 +99,10 @@ function validateConfig(raw: any, filepath: string): DevToolkitConfig {
     'verbose',
     'template',
     'outputMode',
+    'llmTimeoutMs',
+    'maxOutputTokens',
+    'batchConcurrency',
+    'maxBatchFiles',
   ];
 
   for (const key of validKeys) {
@@ -135,6 +147,23 @@ function validateConfig(raw: any, filepath: string): DevToolkitConfig {
     throw new Error(
       `配置文件 ${filepath} 中 outputMode 无效（可选: modern, legacy）`,
     );
+  }
+
+  for (const [key, minimum, maximum] of [
+    ['llmTimeoutMs', 1_000, 600_000],
+    ['maxOutputTokens', 1, 131_072],
+    ['batchConcurrency', 1, 8],
+    ['maxBatchFiles', 1, 10_000],
+  ] as const) {
+    const value = config[key];
+    if (
+      value !== undefined &&
+      (!Number.isSafeInteger(value) || value < minimum || value > maximum)
+    ) {
+      throw new Error(
+        `配置文件 ${filepath} 中 ${key} 必须是 ${minimum}-${maximum} 的整数`,
+      );
+    }
   }
 
   return config;

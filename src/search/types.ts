@@ -171,6 +171,12 @@ export interface ExplainOptions {
   results: SearchResult[];
   /** 项目根目录 */
   projectRoot: string;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
+  /** LLM 调用超时。 */
+  timeoutMs?: number;
+  /** LLM 响应字符上限。 */
+  maxOutputChars?: number;
 }
 
 /** 索引文件元数据 */

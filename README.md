@@ -414,11 +414,17 @@ Options:
   --base-url <url>     LLM API Base URL（覆盖预设）
   --api-key <key>      API Key（建议用环境变量）
   --local-model <name> 本地服务中的真实模型名
+  --llm-timeout <ms>   单次 LLM 调用超时（默认 120000ms）
+  --max-output-tokens <n> 单次模型响应 Token 上限（默认 8192）
+  --batch-concurrency <n> 目录批处理并发数（默认 2，最大 8）
+  --max-batch-files <n> 目录批处理文件数上限（默认 100）
   --convert <file>     转换规则文件（结合 --type 指定目标）
   --sync               自动发现并同步项目中的 Agent 规则
   --sync-from <agent>  同步源 Agent（默认 auto）
   --sync-to <agents>   同步目标 Agent，多个用逗号分隔
   --eval <skillFile>   对技能包执行自动化对照评测
+  --eval-concurrency <n> 技能评测并发数（默认 2，最大 4）
+  --eval-max-cases <n> 技能评测用例上限（默认 20）
   --scan-code          扫描项目代码并构建搜索索引
   --search <query>     用自然语言搜索项目代码
   --no-explain         搜索结果不使用 LLM 解释（仅显示代码片段）
@@ -433,13 +439,19 @@ Options:
   -h, --help           帮助
 ```
 
+长任务支持 `AbortSignal`、单次 LLM 超时、Token/字符上限、LLM 调用预算和受控批处理并发；MCP 客户端也可通过 `notifications/cancelled` 取消进行中的工具请求。
+
 也支持项目级配置文件 `.devtoolkit.json`，CLI 参数优先覆盖配置文件值：
 
 ```json
 {
   "type": "codex",
   "model": "deepseek-chat",
-  "outputMode": "modern"
+  "outputMode": "modern",
+  "llmTimeoutMs": 120000,
+  "maxOutputTokens": 8192,
+  "batchConcurrency": 2,
+  "maxBatchFiles": 100
 }
 ```
 
@@ -477,8 +489,12 @@ Sources (URL/PDF/HTML/MD, 可多个)
 ## 🧪 测试
 
 ```bash
-# 全套测试
-npm test
+# 单元/集成测试与覆盖率硬门槛
+npm run test:coverage
+
+# Chromium Web UI 端到端测试（首次先安装浏览器）
+npx playwright install chromium
+npm run test:e2e
 
 # 类型检查
 npm run typecheck
@@ -495,7 +511,9 @@ npm run build
 - ✅ 现代输出：Codex 技能目录 / Cursor MDC / Claude Rules
 - ✅ 质量基线与真实产物增量缓存
 - ✅ Pipeline：端到端编排（mock LLM）
-- ✅ E2E：真实网页加载
+- ✅ URL E2E：完全离线的抓取传输桩与正文提取链路
+- ✅ Browser E2E：真实 Chromium 下的首页、页签、安全头和规则转换
+- ✅ CI：Ubuntu 多 Node 版本 + macOS/Windows 跨平台验证
 
 ## 📦 编程式 API
 

@@ -22,6 +22,7 @@ import {
   succeedSpinner,
   failSpinner,
 } from '../utils/logger.js';
+import { ResourceLimitError, isAbortError } from '../utils/abort.js';
 
 export {
   buildIndex,
@@ -137,6 +138,11 @@ export async function searchAndPrint(
   useExplain: boolean,
   root?: string,
   options?: SearchOptions,
+  runtime?: {
+    signal?: AbortSignal;
+    llmTimeoutMs?: number;
+    maxOutputChars?: number;
+  },
 ): Promise<void> {
   const { results, index } = await searchProjectCode(query, options, root);
 
@@ -148,11 +154,15 @@ export async function searchAndPrint(
         query,
         results,
         projectRoot: index.projectRoot,
+        signal: runtime?.signal,
+        timeoutMs: runtime?.llmTimeoutMs,
+        maxOutputChars: runtime?.maxOutputChars,
       });
       succeedSpinner('分析完成');
       console.log('\n' + explanation);
     } catch (err: any) {
       failSpinner(`LLM 分析失败: ${err.message}`);
+      if (isAbortError(err) || err instanceof ResourceLimitError) throw err;
       console.log(formatResultsPlain(results, index.projectRoot));
     }
   } else {
@@ -167,6 +177,11 @@ export async function startSearchSession(
   llm: LLMConfig | undefined,
   useExplain: boolean,
   root?: string,
+  runtime?: {
+    signal?: AbortSignal;
+    llmTimeoutMs?: number;
+    maxOutputChars?: number;
+  },
 ): Promise<void> {
   let index = await loadIndex(root || process.cwd());
 
@@ -184,9 +199,12 @@ export async function startSearchSession(
     );
   }
 
-  startInteractiveSearch({
+  await startInteractiveSearch({
     index,
     llm,
     useExplain,
+    signal: runtime?.signal,
+    timeoutMs: runtime?.llmTimeoutMs,
+    maxOutputChars: runtime?.maxOutputChars,
   });
 }

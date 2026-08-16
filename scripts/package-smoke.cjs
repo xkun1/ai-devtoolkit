@@ -52,5 +52,7 @@ const help = execFileSync(process.execPath, [join(root, 'bin/cli.js'), '--help']
 });
 assert(help.includes('--watch'), 'CLI 缺少 --watch');
 assert(help.includes('--local-model'), 'CLI 缺少 --local-model');
+assert(help.includes('--llm-timeout'), 'CLI 缺少 --llm-timeout');
+assert(help.includes('--max-output-tokens'), 'CLI 缺少 --max-output-tokens');
 
 console.log('发布包 smoke test 通过');

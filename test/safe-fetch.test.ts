@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isPublicIp, validatePublicHttpUrl } from '../src/utils/safe-fetch.js';
+import {
+  fetchPublicText,
+  isPublicIp,
+  validatePublicHttpUrl,
+} from '../src/utils/safe-fetch.js';
 
 describe('安全远程抓取校验', () => {
   it('允许公网 HTTP(S) URL', () => {
@@ -42,5 +46,13 @@ describe('安全远程抓取校验', () => {
     expect(isPublicIp('::7f00:1')).toBe(false);
     expect(isPublicIp('2002:7f00:1::')).toBe(false);
     expect(isPublicIp('2001:4860:4860::8888')).toBe(true);
+  });
+
+  it('预先取消时不会发起网络请求', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('停止抓取'));
+    await expect(
+      fetchPublicText('https://example.com', { signal: controller.signal }),
+    ).rejects.toThrow('停止抓取');
   });
 });

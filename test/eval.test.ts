@@ -160,4 +160,39 @@ describe('技能效果评测 — 评测执行与报告 (runner)', () => {
       }),
     );
   });
+
+  it('取消信号不会被降级逻辑吞掉', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('停止评测'));
+    await expect(
+      runSkillEval(MOCK_SKILL, {
+        llm: MOCK_LLM,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('停止评测');
+    expect(mockCallLLM).not.toHaveBeenCalled();
+  });
+
+  it('严格执行评测 LLM 调用预算', async () => {
+    mockCallLLM.mockResolvedValue('普通回答');
+    await expect(
+      runSkillEval(MOCK_SKILL, {
+        llm: MOCK_LLM,
+        maxLLMCalls: 2,
+        suite: {
+          skillName: 'budget',
+          createdAt: Date.now(),
+          cases: [
+            {
+              id: 'budget-1',
+              query: '如何处理？',
+              expectedKeywords: ['签名'],
+              expectedConclusion: '验证签名',
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow('2 次 LLM 调用');
+    expect(mockCallLLM).toHaveBeenCalledTimes(2);
+  });
 });

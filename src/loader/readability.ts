@@ -2,7 +2,7 @@
  * 网页正文提取器：fetch HTML → cheerio 清洗 → turndown 转 Markdown
  * 启发式策略：移除噪声标签 → 定位正文容器 → 转换为干净的 Markdown
  */
-import { fetchPublicText } from '../utils/safe-fetch.js';
+import { fetchPublicText, type SafeFetchOptions } from '../utils/safe-fetch.js';
 
 /** 从 HTML 字符串提取正文（cheerio 清洗 + turndown 转 Markdown） */
 export async function extractFromHtml(html: string): Promise<{
@@ -114,12 +114,15 @@ export async function extractFromHtml(html: string): Promise<{
 }
 
 /** 从 URL 抓取并提取正文 */
-export async function extractContent(url: string): Promise<{
+export async function extractContent(
+  url: string,
+  options: SafeFetchOptions = {},
+): Promise<{
   content: string;
   title: string;
   meta: Record<string, string>;
 }> {
-  const html = await fetchHtml(url);
+  const html = await fetchHtml(url, options);
   const result = await extractFromHtml(html);
   return {
     ...result,
@@ -128,8 +131,11 @@ export async function extractContent(url: string): Promise<{
 }
 
 /** 抓取公网 HTML，统一执行 SSRF、重定向、超时与响应体大小校验。 */
-async function fetchHtml(url: string): Promise<string> {
-  return (await fetchPublicText(url)).body;
+async function fetchHtml(
+  url: string,
+  options: SafeFetchOptions,
+): Promise<string> {
+  return (await fetchPublicText(url, options)).body;
 }
 
 /** 启发式：找文本密度最高的块级容器 */

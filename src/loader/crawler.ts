@@ -9,6 +9,7 @@
 import { extractFromHtml } from './readability.js';
 import type { LoadedDocument } from '../types/index.js';
 import { fetchPublicText } from '../utils/safe-fetch.js';
+import { isAbortError, throwIfAborted } from '../utils/abort.js';
 
 export interface CrawlOptions {
   /** 最大深度（根页面 = 0） */
@@ -19,6 +20,8 @@ export interface CrawlOptions {
   sameOrigin?: boolean;
   /** URL 包含模式（正则，只有匹配的 URL 才爬取） */
   urlPattern?: RegExp;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
 }
 
 interface CrawlTask {
@@ -33,6 +36,7 @@ export async function crawlSite(
   rootUrl: string,
   options: CrawlOptions = {},
 ): Promise<LoadedDocument> {
+  throwIfAborted(options.signal, '站点爬取');
   const maxDepth = options.maxDepth ?? 2;
   const maxPages = options.maxPages ?? 10;
   const sameOrigin = options.sameOrigin ?? true;
@@ -52,13 +56,14 @@ export async function crawlSite(
   const queue: CrawlTask[] = [{ url: rootUrl, depth: 0 }];
 
   while (queue.length > 0 && docs.length < maxPages) {
+    throwIfAborted(options.signal, '站点爬取');
     const { url, depth } = queue.shift()!;
     const normalized = normalizeUrl(url);
     if (visited.has(normalized)) continue;
     visited.add(normalized);
 
     // 抓取 HTML 一次
-    const html = await fetchHtml(normalized);
+    const html = await fetchHtml(normalized, options.signal);
     if (!html) continue;
 
     // 提取正文
@@ -161,10 +166,11 @@ function normalizeUrl(url: string): string {
 }
 
 /** 抓取 HTML */
-async function fetchHtml(url: string): Promise<string> {
+async function fetchHtml(url: string, signal?: AbortSignal): Promise<string> {
   try {
-    return (await fetchPublicText(url)).body;
-  } catch {
+    return (await fetchPublicText(url, { signal })).body;
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     return '';
   }
 }

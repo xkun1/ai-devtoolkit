@@ -8,9 +8,11 @@ import {
   buildReductionPrompt,
   buildSynthesisPrompt,
 } from './prompts.js';
+import { ResourceLimitError, throwIfAborted } from '../utils/abort.js';
 
 const REDUCTION_INPUT_CHARS = 48_000;
 const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_MAX_LLM_CALLS = 100;
 
 export interface TransformResult {
   content: string;
@@ -26,6 +28,10 @@ export interface TransformResult {
 export interface TransformOptions {
   chunkChars?: number;
   concurrency?: number;
+  signal?: AbortSignal;
+  llmTimeoutMs?: number;
+  maxOutputChars?: number;
+  maxLLMCalls?: number;
 }
 
 /** 用 LLM 将原始文档提炼为结构化技能知识 */
@@ -57,6 +63,8 @@ export async function transformDocumentToSkill(
   template?: SkillTemplate,
   options: TransformOptions = {},
 ): Promise<TransformResult> {
+  throwIfAborted(options.signal, '技能提炼');
+  const maxLLMCalls = normalizeMaxLLMCalls(options.maxLLMCalls);
   const chunks = splitDocument(
     doc.content,
     options.chunkChars ?? DEFAULT_CHUNK_CHARS,
@@ -72,48 +80,60 @@ export async function transformDocumentToSkill(
     reductionPasses: 0,
   };
 
-  if (chunks.length <= 1) {
+  const invokeLLM = async (prompt: string): Promise<string> => {
+    throwIfAborted(options.signal, '技能提炼');
+    if (stats.llmCalls >= maxLLMCalls) {
+      throw new ResourceLimitError(
+        `技能提炼超过 ${maxLLMCalls} 次 LLM 调用限制`,
+      );
+    }
     stats.llmCalls++;
+    return callLLM(prompt, config, {
+      signal: options.signal,
+      timeoutMs: options.llmTimeoutMs,
+      maxOutputChars: options.maxOutputChars,
+    });
+  };
+
+  if (chunks.length <= 1) {
     return {
-      content: await callLLM(
-        buildPrompt(doc, agentType, name, template),
-        config,
-      ),
+      content: await invokeLLM(buildPrompt(doc, agentType, name, template)),
       stats,
     };
   }
 
   const concurrency = normalizeConcurrency(options.concurrency);
-  let notes = await mapWithConcurrency(chunks, concurrency, async (chunk) => {
-    stats.llmCalls++;
-    return callLLM(
-      buildChunkExtractionPrompt(
-        doc,
-        chunk.content,
-        chunk.index,
-        chunks.length,
-        agentType,
+  let notes = await mapWithConcurrency(
+    chunks,
+    concurrency,
+    async (chunk) =>
+      invokeLLM(
+        buildChunkExtractionPrompt(
+          doc,
+          chunk.content,
+          chunk.index,
+          chunks.length,
+          agentType,
+        ),
       ),
-      config,
-    );
-  });
+    options.signal,
+  );
 
   while (combinedLength(notes) > REDUCTION_INPUT_CHARS && notes.length > 1) {
+    throwIfAborted(options.signal, '技能提炼');
     stats.reductionPasses++;
     const batches = packNotes(notes, REDUCTION_INPUT_CHARS);
-    notes = await mapWithConcurrency(batches, concurrency, async (batch) => {
-      stats.llmCalls++;
-      return callLLM(
-        buildReductionPrompt(batch, stats.reductionPasses),
-        config,
-      );
-    });
+    notes = await mapWithConcurrency(
+      batches,
+      concurrency,
+      async (batch) =>
+        invokeLLM(buildReductionPrompt(batch, stats.reductionPasses)),
+      options.signal,
+    );
   }
 
-  stats.llmCalls++;
-  const content = await callLLM(
+  const content = await invokeLLM(
     buildSynthesisPrompt(doc, notes, agentType, name, template),
-    config,
   );
   return { content, stats };
 }
@@ -122,6 +142,18 @@ function normalizeConcurrency(value?: number): number {
   return Number.isSafeInteger(value) && value! > 0
     ? Math.min(value!, 8)
     : DEFAULT_CONCURRENCY;
+}
+
+function normalizeMaxLLMCalls(value?: number): number {
+  const normalized = value ?? DEFAULT_MAX_LLM_CALLS;
+  if (
+    !Number.isSafeInteger(normalized) ||
+    normalized < 1 ||
+    normalized > 10_000
+  ) {
+    throw new RangeError('maxLLMCalls 必须是 1-10000 的整数');
+  }
+  return normalized;
 }
 
 function combinedLength(items: string[]): number {
@@ -149,19 +181,31 @@ async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   mapper: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal,
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (true) {
+    while (!failed) {
+      throwIfAborted(signal, '并发提炼');
       const index = next++;
       if (index >= items.length) return;
-      results[index] = await mapper(items[index], index);
+      try {
+        results[index] = await mapper(items[index], index);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
-  await Promise.all(
+  const settled = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
   );
+  const rejected = settled.find(
+    (item): item is PromiseRejectedResult => item.status === 'rejected',
+  );
+  if (rejected) throw rejected.reason;
   return results;
 }
 

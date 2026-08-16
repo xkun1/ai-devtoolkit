@@ -6,6 +6,12 @@ import { loadFromFile } from './file.js';
 import { loadFromHtml } from './html.js';
 import { loadFromDocx } from './doc.js';
 import { loadFromOpenApi, isOpenApiSpec } from './openapi.js';
+import { loadFromPostman, isPostmanCollection } from './postman.js';
+import { isAbortError, throwIfAborted } from '../utils/abort.js';
+
+export interface LoadOptions {
+  signal?: AbortSignal;
+}
 
 /** 判断 source 类型 */
 export function detectSourceType(source: string): SourceType {
@@ -19,31 +25,38 @@ export function detectSourceType(source: string): SourceType {
 }
 
 /** 统一加载入口：按来源分发 */
-export async function loadDocument(source: string): Promise<LoadedDocument> {
+export async function loadDocument(
+  source: string,
+  options: LoadOptions = {},
+): Promise<LoadedDocument> {
+  throwIfAborted(options.signal, '文档加载');
   const type = detectSourceType(source);
   switch (type) {
     case 'url':
-      return loadFromUrl(source);
+      return loadFromUrl(source, { signal: options.signal });
     case 'pdf':
       return loadFromPdf(source);
     case 'html':
       return loadFromHtml(source);
     default: {
-      // docx 文件用专用 loader
       if (/\.docx?$/i.test(source)) return loadFromDocx(source);
 
-      // OpenAPI / Swagger 规范检查（JSON / YAML）
+      // JSON / YAML 规范检查（Postman 或 OpenAPI）
       if (
         /\.(json|ya?ml)$/i.test(source) ||
-        /(openapi|swagger|api[-_]docs)/i.test(source)
+        /(openapi|swagger|postman|collection|api[-_]docs)/i.test(source)
       ) {
         try {
           const raw = await readFile(source, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (isPostmanCollection(parsed)) {
+            return await loadFromPostman(source);
+          }
           if (isOpenApiSpec(raw, source)) {
             return await loadFromOpenApi(source, raw);
           }
         } catch {
-          // 不是 OpenAPI 则走普通文件读取
+          // 不是规范格式则走普通文件读取
         }
       }
 
@@ -52,22 +65,25 @@ export async function loadDocument(source: string): Promise<LoadedDocument> {
   }
 }
 
-/** 并发加载多个来源；任一失败即整体失败并指明来源 */
+/** 并发加载多个来源 */
 export async function loadDocuments(
   sources: string[],
+  options: LoadOptions = {},
 ): Promise<LoadedDocument[]> {
   return Promise.all(
     sources.map(async (source) => {
       try {
-        return await loadDocument(source);
-      } catch (err: any) {
-        throw new Error(`加载 ${source} 失败: ${err.message}`, { cause: err });
+        return await loadDocument(source, options);
+      } catch (err: unknown) {
+        if (isAbortError(err)) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`加载 ${source} 失败: ${message}`, { cause: err });
       }
     }),
   );
 }
 
-/** 将多个文档合并为一个（带来源标题头，便于 LLM 区分） */
+/** 将多个文档合并为一个 */
 export function mergeDocuments(docs: LoadedDocument[]): LoadedDocument {
   if (docs.length === 1) return docs[0];
 
@@ -99,6 +115,19 @@ export type {
   OpenApiEndpoint,
   ParsedOpenApi,
 } from './openapi.js';
+export {
+  loadFromPostman,
+  isPostmanCollection,
+  parsePostmanCollection,
+  renderPostmanToMarkdown,
+  extractPostmanFromBuffer,
+} from './postman.js';
+export type {
+  PostmanEndpoint,
+  ParsedPostmanCollection,
+  PostmanHeader,
+  PostmanQueryParam,
+} from './postman.js';
 export { crawlSite } from './crawler.js';
 export type { CrawlOptions } from './crawler.js';
 export {

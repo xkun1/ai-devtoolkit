@@ -300,6 +300,59 @@ describe('Pipeline E2E (mocked LLM)', () => {
     }
   });
 
+  it('目录批量模式限制文件总数', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-batch-limit-'));
+    await writeFile(
+      join(dir, 'one.md'),
+      '# One\n\nDocumentation with enough content for the batch file limit test.',
+    );
+    await writeFile(
+      join(dir, 'two.md'),
+      '# Two\n\nDocumentation with enough content for the batch file limit test.',
+    );
+
+    await expect(
+      runPipeline(dir, {
+        agentType: 'codex',
+        dryRun: true,
+        maxBatchFiles: 1,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      }),
+    ).rejects.toThrow('批处理上限');
+  });
+
+  it('目录批量模式使用受控并发', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-batch-concurrency-'));
+    for (const name of ['one', 'two', 'three']) {
+      await writeFile(
+        join(dir, `${name}.md`),
+        `# ${name}\n\nDocumentation with enough content to verify bounded batch concurrency.`,
+      );
+    }
+    let active = 0;
+    let peak = 0;
+    vi.mocked(callLLM).mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active--;
+      return '# Mocked Skill\n\n- concurrent result';
+    });
+    try {
+      await runPipeline(dir, {
+        agentType: 'codex',
+        dryRun: true,
+        batchConcurrency: 2,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      });
+      expect(peak).toBe(2);
+    } finally {
+      vi.mocked(callLLM).mockResolvedValue(
+        '# Mocked Skill\n\n- This is a test skill',
+      );
+    }
+  });
+
   it('未指定输出路径时使用现代 Codex 技能目录', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-modern-'));
     const mdPath = join(dir, 'modern.md');

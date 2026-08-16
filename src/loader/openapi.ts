@@ -6,7 +6,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import type { LoadedDocument } from '../types/index.js';
-import { fetchPublicText } from '../utils/safe-fetch.js';
+import { fetchPublicText, type SafeFetchOptions } from '../utils/safe-fetch.js';
 import { parse as parseYaml } from 'yaml';
 
 export interface OpenApiParameter {
@@ -647,12 +647,13 @@ function parseYamlOrJson(raw: string): any {
 export async function loadFromOpenApi(
   source: string,
   content?: string,
+  fetchOptions: SafeFetchOptions = {},
 ): Promise<LoadedDocument> {
   let rawContent = content;
 
   if (!rawContent) {
     if (/^https?:\/\//i.test(source)) {
-      rawContent = (await fetchPublicText(source)).body;
+      rawContent = (await fetchPublicText(source, fetchOptions)).body;
     } else {
       rawContent = await readFile(source, 'utf-8');
     }

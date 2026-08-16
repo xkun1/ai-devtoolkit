@@ -20,7 +20,12 @@ import { printProjectGraph, printImpactAnalysis } from './graph/index.js';
 import { isLocalModel, resolveModel, resolveLocalModelName } from './models.js';
 import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
-import type { AgentType, OutputMode, PipelineOptions } from './types/index.js';
+import type {
+  AgentType,
+  LLMConfig,
+  OutputMode,
+  PipelineOptions,
+} from './types/index.js';
 
 interface CliOptions {
   type?: string;
@@ -62,9 +67,16 @@ interface CliOptions {
   eval?: string;
   graph?: boolean;
   impact?: string;
+  llmTimeout?: number;
+  maxOutputTokens?: number;
+  batchConcurrency?: number;
+  maxBatchFiles?: number;
+  evalConcurrency?: number;
+  evalMaxCases?: number;
 }
 
 const PACKAGE_VERSION = readPackageVersion();
+let cliAbortSignal: AbortSignal | undefined;
 
 function parseInteger(
   value: string,
@@ -117,6 +129,26 @@ export function createProgram(): Command {
     .option('--base-url <url>', 'LLM API Base URL（覆盖预设）')
     .option('--api-key <key>', 'API Key（建议用环境变量）')
     .option('--local-model <name>', '本地服务中的真实模型名')
+    .option(
+      '--llm-timeout <ms>',
+      '单次 LLM 调用超时（1000-600000ms）',
+      (value) => parseInteger(value, 'llm-timeout', 1000, 600000),
+    )
+    .option(
+      '--max-output-tokens <n>',
+      '单次模型响应 Token 上限（1-131072）',
+      (value) => parseInteger(value, 'max-output-tokens', 1, 131072),
+    )
+    .option(
+      '--batch-concurrency <n>',
+      '目录批处理并发数（1-8，默认 2）',
+      (value) => parseInteger(value, 'batch-concurrency', 1, 8),
+    )
+    .option(
+      '--max-batch-files <n>',
+      '目录批处理文件数上限（1-10000，默认 100）',
+      (value) => parseInteger(value, 'max-batch-files', 1, 10000),
+    )
     .option('-v, --verbose', '显示详细日志')
     .option('--template <id>', '使用预设模板')
     .option('--list-templates', '列出所有可用模板')
@@ -144,6 +176,16 @@ export function createProgram(): Command {
     .option(
       '--eval <skillFile>',
       '自动生成测试集并对指定技能包进行效果与命中度对照评测',
+    )
+    .option(
+      '--eval-concurrency <n>',
+      '技能评测并发数（1-4，默认 2）',
+      (value) => parseInteger(value, 'eval-concurrency', 1, 4),
+    )
+    .option(
+      '--eval-max-cases <n>',
+      '技能评测用例上限（1-20，默认 20）',
+      (value) => parseInteger(value, 'eval-max-cases', 1, 20),
     )
     // ── 代码搜索与依赖分析 ──
     .option(
@@ -189,13 +231,27 @@ async function runCommand(
   const model = options.model || cfg.model || 'deepseek-chat';
   const baseUrl = options.baseUrl || cfg.baseUrl;
   const apiKey = options.apiKey || cfg.apiKey;
+  const llmTimeoutMs = options.llmTimeout ?? cfg.llmTimeoutMs;
+  const maxOutputTokens = options.maxOutputTokens ?? cfg.maxOutputTokens;
+  const batchConcurrency = options.batchConcurrency ?? cfg.batchConcurrency;
+  const maxBatchFiles = options.maxBatchFiles ?? cfg.maxBatchFiles;
   setVerbose(options.verbose ?? cfg.verbose ?? false);
 
   // ── 技能效果评测 ──
   if (options.eval) {
     const localModelName = resolveLocalModelName(model, options.localModel);
-    const llm = resolveModel(model, { apiKey, baseUrl, localModelName });
-    await evalSkillFile(options.eval, { llm, outputDir: options.out });
+    const llm = {
+      ...resolveModel(model, { apiKey, baseUrl, localModelName }),
+      maxOutputTokens,
+    };
+    await evalSkillFile(options.eval, {
+      llm,
+      outputDir: options.out,
+      concurrency: options.evalConcurrency,
+      maxCases: options.evalMaxCases,
+      timeoutMs: llmTimeoutMs,
+      signal: cliAbortSignal,
+    });
     return;
   }
 
@@ -253,9 +309,12 @@ async function runCommand(
     const searchRoot = sources.length > 0 ? resolve(sources[0]) : process.cwd();
 
     const localModelName = resolveLocalModelName(model, options.localModel);
-    let llmConfig: ReturnType<typeof resolveModel> | undefined;
+    let llmConfig: LLMConfig | undefined;
     try {
-      llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
+      llmConfig = {
+        ...resolveModel(model, { apiKey, baseUrl, localModelName }),
+        maxOutputTokens,
+      };
       if (!isLocalModel(model) && !llmConfig.apiKey) {
         llmConfig = undefined;
       }
@@ -278,7 +337,21 @@ async function runCommand(
         await initCodeIndex({ root: searchRoot });
       }
       info(`🔎 搜索: "${query}"`);
-      await searchAndPrint(query, llmConfig, useExplain, searchRoot);
+      if (cliAbortSignal || llmTimeoutMs !== undefined) {
+        await searchAndPrint(
+          query,
+          llmConfig,
+          useExplain,
+          searchRoot,
+          undefined,
+          {
+            signal: cliAbortSignal,
+            llmTimeoutMs,
+          },
+        );
+      } else {
+        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
+      }
       return;
     }
 
@@ -286,7 +359,10 @@ async function runCommand(
       info('╔══════════════════════════════════════╗');
       info('║   🔍 devtoolkit — 代码搜索             ║');
       info('╚══════════════════════════════════════╝');
-      await startSearchSession(llmConfig, useExplain, searchRoot);
+      await startSearchSession(llmConfig, useExplain, searchRoot, {
+        signal: cliAbortSignal,
+        llmTimeoutMs,
+      });
       return;
     }
   }
@@ -325,6 +401,8 @@ async function runCommand(
         '',
       baseURL: baseUrl,
       model,
+      llmTimeoutMs,
+      maxOutputTokens,
     });
     server.once(
       'listening',
@@ -350,12 +428,20 @@ async function runCommand(
       baseURL: baseUrl,
       apiKey,
       localModelName: options.localModel,
+      llmTimeoutMs,
+      maxOutputTokens,
     });
     return;
   }
 
   if (sources.length === 0) {
-    await handleWizardFlow(model, apiKey, baseUrl, options);
+    await handleWizardFlow(model, apiKey, baseUrl, {
+      ...options,
+      llmTimeout: llmTimeoutMs,
+      maxOutputTokens,
+      batchConcurrency,
+      maxBatchFiles,
+    });
     return;
   }
 
@@ -376,11 +462,14 @@ async function runCommand(
   }
 
   const localModelName = resolveLocalModelName(model, options.localModel);
-  const llm = resolveModel(model, {
-    apiKey,
-    baseUrl,
-    localModelName,
-  });
+  const llm = {
+    ...resolveModel(model, {
+      apiKey,
+      baseUrl,
+      localModelName,
+    }),
+    maxOutputTokens,
+  };
 
   const agentType: AgentType =
     (options.type as AgentType) || cfg.type || 'codex';
@@ -418,6 +507,10 @@ async function runCommand(
     outputMode,
     mergeDir: options.merge,
     dirMaxDepth: options.dirDepth,
+    signal: cliAbortSignal,
+    llmTimeoutMs,
+    batchConcurrency,
+    maxBatchFiles,
   };
 
   if (options.watch) {
@@ -443,12 +536,19 @@ async function handleWizardFlow(
       await runPipeline(data.sources, {
         agentType: data.agentType,
         outputPath: data.outputPath,
-        llm: data.llm,
+        llm: {
+          ...data.llm,
+          maxOutputTokens: options.maxOutputTokens ?? data.llm.maxOutputTokens,
+        },
         name: data.name,
         stdout: false,
         dryRun: false,
         force: false,
         outputMode: 'modern',
+        signal: cliAbortSignal,
+        llmTimeoutMs: options.llmTimeout,
+        batchConcurrency: options.batchConcurrency,
+        maxBatchFiles: options.maxBatchFiles,
       });
       return;
     }
@@ -470,9 +570,12 @@ async function handleWizardFlow(
 
     if (wizardAction.mode === 'search') {
       const localModelName = resolveLocalModelName(model, options.localModel);
-      let llmConfig: ReturnType<typeof resolveModel> | undefined;
+      let llmConfig: LLMConfig | undefined;
       try {
-        llmConfig = resolveModel(model, { apiKey, baseUrl, localModelName });
+        llmConfig = {
+          ...resolveModel(model, { apiKey, baseUrl, localModelName }),
+          maxOutputTokens: options.maxOutputTokens,
+        };
       } catch {
         llmConfig = undefined;
       }
@@ -481,6 +584,10 @@ async function handleWizardFlow(
           llmConfig,
           options.explain !== false && !!llmConfig,
           wizardAction.projectRoot,
+          {
+            signal: cliAbortSignal,
+            llmTimeoutMs: options.llmTimeout,
+          },
         );
       } else if (wizardAction.query) {
         await searchAndPrint(
@@ -488,6 +595,11 @@ async function handleWizardFlow(
           llmConfig,
           options.explain !== false && !!llmConfig,
           wizardAction.projectRoot,
+          undefined,
+          {
+            signal: cliAbortSignal,
+            llmTimeoutMs: options.llmTimeout,
+          },
         );
       }
       return;
@@ -517,6 +629,8 @@ async function handleWizardFlow(
           '',
         baseURL: baseUrl,
         model,
+        llmTimeoutMs: options.llmTimeout,
+        maxOutputTokens: options.maxOutputTokens,
       });
       server.once(
         'listening',
@@ -583,11 +697,18 @@ function getErrorMessage(err: unknown): string {
 }
 
 export async function runCli(argv: string[] = process.argv): Promise<void> {
+  const controller = new AbortController();
+  const onSigint = () => controller.abort(new Error('用户取消了操作'));
+  process.once('SIGINT', onSigint);
+  cliAbortSignal = controller.signal;
   try {
     await createProgram().parseAsync(argv);
   } catch (err: unknown) {
     error(`\n❌ 执行失败: ${getErrorMessage(err)}`);
     process.exitCode = 1;
+  } finally {
+    cliAbortSignal = undefined;
+    process.removeListener('SIGINT', onSigint);
   }
 }
 

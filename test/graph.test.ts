@@ -96,3 +96,58 @@ describe('代码依赖图谱 — 图构建与影响面推演 (impact & mermaid)'
     expect(mermaid).toContain('-->');
   });
 });
+
+describe('代码依赖图谱 — Go / Rust / Java 多语言依赖解析', () => {
+  it('extractImports 解析 Go 语言单行与块导入', () => {
+    const goCode = `package main
+
+import "fmt"
+import "myproject/pkg/util"
+import (
+    "net/http"
+    custom "myproject/services/auth"
+)
+`;
+    const imports = extractImports(goCode, 'go');
+    expect(imports.length).toBe(4);
+    expect(imports.some((i) => i.rawPath === 'myproject/pkg/util')).toBe(true);
+    expect(imports.some((i) => i.rawPath === 'myproject/services/auth')).toBe(
+      true,
+    );
+  });
+
+  it('extractImports 解析 Rust mod 与 use crate 导入', () => {
+    const rustCode = `
+mod models;
+pub mod service;
+
+use crate::models::User;
+use crate::service::{AuthService, Token};
+use super::helper;
+`;
+    const imports = extractImports(rustCode, 'rust');
+    expect(imports.length).toBe(5);
+    expect(imports.some((i) => i.rawPath === 'models')).toBe(true);
+    expect(imports.some((i) => i.rawPath === 'crate::models::User')).toBe(true);
+    expect(imports.some((i) => i.rawPath === 'super::helper')).toBe(true);
+  });
+
+  it('extractImports 解析 Java 业务包导入', () => {
+    const javaCode = `package com.example.app;
+
+import java.util.List;
+import com.example.service.UserService;
+import static com.example.constants.Config.MAX_RETRY;
+`;
+    const imports = extractImports(javaCode, 'java');
+    expect(imports.length).toBe(2);
+    expect(
+      imports.some((i) => i.rawPath === 'com.example.service.UserService'),
+    ).toBe(true);
+    expect(
+      imports.some(
+        (i) => i.rawPath === 'com.example.constants.Config.MAX_RETRY',
+      ),
+    ).toBe(true);
+  });
+});

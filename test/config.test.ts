@@ -88,6 +88,40 @@ describe('loadConfig', () => {
     await expect(loadConfig(badDir)).rejects.toThrow('outputMode 无效');
   });
 
+  it('读取并校验资源控制配置', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-limits-'));
+    await writeFile(
+      join(dir, '.devtoolkit.json'),
+      JSON.stringify({
+        llmTimeoutMs: 45000,
+        maxOutputTokens: 4096,
+        batchConcurrency: 4,
+        maxBatchFiles: 50,
+      }),
+    );
+
+    await expect(loadConfig(dir)).resolves.toMatchObject({
+      llmTimeoutMs: 45000,
+      maxOutputTokens: 4096,
+      batchConcurrency: 4,
+      maxBatchFiles: 50,
+    });
+  });
+
+  it.each([
+    ['llmTimeoutMs', 999],
+    ['maxOutputTokens', 0],
+    ['batchConcurrency', 9],
+    ['maxBatchFiles', 1.5],
+  ])('拒绝非法资源控制配置 %s=%s', async (key, value) => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-badlimit-'));
+    await writeFile(
+      join(dir, '.devtoolkit.json'),
+      JSON.stringify({ [key]: value }),
+    );
+    await expect(loadConfig(dir)).rejects.toThrow(`${key} 必须是`);
+  });
+
   it('子目录查找会递归到父目录', async () => {
     const root = await mkdtemp(join(tmpdir(), 'devtoolkit-parent-'));
     await writeFile(

@@ -1,5 +1,8 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ResourceLimitError, throwIfAborted } from '../utils/abort.js';
+
+const DEFAULT_MAX_FILES = 10_000;
 
 /** 支持的文档扩展名 */
 const SUPPORTED_EXTENSIONS = [
@@ -51,6 +54,10 @@ export interface ScanOptions {
   maxDepth?: number;
   /** 自定义忽略的目录名（会与内置忽略列表合并） */
   ignoreDirs?: string[];
+  /** 最多扫描的文档文件数，默认 10000。 */
+  maxFiles?: number;
+  /** 上游取消信号。 */
+  signal?: AbortSignal;
 }
 
 /** 递归扫描目录，返回所有受支持的文档文件路径 */
@@ -59,10 +66,18 @@ export async function scanDirectory(
   options: ScanOptions = {},
 ): Promise<string[]> {
   const { maxDepth = 5, ignoreDirs = [] } = options;
+  const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0 || maxDepth > 20) {
+    throw new RangeError('maxDepth 必须是 0-20 的整数');
+  }
+  if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > 100_000) {
+    throw new RangeError('maxFiles 必须是 1-100000 的整数');
+  }
   const ignored = new Set([...IGNORED_DIRS, ...ignoreDirs]);
   const results: string[] = [];
 
   async function walk(currentPath: string, depth: number): Promise<void> {
+    throwIfAborted(options.signal, '目录扫描');
     if (depth > maxDepth) return;
 
     let entries;
@@ -75,6 +90,7 @@ export async function scanDirectory(
     entries.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of entries) {
+      throwIfAborted(options.signal, '目录扫描');
       const fullPath = join(currentPath, entry.name);
 
       if (entry.isDirectory()) {
@@ -82,6 +98,9 @@ export async function scanDirectory(
         await walk(fullPath, depth + 1);
       } else if (entry.isFile() && isSupportedFile(entry.name)) {
         if (entry.name.startsWith('.')) continue;
+        if (results.length >= maxFiles) {
+          throw new ResourceLimitError(`目录扫描文件数超过 ${maxFiles} 个上限`);
+        }
         results.push(fullPath);
       }
     }
@@ -103,11 +122,29 @@ export async function expandSources(
   let hadDirectory = false;
 
   for (const source of sources) {
+    throwIfAborted(options.signal, '目录展开');
     if (await isDirectory(source)) {
       hadDirectory = true;
-      const scanned = await scanDirectory(source, options);
+      const remaining =
+        options.maxFiles === undefined
+          ? undefined
+          : options.maxFiles - files.length;
+      if (remaining !== undefined && remaining < 1) {
+        throw new ResourceLimitError(
+          `目录扫描文件数超过 ${options.maxFiles} 个上限`,
+        );
+      }
+      const scanned = await scanDirectory(source, {
+        ...options,
+        maxFiles: remaining,
+      });
       files.push(...scanned);
     } else {
+      if (options.maxFiles !== undefined && files.length >= options.maxFiles) {
+        throw new ResourceLimitError(
+          `目录扫描文件数超过 ${options.maxFiles} 个上限`,
+        );
+      }
       files.push(source);
     }
   }

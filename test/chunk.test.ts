@@ -59,4 +59,42 @@ describe('transformDocumentToSkill', () => {
     expect(prompts.join('\n')).toContain(content.slice(-300));
     expect(prompts.at(-1)).toContain('Long-document synthesis constraints');
   });
+
+  it('超过 LLM 调用预算时立即停止', async () => {
+    const content = Array.from(
+      { length: 4 },
+      (_, index) => `## Topic ${index}\n${'x'.repeat(1_200)}\n`,
+    ).join('\n');
+    await expect(
+      transformDocumentToSkill(
+        { source: 'budget.md', type: 'markdown', content },
+        { apiKey: 'mock', model: 'mock' },
+        'codex',
+        undefined,
+        undefined,
+        { chunkChars: 1_500, concurrency: 1, maxLLMCalls: 1 },
+      ),
+    ).rejects.toThrow('1 次 LLM 调用');
+    expect(callLLM).toHaveBeenCalledTimes(1);
+  });
+
+  it('预先取消时不调用 LLM', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('停止提炼'));
+    await expect(
+      transformDocumentToSkill(
+        {
+          source: 'cancel.md',
+          type: 'markdown',
+          content: '足够长的文档内容'.repeat(20),
+        },
+        { apiKey: 'mock', model: 'mock' },
+        'codex',
+        undefined,
+        undefined,
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow('停止提炼');
+    expect(callLLM).not.toHaveBeenCalled();
+  });
 });

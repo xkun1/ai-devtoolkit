@@ -107,6 +107,14 @@ describe('MCP Server — 协议握手', () => {
     ]);
     expect(responses[0]).toEqual({ jsonrpc: '2.0', id: 2, result: {} });
   });
+
+  it('接受取消通知且通知本身不产生响应', async () => {
+    const responses = await mcpExchange([
+      '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":999,"reason":"test"}}',
+      '{"jsonrpc":"2.0","id":3,"method":"ping","params":{}}',
+    ]);
+    expect(responses).toEqual([{ jsonrpc: '2.0', id: 3, result: {} }]);
+  });
 });
 
 describe('MCP Server — tools/list', () => {
@@ -141,6 +149,10 @@ describe('MCP Server — tools/list', () => {
     expect(genSkill.inputSchema.properties.sources).toBeDefined();
     expect(genSkill.inputSchema.properties.agentType).toBeDefined();
     expect(genSkill.inputSchema.required).toContain('sources');
+    expect(genSkill.inputSchema.properties.timeoutMs.maximum).toBe(600000);
+    expect(genSkill.inputSchema.properties.maxOutputTokens.maximum).toBe(
+      131072,
+    );
   });
 });
 

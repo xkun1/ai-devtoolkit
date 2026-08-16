@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  quality:
+    name: Node ${{ matrix.node-version }} / Ubuntu
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -16,30 +21,80 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: 使用 Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-
       - name: 安装依赖
         run: npm ci
-
+      - name: 检查 Web UI 内嵌产物
+        run: npm run check:ui
       - name: 类型检查
         run: npm run typecheck
-
       - name: 代码检查
         run: npm run lint
-
       - name: 格式检查
         run: npm run format:check
-
       - name: 构建
         run: npm run build
-
-      - name: 测试
+      - name: 单元与集成测试
         run: npm test
-
       - name: 发布包检查
         run: npm run test:package
+
+  cross-platform:
+    name: Node 22 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:package
+
+  coverage:
+    name: 覆盖率门槛
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+      - name: 保存覆盖率报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  browser-e2e:
+    name: Chromium Web UI E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 安装 Chromium
+        run: npx playwright install --with-deps chromium
+      - name: 浏览器端到端测试
+        run: npm run test:e2e

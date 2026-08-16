@@ -124,4 +124,12 @@ describe('detectLocalModels', () => {
     const models = await detectLocalModels('http://localhost:59999///');
     expect(models).toEqual([]);
   }, 10000);
+
+  it('预先取消时不发起探测请求', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('停止探测'));
+    await expect(
+      detectLocalModels('http://localhost:59999', 5000, controller.signal),
+    ).rejects.toThrow('停止探测');
+  });
 });

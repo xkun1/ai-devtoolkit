@@ -20,7 +20,8 @@ npm install
    npm run typecheck   # 类型检查
    npm run lint        # ESLint
    npm run format:check # Prettier 格式
-   npm test            # 单元测试
+   npm run test:coverage # 单元测试与覆盖率门槛
+   npm run test:e2e    # Chromium Web UI 端到端测试
    npm run build       # 构建
    ```
 3. 提交代码（pre-commit hook 会自动跑 lint-staged）
@@ -49,7 +50,9 @@ npm install
 - 新功能必须附带测试
 - 测试文件放在 `test/` 目录
 - 不依赖网络的测试不应该需要 API Key
-- E2E 测试在无网络时应该自动 skip
+- 默认测试必须完全离线、可重复，不允许依赖公网可用性
+- Web UI 交互变更需补充 `e2e/` 下的 Playwright 测试
+- 首次运行浏览器测试前执行 `npx playwright install chromium`
 
 ### 🐛 报告 Issue
 
@@ -66,4 +69,4 @@ npm version patch  # 或 minor / major
 npm publish
 git push --tags
 ```
-`prepublishOnly` 脚本会自动执行 typecheck + build + test。
+`prepublishOnly` 脚本会自动执行 UI 产物校验、类型检查、Lint、格式检查、构建、覆盖率测试、浏览器 E2E 与发布包检查。

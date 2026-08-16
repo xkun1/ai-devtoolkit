@@ -7,6 +7,8 @@ SKILL.md
 .cursorrules
 CLAUDE.md
 coverage/
+test-results/
+playwright-report/
 .DS_Store
 *.tsbuildinfo
 .devtoolkit-index.json

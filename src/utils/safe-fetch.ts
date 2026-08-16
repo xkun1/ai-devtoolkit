@@ -2,11 +2,19 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
+import { throwIfAborted, toAbortError } from './abort.js';
 
 export interface SafeFetchResult {
   body: string;
   contentType: string;
   finalUrl: string;
+}
+
+export interface SafeFetchOptions {
+  maxBytes?: number;
+  timeoutMs?: number;
+  maxRedirects?: number;
+  signal?: AbortSignal;
 }
 
 export class SafeFetchError extends Error {
@@ -24,17 +32,15 @@ export class SafeFetchError extends Error {
  */
 export async function fetchPublicText(
   input: string,
-  options: {
-    maxBytes?: number;
-    timeoutMs?: number;
-    maxRedirects?: number;
-  } = {},
+  options: SafeFetchOptions = {},
 ): Promise<SafeFetchResult> {
+  throwIfAborted(options.signal, '远程文档抓取');
   return fetchStep(
     input,
     options.maxBytes ?? 5 * 1024 * 1024,
     options.timeoutMs ?? 30_000,
     options.maxRedirects ?? 5,
+    options.signal,
   );
 }
 
@@ -43,7 +49,9 @@ async function fetchStep(
   maxBytes: number,
   timeoutMs: number,
   redirectsLeft: number,
+  signal?: AbortSignal,
 ): Promise<SafeFetchResult> {
+  throwIfAborted(signal, '远程文档抓取');
   const url = validatePublicHttpUrl(input);
   const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
 
@@ -74,6 +82,7 @@ async function fetchStep(
             maxBytes,
             timeoutMs,
             redirectsLeft - 1,
+            signal,
           ).then(resolve, reject);
           return;
         }
@@ -126,6 +135,11 @@ async function fetchStep(
     req.setTimeout(timeoutMs, () => {
       req.destroy(new SafeFetchError(504, '抓取文档超时'));
     });
+    const onAbort = () => {
+      req.destroy(toAbortError(signal?.reason, '远程文档抓取已取消'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    req.once('close', () => signal?.removeEventListener('abort', onAbort));
     req.on('error', reject);
     req.end();
   });
