@@ -293,10 +293,19 @@ export {
   generateMermaidGraph,
   printProjectGraph,
   printImpactAnalysis,
+  loadGraphCache,
+  saveGraphCache,
+  clearGraphCache,
+  GRAPH_CACHE_FILENAME,
+  GRAPH_CACHE_VERSION,
 } from './graph/index.js';
 export type {
   DependencyGraph,
   GraphNode,
   GraphEdge,
+  DependencyGraphStats,
   ImpactAnalysisResult,
+  GraphOptions,
+  DependencyGraphCache,
+  FileNodeCache,
 } from './graph/index.js';

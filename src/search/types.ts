@@ -159,6 +159,10 @@ export interface SearchOptions {
   searchSymbols?: boolean;
   /** 是否搜索文件路径（默认 true） */
   searchFilePath?: boolean;
+  /** 检索模式：hybrid (默认: BM25 + 向量语义融合) | exact (精准关键词) | semantic (语义优先) */
+  mode?: 'hybrid' | 'exact' | 'semantic';
+  /** 语义向量打分权重 (0-1, 默认 0.35) */
+  semanticWeight?: number;
 }
 
 /** 解释结果的选项 */

@@ -3,17 +3,30 @@
  *
  * 扫描项目代码，解析 import/export/use/mod 语句，构建项目有向依赖图。
  * 支持 TypeScript, JavaScript, Python, Go, Rust, Java 等主流语言。
+ * 支持增量文件缓存加速（Monorepo 与超大工程极速秒级解析）。
  */
 import { readFile } from 'node:fs/promises';
 import { join, dirname, normalize } from 'node:path';
 import type { DependencyGraph, GraphEdge, GraphNode } from './types.js';
 import type { ScanCodeOptions } from '../search/types.js';
 import { scanCodeFiles, extractSymbols } from '../search/scanner.js';
+import {
+  loadGraphCache,
+  saveGraphCache,
+  GRAPH_CACHE_VERSION,
+  type FileNodeCache,
+} from './cache.js';
+
+export interface GraphOptions extends ScanCodeOptions {
+  /** 是否启用增量分析缓存（默认 true） */
+  useCache?: boolean;
+}
 
 export async function buildDependencyGraph(
-  options: ScanCodeOptions = {},
+  options: GraphOptions = {},
 ): Promise<DependencyGraph> {
   const root = options.root || process.cwd();
+  const useCache = options.useCache !== false;
   const files = await scanCodeFiles(options);
 
   const fileSet = new Set(files.map((f) => f.path.replaceAll('\\', '/')));
@@ -35,21 +48,55 @@ export async function buildDependencyGraph(
     dependents[normPath] = [];
   }
 
+  // 1. 读取增量分析缓存
+  const oldCache = useCache ? await loadGraphCache(root) : null;
+  const newFileCache: Record<string, FileNodeCache> = {};
+  let cacheHits = 0;
+  let cacheMisses = 0;
+
   for (const f of files) {
     const normPath = f.path.replaceAll('\\', '/');
-    let content: string;
-    try {
-      content = await readFile(join(root, f.path), 'utf-8');
-    } catch {
-      continue;
+    const cached = oldCache?.fileCache?.[normPath];
+
+    let exportsList: string[];
+    let importsList: RawImport[];
+
+    // 若修改时间与文件大小均一致，直接复用缓存中的 exports 和 imports
+    if (
+      cached &&
+      cached.mtime === f.lastModified &&
+      cached.size === f.size &&
+      Array.isArray(cached.exports) &&
+      Array.isArray(cached.imports)
+    ) {
+      cacheHits++;
+      exportsList = cached.exports;
+      importsList = cached.imports;
+    } else {
+      cacheMisses++;
+      let content: string;
+      try {
+        content = await readFile(join(root, f.path), 'utf-8');
+      } catch {
+        continue;
+      }
+
+      const symbols = extractSymbols(content, f.language, normPath);
+      exportsList = symbols.map((s) => s.name);
+      importsList = extractImports(content, f.language);
     }
 
-    const symbols = extractSymbols(content, f.language, normPath);
-    nodes[normPath].exports = symbols.map((s) => s.name);
+    newFileCache[normPath] = {
+      mtime: f.lastModified || 0,
+      size: f.size,
+      lines: f.lines,
+      exports: exportsList,
+      imports: importsList,
+    };
 
-    const imports = extractImports(content, f.language);
+    nodes[normPath].exports = exportsList;
 
-    for (const imp of imports) {
+    for (const imp of importsList) {
       const resolvedTarget = resolveImportPath(
         normPath,
         imp.rawPath,
@@ -73,6 +120,20 @@ export async function buildDependencyGraph(
     }
   }
 
+  // 2. 异步持久化写入新缓存
+  if (useCache) {
+    try {
+      await saveGraphCache(root, {
+        version: GRAPH_CACHE_VERSION,
+        projectRoot: root,
+        updatedAt: Date.now(),
+        fileCache: newFileCache,
+      });
+    } catch {
+      // 忽略缓存写入失败
+    }
+  }
+
   const isolatedFiles = Object.keys(nodes).filter(
     (k) => dependencies[k].length === 0 && dependents[k].length === 0,
   ).length;
@@ -88,6 +149,8 @@ export async function buildDependencyGraph(
       totalFiles: files.length,
       totalEdges: edges.length,
       isolatedFiles,
+      cacheHits,
+      cacheMisses,
     },
   };
 }

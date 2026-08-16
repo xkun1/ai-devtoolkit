@@ -151,3 +151,62 @@ import static com.example.constants.Config.MAX_RETRY;
     ).toBe(true);
   });
 });
+
+describe('代码依赖图谱 — 大型 Monorepo 增量分析缓存 (cache)', () => {
+  it('首次全量解析产生 cacheMisses 并创建缓存文件', async () => {
+    const graph = await buildDependencyGraph({ root: TMP_DIR, useCache: true });
+    expect(graph.stats.cacheMisses).toBe(4);
+    expect(graph.stats.cacheHits).toBe(0);
+
+    const { loadGraphCache } = await import('../src/graph/cache.js');
+    const cache = await loadGraphCache(TMP_DIR);
+    expect(cache).not.toBeNull();
+    expect(Object.keys(cache!.fileCache).length).toBe(4);
+  });
+
+  it('第二次分析未变动文件 100% 命中缓存 (cacheHits = 4)', async () => {
+    // 第一次构建
+    await buildDependencyGraph({ root: TMP_DIR, useCache: true });
+
+    // 第二次构建：无文件变动
+    const graph2 = await buildDependencyGraph({
+      root: TMP_DIR,
+      useCache: true,
+    });
+    expect(graph2.stats.cacheHits).toBe(4);
+    expect(graph2.stats.cacheMisses).toBe(0);
+    expect(graph2.stats.totalEdges).toBeGreaterThanOrEqual(3);
+  });
+
+  it('修改单个文件时只重新解析变动文件 (增量更新)', async () => {
+    // 第一次构建
+    await buildDependencyGraph({ root: TMP_DIR, useCache: true });
+
+    // 修改 logger.ts，增加新函数并延后修改时间
+    const loggerPath = join(TMP_DIR, 'src', 'utils', 'logger.ts');
+    await writeFile(
+      loggerPath,
+      'export function log(msg: string) {}' +
+        '\n' +
+        'export function warn(msg: string) {}',
+    );
+
+    const graph3 = await buildDependencyGraph({
+      root: TMP_DIR,
+      useCache: true,
+    });
+    // 3 个文件命中，1 个修改的文件未命中重解析
+    expect(graph3.stats.cacheHits).toBe(3);
+    expect(graph3.stats.cacheMisses).toBe(1);
+    expect(graph3.nodes['src/utils/logger.ts'].exports).toContain('warn');
+  });
+
+  it('禁用缓存时 useCache: false 总是全量解析', async () => {
+    const graph = await buildDependencyGraph({
+      root: TMP_DIR,
+      useCache: false,
+    });
+    expect(graph.stats.cacheMisses).toBe(4);
+    expect(graph.stats.cacheHits).toBe(0);
+  });
+});

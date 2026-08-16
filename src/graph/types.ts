@@ -26,6 +26,17 @@ export interface GraphEdge {
   rawStatement?: string;
 }
 
+/** 依赖图统计信息 */
+export interface DependencyGraphStats {
+  totalFiles: number;
+  totalEdges: number;
+  isolatedFiles: number;
+  /** 增量分析命中缓存的文件数 */
+  cacheHits?: number;
+  /** 未命中缓存需要重新静态解析的文件数 */
+  cacheMisses?: number;
+}
+
 /** 完整项目依赖图谱 */
 export interface DependencyGraph {
   projectRoot: string;
@@ -36,11 +47,7 @@ export interface DependencyGraph {
   /** 入边反向邻接表：filePath -> 依赖该文件的上游调用方列表 */
   dependents: Record<string, string[]>;
   edges: GraphEdge[];
-  stats: {
-    totalFiles: number;
-    totalEdges: number;
-    isolatedFiles: number;
-  };
+  stats: DependencyGraphStats;
 }
 
 /** 影响面分析结果 */

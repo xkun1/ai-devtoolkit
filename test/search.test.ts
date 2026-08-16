@@ -429,3 +429,53 @@ describe('代码搜索 — 高级语法与忽略规则增强', () => {
     expect(results.some((r) => r.chunk.content.includes('amount'))).toBe(true);
   });
 });
+
+describe('混合检索 (Hybrid Search) 与语义相似度打分', () => {
+  let index: SearchIndex;
+
+  beforeEach(async () => {
+    index = await buildIndex({ root: tmpProject });
+  });
+
+  it('支持 hybrid 模式下的概念近义词召回 (auth -> login/token)', () => {
+    // 搜索概念词 'auth'，即使代码中只有 login / authenticate / token，也能通过混合打分排在前列
+    const hybridResults = searchCode(index, 'auth', {
+      mode: 'hybrid',
+      limit: 5,
+    });
+    expect(hybridResults.length).toBeGreaterThan(0);
+    expect(
+      hybridResults.some((r) => r.chunk.file.includes('UserController')),
+    ).toBe(true);
+  });
+
+  it('支持 exact 与 semantic 检索模式切换', () => {
+    const exactResults = searchCode(index, 'login', {
+      mode: 'exact',
+      limit: 3,
+    });
+    const semanticResults = searchCode(index, '用户登录认证与令牌发放流程', {
+      mode: 'semantic',
+      limit: 3,
+    });
+
+    expect(exactResults.length).toBeGreaterThan(0);
+    expect(exactResults[0].chunk.file).toContain('UserController');
+
+    expect(semanticResults.length).toBeGreaterThan(0);
+    expect(
+      semanticResults.some((r) => r.chunk.file.includes('UserController')),
+    ).toBe(true);
+  });
+
+  it('BM25 与向量余弦相似度融合打分返回合理归一化区间 (0 - 1)', () => {
+    const results = searchCode(index, 'UserController login authenticate', {
+      limit: 5,
+    });
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.score).toBeGreaterThanOrEqual(0);
+      expect(r.score).toBeLessThanOrEqual(1);
+    }
+  });
+});

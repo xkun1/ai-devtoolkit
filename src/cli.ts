@@ -73,6 +73,8 @@ interface CliOptions {
   maxBatchFiles?: number;
   evalConcurrency?: number;
   evalMaxCases?: number;
+  cache?: boolean;
+  searchMode?: 'hybrid' | 'exact' | 'semantic';
 }
 
 const PACKAGE_VERSION = readPackageVersion();
@@ -195,6 +197,11 @@ export function createProgram(): Command {
     .option('--search <query>', '用自然语言搜索项目代码')
     .option('--no-explain', '搜索结果不使用 LLM 解释（仅显示匹配的代码片段）')
     .option('--graph', '分析当前项目的代码依赖关系并生成 Mermaid 架构拓扑图')
+    .option('--no-cache', '禁用依赖图谱增量分析缓存，执行全量静态分析')
+    .option(
+      '--search-mode <mode>',
+      '代码搜索模式: hybrid (默认) | exact | semantic',
+    )
     .option(
       '--impact <file>',
       '分析修改指定文件所波及的所有直接与间接上游依赖链路',
@@ -258,7 +265,7 @@ async function runCommand(
   // ── 代码架构依赖图谱与影响面分析 ──
   if (options.graph) {
     const root = sources.length > 0 ? resolve(sources[0]) : process.cwd();
-    await printProjectGraph({ root });
+    await printProjectGraph({ root, useCache: options.cache !== false });
     return;
   }
 
