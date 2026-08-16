@@ -12,3 +12,4 @@ playwright-report/
 .DS_Store
 *.tsbuildinfo
 .devtoolkit-index.json
+.devtoolkit-graph.json
