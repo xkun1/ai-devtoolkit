@@ -52,7 +52,8 @@
     "lint:fix": "eslint src/ test/ e2e/ \"*.config.{ts,mts}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.cjs\" \".github/**/*.yml\" \"*.{js,mjs,json,ts,mts}\" && npm run generate:ui",
     "format:check": "npm run check:ui && prettier --check \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.cjs\" \".github/**/*.yml\" \"*.{mjs,ts,mts}\"",
-    "prepublishOnly": "npm run check:ui && npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test:coverage && npm run test:e2e && npm run test:package",
+    "prepublishOnly": "npm run check:ui && npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test:package",
+    "verify:release": "npm run check:ui && npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test:coverage && npm run test:e2e && npm run test:package",
     "test:package": "node scripts/package-smoke.cjs",
     "prepare": "husky"
   },

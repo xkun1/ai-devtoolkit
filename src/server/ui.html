@@ -1222,1244 +1222,1323 @@
     </div>
 
     <script nonce="__SESSION_TOKEN__">
-            const SESSION_TOKEN = '__SESSION_TOKEN__';
-            let currentFile = null;
-            let lastZip = null;
-            let currentEnvSnapshot = null;
-            let currentGraphData = null;
-            let currentSelectedPath = null;
-            let showingMermaidSource = false;
+      const SESSION_TOKEN = '__SESSION_TOKEN__';
+      let currentFile = null;
+      let lastZip = null;
+      let currentEnvSnapshot = null;
+      let currentGraphData = null;
+      let currentSelectedPath = null;
+      let showingMermaidSource = false;
 
-            function switchTab(tab) {
-              var tabs = ['skills', 'convert', 'search', 'graph', 'env'];
-              for (var i = 0; i < tabs.length; i++) {
-                var t = tabs[i];
-                var el = document.getElementById('panel-' + t);
-                if (el) el.style.display = t === tab ? 'block' : 'none';
-              }
+      function switchTab(tab) {
+        var tabs = ['skills', 'convert', 'search', 'graph', 'env'];
+        for (var i = 0; i < tabs.length; i++) {
+          var t = tabs[i];
+          var el = document.getElementById('panel-' + t);
+          if (el) el.style.display = t === tab ? 'block' : 'none';
+        }
 
-              var allBtns = document.querySelectorAll('.tab-btn');
-              for (var j = 0; j < allBtns.length; j++) {
-                allBtns[j].classList.remove('active');
-              }
+        var allBtns = document.querySelectorAll('.tab-btn');
+        for (var j = 0; j < allBtns.length; j++) {
+          allBtns[j].classList.remove('active');
+        }
 
-              var activeBtnMap = {
-                skills: 'tabBtnSkills',
-                convert: 'tabBtnConvert',
-                search: 'tabBtnSearch',
-                graph: 'tabBtnGraph',
-                env: 'tabBtnEnv',
-              };
-              var activeId = activeBtnMap[tab];
-              if (activeId) {
-                var activeEl = document.getElementById(activeId);
-                if (activeEl) activeEl.classList.add('active');
-              }
+        var activeBtnMap = {
+          skills: 'tabBtnSkills',
+          convert: 'tabBtnConvert',
+          search: 'tabBtnSearch',
+          graph: 'tabBtnGraph',
+          env: 'tabBtnEnv',
+        };
+        var activeId = activeBtnMap[tab];
+        if (activeId) {
+          var activeEl = document.getElementById(activeId);
+          if (activeEl) activeEl.classList.add('active');
+        }
 
-              if (tab === 'env' && !currentEnvSnapshot) detectEnv();
-              if (tab === 'graph' && !currentGraphData) loadGraph();
+        if (tab === 'env' && !currentEnvSnapshot) detectEnv();
+        if (tab === 'graph' && !currentGraphData) loadGraph();
+      }
+
+      function showStatus(elemId, type, msg) {
+        var el = document.getElementById(elemId);
+        if (!el) return;
+        el.className = 'status show ' + type;
+        el.textContent = msg;
+      }
+      function hideStatus(elemId) {
+        var el = document.getElementById(elemId);
+        if (el) el.className = 'status';
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function handleFile(file) {
+        if (!file) return;
+        currentFile = file;
+        document.getElementById('fileNameDisplay').textContent =
+          '已选择: ' +
+          file.name +
+          ' (' +
+          (file.size / 1024).toFixed(1) +
+          ' KB)';
+      }
+
+      function getLocalModelName() {
+        var sel = document.getElementById('localModelSelect');
+        var inp = document.getElementById('localModelInput');
+        if (sel && sel.style.display !== 'none' && sel.value)
+          return sel.value.trim();
+        return inp ? inp.value.trim() : '';
+      }
+
+      function getLocalBaseUrl() {
+        var el = document.getElementById('localBaseUrl');
+        return el ? el.value.trim() : '';
+      }
+
+      function typewriter(text, targetEl, callback) {
+        if (!targetEl) return;
+        targetEl.textContent = '';
+        var i = 0;
+        var chunkSize = Math.max(1, Math.floor(text.length / 80));
+        var timer = setInterval(function () {
+          if (i < text.length) {
+            targetEl.textContent += text.slice(i, i + chunkSize);
+            i += chunkSize;
+            targetEl.scrollTop = targetEl.scrollHeight;
+          } else {
+            targetEl.textContent = text;
+            clearInterval(timer);
+            if (callback) callback();
+          }
+        }, 15);
+      }
+
+      function buildGraphSvgString(graph) {
+        if (!graph) return '';
+        var modules = {};
+        Object.keys(graph.nodes).forEach(function (path) {
+          var parts = path.split('/');
+          var mod = parts.length > 1 ? parts.slice(0, 2).join('/') : 'root';
+          if (!modules[mod]) modules[mod] = [];
+          modules[mod].push(path);
+        });
+
+        var modKeys = Object.keys(modules).sort();
+        var cols = Math.min(3, Math.max(1, modKeys.length));
+        var cardWidth = 280;
+        var gap = 24;
+        var heights = modKeys.map(function (m) {
+          return 50 + modules[m].length * 36;
+        });
+        var totalRows = Math.ceil(modKeys.length / cols);
+        var totalWidth = cols * cardWidth + (cols + 1) * gap;
+        var maxRowHeight = Math.max.apply(null, heights);
+        var totalHeight = 100 + totalRows * (maxRowHeight + gap);
+
+        var svg = [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+            totalWidth +
+            '" height="' +
+            totalHeight +
+            '" viewBox="0 0 ' +
+            totalWidth +
+            ' ' +
+            totalHeight +
+            '">',
+        ];
+        svg.push('<defs>');
+        svg.push(
+          '  <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0b0f19"/><stop offset="100%" stop-color="#111827"/></linearGradient>',
+        );
+        svg.push(
+          '  <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>',
+        );
+        svg.push(
+          '  <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/></filter>',
+        );
+        svg.push('</defs>');
+        svg.push('<rect width="100%" height="100%" fill="url(#bgGrad)"/>');
+        svg.push(
+          '<text x="24" y="42" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700">📈 项目架构依赖拓扑大盘</text>',
+        );
+        svg.push(
+          '<text x="24" y="70" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="13">源码文件: ' +
+            graph.stats.totalFiles +
+            ' | 依赖引用边: ' +
+            graph.stats.totalEdges +
+            ' | 独立模块: ' +
+            graph.stats.isolatedFiles +
+            '</text>',
+        );
+
+        modKeys.forEach(function (mod, idx) {
+          var row = Math.floor(idx / cols);
+          var col = idx % cols;
+          var x = gap + col * (cardWidth + gap);
+          var y = 100 + row * (maxRowHeight + gap);
+          var cardH = 46 + modules[mod].length * 36;
+
+          svg.push('<g filter="url(#shadow)">');
+          svg.push(
+            '  <rect x="' +
+              x +
+              '" y="' +
+              y +
+              '" width="' +
+              cardWidth +
+              '" height="' +
+              cardH +
+              '" rx="12" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5"/>',
+          );
+          svg.push(
+            '  <text x="' +
+              (x + 16) +
+              '" y="' +
+              (y + 28) +
+              '" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="14" font-weight="600">📁 ' +
+              mod +
+              ' (' +
+              modules[mod].length +
+              ')</text>',
+          );
+
+          modules[mod].forEach(function (filePath, fIdx) {
+            var fileY = y + 46 + fIdx * 36;
+            var fileName = filePath.split('/').pop() || filePath;
+            var outDeg = (graph.dependencies[filePath] || []).length;
+            var inDeg = (graph.dependents[filePath] || []).length;
+
+            svg.push(
+              '  <rect x="' +
+                (x + 12) +
+                '" y="' +
+                fileY +
+                '" width="' +
+                (cardWidth - 24) +
+                '" height="28" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>',
+            );
+            svg.push(
+              '  <text x="' +
+                (x + 22) +
+                '" y="' +
+                (fileY + 18) +
+                '" fill="#e2e8f0" font-family="monospace" font-size="12">' +
+                fileName +
+                '</text>',
+            );
+            svg.push(
+              '  <text x="' +
+                (x + cardWidth - 22) +
+                '" y="' +
+                (fileY + 18) +
+                '" fill="#64748b" font-family="system-ui, sans-serif" font-size="10" text-anchor="end">出 ' +
+                outDeg +
+                ' | 入 ' +
+                inDeg +
+                '</text>',
+            );
+          });
+          svg.push('</g>');
+        });
+
+        svg.push('</svg>');
+        return svg.join('\n');
+      }
+
+      function exportGraphSvg() {
+        if (!currentGraphData) {
+          alert('请先等待或刷新拓扑图数据');
+          return;
+        }
+        var svgStr = buildGraphSvgString(currentGraphData);
+        var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'project-architecture.svg';
+        a.click();
+        setTimeout(function () {
+          URL.revokeObjectURL(url);
+        }, 500);
+      }
+
+      function exportGraphPng() {
+        if (!currentGraphData) {
+          alert('请先等待或刷新拓扑图数据');
+          return;
+        }
+        var svgStr = buildGraphSvgString(currentGraphData);
+        var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function () {
+          var canvas = document.createElement('canvas');
+          canvas.width = img.width * 2;
+          canvas.height = img.height * 2;
+          var ctx = canvas.getContext('2d');
+          ctx.scale(2, 2);
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+
+          canvas.toBlob(function (pngBlob) {
+            if (!pngBlob) return;
+            var pngUrl = URL.createObjectURL(pngBlob);
+            var a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = 'project-architecture.png';
+            a.click();
+            setTimeout(function () {
+              URL.revokeObjectURL(pngUrl);
+            }, 500);
+          }, 'image/png');
+        };
+        img.src = url;
+      }
+
+      function setupEvents() {
+        // 1. Tab 切换
+        var btnSkills = document.getElementById('tabBtnSkills');
+        var btnConvert = document.getElementById('tabBtnConvert');
+        var btnSearch = document.getElementById('tabBtnSearch');
+        var btnGraph = document.getElementById('tabBtnGraph');
+        var btnEnv = document.getElementById('tabBtnEnv');
+
+        if (btnSkills)
+          btnSkills.addEventListener('click', function () {
+            switchTab('skills');
+          });
+        if (btnConvert)
+          btnConvert.addEventListener('click', function () {
+            switchTab('convert');
+          });
+        if (btnSearch)
+          btnSearch.addEventListener('click', function () {
+            switchTab('search');
+          });
+        if (btnGraph)
+          btnGraph.addEventListener('click', function () {
+            switchTab('graph');
+          });
+        if (btnEnv)
+          btnEnv.addEventListener('click', function () {
+            switchTab('env');
+          });
+
+        // 2. 上传区
+        var uploadZone = document.getElementById('uploadZone');
+        var fileInput = document.getElementById('fileInput');
+        if (uploadZone && fileInput) {
+          uploadZone.addEventListener('click', function () {
+            fileInput.click();
+          });
+          fileInput.addEventListener('change', function (e) {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+          });
+
+          ['dragenter', 'dragover'].forEach(function (name) {
+            uploadZone.addEventListener(name, function (e) {
+              e.preventDefault();
+              uploadZone.classList.add('dragover');
+            });
+          });
+          ['dragleave', 'drop'].forEach(function (name) {
+            uploadZone.addEventListener(name, function (e) {
+              e.preventDefault();
+              uploadZone.classList.remove('dragover');
+            });
+          });
+          uploadZone.addEventListener('drop', function (e) {
+            if (e.dataTransfer.files.length)
+              handleFile(e.dataTransfer.files[0]);
+          });
+        }
+
+        // 3. 技能工坊
+        var modelSelect = document.getElementById('modelSelect');
+        var detectBtn = document.getElementById('detectBtn');
+        var generateBtn = document.getElementById('generateBtn');
+        var evalSkillBtn = document.getElementById('evalSkillBtn');
+        var downloadZipBtn = document.getElementById('downloadZipBtn');
+        var copySkillBtn = document.getElementById('copySkillBtn');
+
+        if (modelSelect) modelSelect.addEventListener('change', onModelChange);
+        if (detectBtn) detectBtn.addEventListener('click', detectLocalModels);
+        if (generateBtn) generateBtn.addEventListener('click', generateSkill);
+        if (evalSkillBtn)
+          evalSkillBtn.addEventListener('click', evaluateCurrentSkill);
+        if (downloadZipBtn)
+          downloadZipBtn.addEventListener('click', triggerDownload);
+        if (copySkillBtn)
+          copySkillBtn.addEventListener('click', copySkillContent);
+
+        // 4. 规则互转
+        var startConvertBtn = document.getElementById('startConvertBtn');
+        var syncProjectBtn = document.getElementById('syncProjectBtn');
+        var copyConvertBtn = document.getElementById('copyConvertBtn');
+
+        if (startConvertBtn)
+          startConvertBtn.addEventListener('click', executeConvert);
+        if (syncProjectBtn)
+          syncProjectBtn.addEventListener('click', executeSyncProject);
+        if (copyConvertBtn)
+          copyConvertBtn.addEventListener('click', function () {
+            navigator.clipboard.writeText(
+              document.getElementById('convertPreview').textContent,
+            );
+            alert('已复制转换结果！');
+          });
+
+        // 5. 搜索与影响面
+        var rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
+        var searchBtn = document.getElementById('searchBtn');
+        var impactBtn = document.getElementById('impactBtn');
+        var searchQueryInput = document.getElementById('searchQueryInput');
+
+        if (rebuildIndexBtn)
+          rebuildIndexBtn.addEventListener('click', buildCodeIndex);
+        if (searchBtn) searchBtn.addEventListener('click', executeSearch);
+        if (impactBtn)
+          impactBtn.addEventListener('click', executeImpactAnalysis);
+        if (searchQueryInput) {
+          searchQueryInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') executeSearch();
+          });
+        }
+
+        document.querySelectorAll('.quick-tag').forEach(function (tag) {
+          tag.addEventListener('click', function () {
+            var filter = tag.getAttribute('data-filter');
+            var input = document.getElementById('searchQueryInput');
+            if (input && filter) {
+              input.value = (input.value.trim() + ' ' + filter).trim();
+              input.focus();
             }
+          });
+        });
 
-            function showStatus(elemId, type, msg) {
-              var el = document.getElementById(elemId);
-              if (!el) return;
-              el.className = 'status show ' + type;
-              el.textContent = msg;
-            }
-            function hideStatus(elemId) {
-              var el = document.getElementById(elemId);
-              if (el) el.className = 'status';
-            }
+        // 6. 图谱交互与事件委托 (Event Delegation)
+        var refreshGraphBtn = document.getElementById('refreshGraphBtn');
+        var toggleGraphViewBtn = document.getElementById('toggleGraphViewBtn');
+        var copyMermaidBtn = document.getElementById('copyMermaidBtn');
+        var closeDetailBtn = document.getElementById('closeDetailBtn');
+        var copySourceCodeBtn = document.getElementById('copySourceCodeBtn');
+        var trackImpactFromGraphBtn = document.getElementById(
+          'trackImpactFromGraphBtn',
+        );
 
-            function escapeHtml(value) {
-              return String(value == null ? '' : value)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-            }
+        if (refreshGraphBtn)
+          refreshGraphBtn.addEventListener('click', loadGraph);
+        if (toggleGraphViewBtn)
+          toggleGraphViewBtn.addEventListener('click', toggleGraphView);
+        if (copyMermaidBtn)
+          copyMermaidBtn.addEventListener('click', function () {
+            navigator.clipboard.writeText(
+              document.getElementById('graphMermaidCode').textContent,
+            );
+            alert('已复制 Mermaid 代码！');
+          });
+        if (closeDetailBtn)
+          closeDetailBtn.addEventListener('click', function () {
+            document.getElementById('nodeDetailCard').style.display = 'none';
+            currentSelectedPath = null;
+            document.querySelectorAll('.node-item').forEach(function (n) {
+              n.classList.remove('selected', 'dep-node', 'upstream-node');
+            });
+            document.querySelectorAll('.module-card').forEach(function (c) {
+              c.classList.remove('dimmed', 'highlighted');
+            });
+          });
 
-            function handleFile(file) {
-              if (!file) return;
-              currentFile = file;
-              document.getElementById('fileNameDisplay').textContent =
-                '已选择: ' +
-                file.name +
-                ' (' +
-                (file.size / 1024).toFixed(1) +
-                ' KB)';
-            }
+        if (copySourceCodeBtn)
+          copySourceCodeBtn.addEventListener('click', function () {
+            navigator.clipboard.writeText(
+              document.getElementById('sourceCodeViewer').textContent,
+            );
+            alert('已复制文件源码！');
+          });
 
-            function getLocalModelName() {
-              var sel = document.getElementById('localModelSelect');
+        if (trackImpactFromGraphBtn)
+          trackImpactFromGraphBtn.addEventListener('click', function () {
+            if (!currentSelectedPath) return;
+            switchTab('search');
+            var searchInput = document.getElementById('searchQueryInput');
+            if (searchInput) searchInput.value = currentSelectedPath;
+            executeImpactAnalysis();
+          });
+
+        // 事件委托：模块网格点击
+        var visualContainer = document.getElementById('visualModulesContainer');
+        if (visualContainer) {
+          visualContainer.addEventListener('click', function (e) {
+            var nodeItem = e.target.closest('.node-item');
+            if (nodeItem) {
+              var p = nodeItem.getAttribute('data-path');
+              if (p) selectNode(p);
+            }
+          });
+        }
+
+        // 事件委托：依赖药丸点击
+        var detailBox = document.getElementById('nodeDetailCard');
+        if (detailBox) {
+          detailBox.addEventListener('click', function (e) {
+            var pill = e.target.closest('.link-pill');
+            if (pill) {
+              var p = pill.getAttribute('data-path');
+              if (p) selectNode(p);
+            }
+          });
+        }
+
+        // 7. 环境资产
+        var refreshEnvBtn = document.getElementById('refreshEnvBtn');
+        var exportEnvBtn = document.getElementById('exportEnvBtn');
+        var diffEnvBtn = document.getElementById('diffEnvBtn');
+
+        if (refreshEnvBtn) refreshEnvBtn.addEventListener('click', detectEnv);
+        if (exportEnvBtn)
+          exportEnvBtn.addEventListener('click', exportEnvSnapshot);
+        if (diffEnvBtn) diffEnvBtn.addEventListener('click', executeEnvDiff);
+      }
+
+      async function init() {
+        setupEvents();
+
+        try {
+          var mRes = await fetch('/api/models');
+          var mData = await mRes.json();
+          var mSelect = document.getElementById('modelSelect');
+          if (mSelect && mData.models) {
+            mSelect.innerHTML = '';
+            mData.models.forEach(function (m) {
+              var opt = document.createElement('option');
+              opt.value = m.id;
+              opt.textContent = m.name;
+              if (m.id === mData.defaultModel) opt.selected = true;
+              mSelect.appendChild(opt);
+            });
+            onModelChange();
+          }
+
+          var tRes = await fetch('/api/templates');
+          var tData = await tRes.json();
+          var tSelect = document.getElementById('templateSelect');
+          if (tSelect && tData.templates) {
+            tData.templates.forEach(function (t) {
+              var opt = document.createElement('option');
+              opt.value = t.id;
+              opt.textContent = t.name + ' (' + t.id + ')';
+              tSelect.appendChild(opt);
+            });
+          }
+        } catch (e) {
+          console.error('初始化数据加载失败:', e);
+        }
+      }
+
+      function onModelChange() {
+        var modelSelect = document.getElementById('modelSelect');
+        if (!modelSelect) return;
+        var model = modelSelect.value;
+        var isLocal = model.indexOf('local') !== -1;
+        var localCfg = document.getElementById('localConfig');
+        var apiGrp = document.getElementById('apiKeyGroup');
+        if (localCfg) localCfg.style.display = isLocal ? 'block' : 'none';
+        if (apiGrp) apiGrp.style.display = isLocal ? 'none' : 'block';
+      }
+
+      async function detectLocalModels() {
+        var base = document.getElementById('localBaseUrl').value;
+        var btn = document.getElementById('detectBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '探测中...';
+        }
+        try {
+          var res = await fetch('/api/local-models', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({ baseUrl: base }),
+          });
+          var data = await res.json();
+          if (data.models && data.models.length) {
+            var sel = document.getElementById('localModelSelect');
+            if (sel) {
+              sel.innerHTML = '';
+              data.models.forEach(function (m) {
+                var opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name;
+                sel.appendChild(opt);
+              });
+              sel.style.display = 'block';
               var inp = document.getElementById('localModelInput');
-              if (sel && sel.style.display !== 'none' && sel.value)
-                return sel.value.trim();
-              return inp ? inp.value.trim() : '';
+              if (inp) inp.style.display = 'none';
             }
+          }
+        } catch (e) {
+          alert('探测失败: ' + e.message);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔍 探测模型';
+          }
+        }
+      }
 
-            function getLocalBaseUrl() {
-              var el = document.getElementById('localBaseUrl');
-              return el ? el.value.trim() : '';
-            }
+      async function generateSkill() {
+        hideStatus('skillStatus');
+        var btn = document.getElementById('generateBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '⏳ 正在提炼生成技能包...';
+        }
 
+        try {
+          var formData = new FormData();
+          if (currentFile) {
+            formData.append('file', currentFile);
+            formData.append('fileName', currentFile.name);
+          } else {
+            var src = document.getElementById('sourceInput').value.trim();
+            if (!src) throw new Error('请提供文档内容、URL 或上传文件');
+            formData.append('source', src);
+          }
+          var selectedModel = document.getElementById('modelSelect').value;
+          formData.append(
+            'agentType',
+            document.getElementById('agentType').value,
+          );
+          formData.append('modelName', selectedModel);
+          formData.append(
+            'apiKey',
+            document.getElementById('apiKeyInput').value,
+          );
+          formData.append(
+            'template',
+            document.getElementById('templateSelect').value,
+          );
+          formData.append(
+            'skillName',
+            document.getElementById('skillNameInput').value,
+          );
 
-            function typewriter(text, targetEl, callback) {
-              if (!targetEl) return;
-              targetEl.textContent = '';
-              var i = 0;
-              var chunkSize = Math.max(1, Math.floor(text.length / 80));
-              var timer = setInterval(function() {
-                if (i < text.length) {
-                  targetEl.textContent += text.slice(i, i + chunkSize);
-                  i += chunkSize;
-                  targetEl.scrollTop = targetEl.scrollHeight;
-                } else {
-                  targetEl.textContent = text;
-                  clearInterval(timer);
-                  if (callback) callback();
-                }
-              }, 15);
-            }
+          if (selectedModel.indexOf('local') !== -1) {
+            var localBase = getLocalBaseUrl();
+            var localName = getLocalModelName();
+            if (localBase) formData.append('localBaseUrl', localBase);
+            if (localName) formData.append('localModelName', localName);
+          }
 
-            function buildGraphSvgString(graph) {
-              if (!graph) return '';
-              var modules = {};
-              Object.keys(graph.nodes).forEach(function (path) {
-                var parts = path.split('/');
-                var mod = parts.length > 1 ? parts.slice(0, 2).join('/') : 'root';
-                if (!modules[mod]) modules[mod] = [];
-                modules[mod].push(path);
-              });
+          var res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'X-DevToolkit-Token': SESSION_TOKEN },
+            body: formData,
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error || '生成失败');
 
-              var modKeys = Object.keys(modules).sort();
-              var cols = Math.min(3, Math.max(1, modKeys.length));
-              var cardWidth = 280;
-              var gap = 24;
-              var heights = modKeys.map(function(m) { return 50 + modules[m].length * 36; });
-              var totalRows = Math.ceil(modKeys.length / cols);
-              var totalWidth = cols * cardWidth + (cols + 1) * gap;
-              var maxRowHeight = Math.max.apply(null, heights);
-              var totalHeight = 100 + totalRows * (maxRowHeight + gap);
+          showStatus('skillStatus', 'success', '✨ 技能包提炼完成！');
+          document.getElementById('skillResultCard').style.display = 'block';
+          lastZip = data.zip;
+          typewriter(
+            data.content,
+            document.getElementById('skillContentPreview'),
+          );
 
-              var svg = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + totalWidth + '" height="' + totalHeight + '" viewBox="0 0 ' + totalWidth + ' ' + totalHeight + '">'];
-              svg.push('<defs>');
-              svg.push('  <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0b0f19"/><stop offset="100%" stop-color="#111827"/></linearGradient>');
-              svg.push('  <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>');
-              svg.push('  <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/></filter>');
-              svg.push('</defs>');
-              svg.push('<rect width="100%" height="100%" fill="url(#bgGrad)"/>');
-              svg.push('<text x="24" y="42" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700">📈 项目架构依赖拓扑大盘</text>');
-              svg.push('<text x="24" y="70" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="13">源码文件: ' + graph.stats.totalFiles + ' | 依赖引用边: ' + graph.stats.totalEdges + ' | 独立模块: ' + graph.stats.isolatedFiles + '</text>');
+          var statsEl = document.getElementById('skillStats');
+          if (statsEl) {
+            statsEl.innerHTML =
+              '<div class="stat-card"><div class="label">目标 Agent</div><div class="num" style="font-size:16px">' +
+              escapeHtml(data.agentType) +
+              '</div></div>' +
+              '<div class="stat-card"><div class="label">产物大小</div><div class="num">' +
+              escapeHtml(data.size) +
+              ' 字符</div></div>' +
+              '<div class="stat-card"><div class="label">质量得分</div><div class="num" style="color:var(--green)">' +
+              escapeHtml(data.quality ? data.quality.score : 100) +
+              ' 分</div></div>';
+          }
+        } catch (e) {
+          showStatus('skillStatus', 'error', e.message);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🚀 开始提炼技能包';
+          }
+        }
+      }
 
-              modKeys.forEach(function(mod, idx) {
-                var row = Math.floor(idx / cols);
-                var col = idx % cols;
-                var x = gap + col * (cardWidth + gap);
-                var y = 100 + row * (maxRowHeight + gap);
-                var cardH = 46 + modules[mod].length * 36;
+      async function evaluateCurrentSkill() {
+        hideStatus('skillStatus');
+        var content = document.getElementById(
+          'skillContentPreview',
+        ).textContent;
+        if (!content) {
+          showStatus('skillStatus', 'error', '请先提炼生成技能包');
+          return;
+        }
 
-                svg.push('<g filter="url(#shadow)">');
-                svg.push('  <rect x="' + x + '" y="' + y + '" width="' + cardWidth + '" height="' + cardH + '" rx="12" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5"/>');
-                svg.push('  <text x="' + (x + 16) + '" y="' + (y + 28) + '" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="14" font-weight="600">📁 ' + mod + ' (' + modules[mod].length + ')</text>');
+        var btn = document.getElementById('evalSkillBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '⏳ 正在并发进行 Benchmark 评测...';
+        }
+        try {
+          var selectedModel = document.getElementById('modelSelect').value;
+          var evalPayload = {
+            skillContent: content,
+            model: selectedModel,
+            apiKey: document.getElementById('apiKeyInput').value,
+          };
+          if (selectedModel.indexOf('local') !== -1) {
+            evalPayload.baseURL = getLocalBaseUrl() || undefined;
+            evalPayload.localModelName = getLocalModelName() || undefined;
+          }
 
-                modules[mod].forEach(function(filePath, fIdx) {
-                  var fileY = y + 46 + fIdx * 36;
-                  var fileName = filePath.split('/').pop() || filePath;
-                  var outDeg = (graph.dependencies[filePath] || []).length;
-                  var inDeg = (graph.dependents[filePath] || []).length;
+          var res = await fetch('/api/eval', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify(evalPayload),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error || '评测执行失败');
 
-                  svg.push('  <rect x="' + (x + 12) + '" y="' + fileY + '" width="' + (cardWidth - 24) + '" height="28" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>');
-                  svg.push('  <text x="' + (x + 22) + '" y="' + (fileY + 18) + '" fill="#e2e8f0" font-family="monospace" font-size="12">' + fileName + '</text>');
-                  svg.push('  <text x="' + (x + cardWidth - 22) + '" y="' + (fileY + 18) + '" fill="#64748b" font-family="system-ui, sans-serif" font-size="10" text-anchor="end">出 ' + outDeg + ' | 入 ' + inDeg + '</text>');
-                });
-                svg.push('</g>');
-              });
+          var card = document.getElementById('skillEvalCard');
+          card.style.display = 'block';
+          document.getElementById('skillEvalPreview').textContent =
+            data.markdown;
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          showStatus(
+            'skillStatus',
+            'success',
+            '✨ Benchmark 自动化评测完成！综合得分: ' +
+              data.report.overallScore +
+              ' 分 (' +
+              data.report.grade +
+              ' 级)',
+          );
+        } catch (e) {
+          showStatus('skillStatus', 'error', '评测失败: ' + e.message);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '📊 技能效果自动化评测';
+          }
+        }
+      }
 
-              svg.push('</svg>');
-              return svg.join('
-      ');
-            }
+      async function executeConvert() {
+        hideStatus('convertStatus');
+        var content = document.getElementById('convertInput').value.trim();
+        if (!content)
+          return showStatus('convertStatus', 'error', '请粘贴要转换的规则内容');
 
-            function exportGraphSvg() {
-              if (!currentGraphData) {
-                alert('请先等待或刷新拓扑图数据');
-                return;
-              }
-              var svgStr = buildGraphSvgString(currentGraphData);
-              var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-              var url = URL.createObjectURL(blob);
-              var a = document.createElement('a');
-              a.href = url;
-              a.download = 'project-architecture.svg';
-              a.click();
-              setTimeout(function() { URL.revokeObjectURL(url); }, 500);
-            }
+        try {
+          var res = await fetch('/api/convert', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({
+              content: content,
+              to: document.getElementById('convertToSelect').value,
+              name:
+                document.getElementById('convertNameInput').value.trim() ||
+                undefined,
+            }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
 
-            function exportGraphPng() {
-              if (!currentGraphData) {
-                alert('请先等待或刷新拓扑图数据');
-                return;
-              }
-              var svgStr = buildGraphSvgString(currentGraphData);
-              var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-              var url = URL.createObjectURL(blob);
-              var img = new Image();
-              img.onload = function() {
-                var canvas = document.createElement('canvas');
-                canvas.width = img.width * 2;
-                canvas.height = img.height * 2;
-                var ctx = canvas.getContext('2d');
-                ctx.scale(2, 2);
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
+          showStatus('convertStatus', 'success', '✨ 规则转换成功！');
+          document.getElementById('convertResultCard').style.display = 'block';
+          document.getElementById('convertPreview').textContent = data.preview;
+        } catch (e) {
+          showStatus('convertStatus', 'error', e.message);
+        }
+      }
 
-                canvas.toBlob(function(pngBlob) {
-                  if (!pngBlob) return;
-                  var pngUrl = URL.createObjectURL(pngBlob);
-                  var a = document.createElement('a');
-                  a.href = pngUrl;
-                  a.download = 'project-architecture.png';
-                  a.click();
-                  setTimeout(function() { URL.revokeObjectURL(pngUrl); }, 500);
-                }, 'image/png');
-              };
-              img.src = url;
-            }
+      async function executeSyncProject() {
+        showStatus('convertStatus', 'info', '正在扫描并预览项目规则变更...');
+        try {
+          var headers = {
+            'Content-Type': 'application/json',
+            'X-DevToolkit-Token': SESSION_TOKEN,
+          };
+          var previewRes = await fetch('/api/sync', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ dryRun: true }),
+          });
+          var preview = await previewRes.json();
+          if (!previewRes.ok) throw new Error(preview.error);
+          var count = preview.summary.totalSynced;
+          if (!count) {
+            showStatus(
+              'convertStatus',
+              'success',
+              '规则已是最新状态，无需写入。',
+            );
+            return;
+          }
+          if (
+            !window.confirm('将创建或更新 ' + count + ' 项规则产物，是否继续？')
+          ) {
+            showStatus('convertStatus', 'info', '已取消同步，未写入任何文件。');
+            return;
+          }
 
-            function setupEvents() {
-              // 1. Tab 切换
-              var btnSkills = document.getElementById('tabBtnSkills');
-              var btnConvert = document.getElementById('tabBtnConvert');
-              var btnSearch = document.getElementById('tabBtnSearch');
-              var btnGraph = document.getElementById('tabBtnGraph');
-              var btnEnv = document.getElementById('tabBtnEnv');
+          var res = await fetch('/api/sync', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ dryRun: false }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          showStatus(
+            'convertStatus',
+            'success',
+            '✨ 项目全量规则同步完成！共分发 ' +
+              data.summary.totalSynced +
+              ' 项产物。',
+          );
+        } catch (e) {
+          showStatus('convertStatus', 'error', e.message);
+        }
+      }
 
-              if (btnSkills)
-                btnSkills.addEventListener('click', function () {
-                  switchTab('skills');
-                });
-              if (btnConvert)
-                btnConvert.addEventListener('click', function () {
-                  switchTab('convert');
-                });
-              if (btnSearch)
-                btnSearch.addEventListener('click', function () {
-                  switchTab('search');
-                });
-              if (btnGraph)
-                btnGraph.addEventListener('click', function () {
-                  switchTab('graph');
-                });
-              if (btnEnv)
-                btnEnv.addEventListener('click', function () {
-                  switchTab('env');
-                });
+      function triggerDownload() {
+        if (!lastZip || !lastZip.id) return alert('未找到可下载的 ZIP 产物');
+        window.location.href = '/api/download/' + lastZip.id;
+      }
 
-              // 2. 上传区
-              var uploadZone = document.getElementById('uploadZone');
-              var fileInput = document.getElementById('fileInput');
-              if (uploadZone && fileInput) {
-                uploadZone.addEventListener('click', function () {
-                  fileInput.click();
-                });
-                fileInput.addEventListener('change', function (e) {
-                  if (e.target.files.length) handleFile(e.target.files[0]);
-                });
+      function copySkillContent() {
+        navigator.clipboard.writeText(
+          document.getElementById('skillContentPreview').textContent,
+        );
+        alert('已复制到剪贴板！');
+      }
 
-                ['dragenter', 'dragover'].forEach(function (name) {
-                  uploadZone.addEventListener(name, function (e) {
-                    e.preventDefault();
-                    uploadZone.classList.add('dragover');
-                  });
-                });
-                ['dragleave', 'drop'].forEach(function (name) {
-                  uploadZone.addEventListener(name, function (e) {
-                    e.preventDefault();
-                    uploadZone.classList.remove('dragover');
-                  });
-                });
-                uploadZone.addEventListener('drop', function (e) {
-                  if (e.dataTransfer.files.length)
-                    handleFile(e.dataTransfer.files[0]);
-                });
-              }
+      async function executeSearch() {
+        hideStatus('searchStatus');
+        var query = document.getElementById('searchQueryInput').value.trim();
+        if (!query)
+          return showStatus('searchStatus', 'error', '请输入搜索内容');
 
-              // 3. 技能工坊
-              var modelSelect = document.getElementById('modelSelect');
-              var detectBtn = document.getElementById('detectBtn');
-              var generateBtn = document.getElementById('generateBtn');
-              var evalSkillBtn = document.getElementById('evalSkillBtn');
-              var downloadZipBtn = document.getElementById('downloadZipBtn');
-              var copySkillBtn = document.getElementById('copySkillBtn');
+        var btn = document.getElementById('searchBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '搜索中...';
+        }
 
-              if (modelSelect) modelSelect.addEventListener('change', onModelChange);
-              if (detectBtn) detectBtn.addEventListener('click', detectLocalModels);
-              if (generateBtn) generateBtn.addEventListener('click', generateSkill);
-              if (evalSkillBtn)
-                evalSkillBtn.addEventListener('click', evaluateCurrentSkill);
-              if (downloadZipBtn)
-                downloadZipBtn.addEventListener('click', triggerDownload);
-              if (copySkillBtn)
-                copySkillBtn.addEventListener('click', copySkillContent);
+        try {
+          var res = await fetch('/api/search', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({
+              query: query,
+              directory:
+                document.getElementById('searchDirInput').value.trim() ||
+                undefined,
+              explain: document.getElementById('searchExplainCheck').checked,
+            }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error || '搜索失败');
 
-              // 4. 规则互转
-              var startConvertBtn = document.getElementById('startConvertBtn');
-              var syncProjectBtn = document.getElementById('syncProjectBtn');
-              var copyConvertBtn = document.getElementById('copyConvertBtn');
+          if (data.explanation) {
+            document.getElementById('searchExplainCard').style.display =
+              'block';
+            document.getElementById('searchExplanation').textContent =
+              data.explanation;
+          } else {
+            document.getElementById('searchExplainCard').style.display = 'none';
+          }
 
-              if (startConvertBtn)
-                startConvertBtn.addEventListener('click', executeConvert);
-              if (syncProjectBtn)
-                syncProjectBtn.addEventListener('click', executeSyncProject);
-              if (copyConvertBtn)
-                copyConvertBtn.addEventListener('click', function () {
-                  navigator.clipboard.writeText(
-                    document.getElementById('convertPreview').textContent,
+          var area = document.getElementById('searchResultsArea');
+          area.innerHTML = '';
+          if (!data.results || data.results.length === 0) {
+            area.innerHTML =
+              '<div class="card" style="text-align:center; color:var(--text-muted)">未找到匹配的代码片段</div>';
+            return;
+          }
+
+          data.results.forEach(function (r) {
+            var item = document.createElement('div');
+            item.className = 'search-item';
+            item.innerHTML =
+              '<div class="search-item-header">' +
+              '<div class="file-badge">📄 ' +
+              escapeHtml(r.file) +
+              ' :' +
+              escapeHtml(r.startLine) +
+              '-' +
+              escapeHtml(r.endLine) +
+              '</div>' +
+              '<div class="score-badge">相关度: ' +
+              (r.score * 100).toFixed(0) +
+              '%</div>' +
+              '</div>' +
+              '<div style="margin-bottom:10px;">' +
+              r.matchedSymbols
+                .map(function (s) {
+                  return (
+                    '<span class="tag" style="color:var(--accent-hover);">' +
+                    escapeHtml(s) +
+                    '</span>'
                   );
-                  alert('已复制转换结果！');
-                });
+                })
+                .join('') +
+              r.matchedKeywords
+                .map(function (k) {
+                  return '<span class="tag">' + escapeHtml(k) + '</span>';
+                })
+                .join('') +
+              '</div>' +
+              '<div class="code-box" style="max-height:220px;">' +
+              escapeHtml(r.content) +
+              '</div>';
+            area.appendChild(item);
+          });
+        } catch (e) {
+          showStatus('searchStatus', 'error', e.message);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔎 搜索代码';
+          }
+        }
+      }
 
-              // 5. 搜索与影响面
-              var rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
-              var searchBtn = document.getElementById('searchBtn');
-              var impactBtn = document.getElementById('impactBtn');
-              var searchQueryInput = document.getElementById('searchQueryInput');
+      async function executeImpactAnalysis() {
+        var file =
+          document.getElementById('searchQueryInput').value.trim() ||
+          document.getElementById('searchDirInput').value.trim();
+        if (!file)
+          return alert(
+            '请在搜索框输入要分析的目标文件路径（如 src/utils/logger.ts）',
+          );
 
-              if (rebuildIndexBtn)
-                rebuildIndexBtn.addEventListener('click', buildCodeIndex);
-              if (searchBtn) searchBtn.addEventListener('click', executeSearch);
-              if (impactBtn)
-                impactBtn.addEventListener('click', executeImpactAnalysis);
-              if (searchQueryInput) {
-                searchQueryInput.addEventListener('keydown', function (e) {
-                  if (e.key === 'Enter') executeSearch();
-                });
-              }
+        showStatus('searchStatus', 'info', '正在推演改动影响链路...');
+        try {
+          var res = await fetch('/api/impact', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({ targetFile: file }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
 
-              document.querySelectorAll('.quick-tag').forEach(function (tag) {
-                tag.addEventListener('click', function () {
-                  var filter = tag.getAttribute('data-filter');
-                  var input = document.getElementById('searchQueryInput');
-                  if (input && filter) {
-                    input.value = (input.value.trim() + ' ' + filter).trim();
-                    input.focus();
-                  }
-                });
-              });
+          document.getElementById('impactResultCard').style.display = 'block';
+          document.getElementById('impactReportText').textContent = data.report;
+          hideStatus('searchStatus');
+        } catch (e) {
+          showStatus('searchStatus', 'error', e.message);
+        }
+      }
 
-              // 6. 图谱交互与事件委托 (Event Delegation)
-              var refreshGraphBtn = document.getElementById('refreshGraphBtn');
-              var toggleGraphViewBtn = document.getElementById('toggleGraphViewBtn');
-              var copyMermaidBtn = document.getElementById('copyMermaidBtn');
-              var closeDetailBtn = document.getElementById('closeDetailBtn');
-              var copySourceCodeBtn = document.getElementById('copySourceCodeBtn');
-              var trackImpactFromGraphBtn = document.getElementById(
-                'trackImpactFromGraphBtn',
-              );
+      async function loadGraph() {
+        showStatus('graphStatus', 'info', '正在构建代码架构拓扑图...');
+        try {
+          var res = await fetch('/api/graph', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({}),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          hideStatus('graphStatus');
+          currentGraphData = data.graph;
 
-              if (refreshGraphBtn)
-                refreshGraphBtn.addEventListener('click', loadGraph);
-              if (toggleGraphViewBtn)
-                toggleGraphViewBtn.addEventListener('click', toggleGraphView);
-              if (copyMermaidBtn)
-                copyMermaidBtn.addEventListener('click', function () {
-                  navigator.clipboard.writeText(
-                    document.getElementById('graphMermaidCode').textContent,
-                  );
-                  alert('已复制 Mermaid 代码！');
-                });
-              if (closeDetailBtn)
-                closeDetailBtn.addEventListener('click', function () {
-                  document.getElementById('nodeDetailCard').style.display = 'none';
-                  currentSelectedPath = null;
-                  document.querySelectorAll('.node-item').forEach(function (n) {
-                    n.classList.remove('selected', 'dep-node', 'upstream-node');
-                  });
-                  document.querySelectorAll('.module-card').forEach(function (c) {
-                    c.classList.remove('dimmed', 'highlighted');
-                  });
-                });
+          var s = data.graph.stats;
+          document.getElementById('graphStats').innerHTML =
+            '<div class="stat-card"><div class="label">源码文件数</div><div class="num">' +
+            s.totalFiles +
+            '</div></div>' +
+            '<div class="stat-card"><div class="label">依赖引用边</div><div class="num" style="color:var(--accent)">' +
+            s.totalEdges +
+            '</div></div>' +
+            '<div class="stat-card"><div class="label">独立模块数</div><div class="num">' +
+            s.isolatedFiles +
+            '</div></div>';
 
-              if (copySourceCodeBtn)
-                copySourceCodeBtn.addEventListener('click', function () {
-                  navigator.clipboard.writeText(
-                    document.getElementById('sourceCodeViewer').textContent,
-                  );
-                  alert('已复制文件源码！');
-                });
+          document.getElementById('graphMermaidCode').textContent =
+            data.mermaid;
 
-              if (trackImpactFromGraphBtn)
-                trackImpactFromGraphBtn.addEventListener('click', function () {
-                  if (!currentSelectedPath) return;
-                  switchTab('search');
-                  var searchInput = document.getElementById('searchQueryInput');
-                  if (searchInput) searchInput.value = currentSelectedPath;
-                  executeImpactAnalysis();
-                });
+          renderVisualModules(data.graph);
+        } catch (e) {
+          showStatus('graphStatus', 'error', e.message);
+        }
+      }
 
-              // 事件委托：模块网格点击
-              var visualContainer = document.getElementById('visualModulesContainer');
-              if (visualContainer) {
-                visualContainer.addEventListener('click', function (e) {
-                  var nodeItem = e.target.closest('.node-item');
-                  if (nodeItem) {
-                    var p = nodeItem.getAttribute('data-path');
-                    if (p) selectNode(p);
-                  }
-                });
-              }
+      function renderVisualModules(graph) {
+        var container = document.getElementById('visualModulesContainer');
+        if (!container) return;
+        container.innerHTML = '';
 
-              // 事件委托：依赖药丸点击
-              var detailBox = document.getElementById('nodeDetailCard');
-              if (detailBox) {
-                detailBox.addEventListener('click', function (e) {
-                  var pill = e.target.closest('.link-pill');
-                  if (pill) {
-                    var p = pill.getAttribute('data-path');
-                    if (p) selectNode(p);
-                  }
-                });
-              }
+        var modules = {};
+        Object.keys(graph.nodes).forEach(function (path) {
+          var parts = path.split('/');
+          var mod = parts.length > 1 ? parts.slice(0, 2).join('/') : 'root';
+          if (!modules[mod]) modules[mod] = [];
+          modules[mod].push(path);
+        });
 
-              // 7. 环境资产
-              var refreshEnvBtn = document.getElementById('refreshEnvBtn');
-              var exportEnvBtn = document.getElementById('exportEnvBtn');
-              var diffEnvBtn = document.getElementById('diffEnvBtn');
+        Object.keys(modules)
+          .sort()
+          .forEach(function (mod) {
+            var card = document.createElement('div');
+            card.className = 'module-card';
+            card.setAttribute('data-module', mod);
+            var html =
+              '<div class="module-header"><span>📁 ' +
+              escapeHtml(mod) +
+              '</span><span style="font-size:11px; font-weight:normal; color:var(--text-muted);">' +
+              escapeHtml(modules[mod].length) +
+              ' 个文件</span></div>';
 
-              if (refreshEnvBtn) refreshEnvBtn.addEventListener('click', detectEnv);
-              if (exportEnvBtn)
-                exportEnvBtn.addEventListener('click', exportEnvSnapshot);
-              if (diffEnvBtn) diffEnvBtn.addEventListener('click', executeEnvDiff);
-            }
+            modules[mod].forEach(function (filePath) {
+              var fileName = filePath.split('/').pop() || filePath;
+              var outDeg = (graph.dependencies[filePath] || []).length;
+              var inDeg = (graph.dependents[filePath] || []).length;
+              html +=
+                '<div class="node-item" data-path="' +
+                escapeHtml(filePath) +
+                '">' +
+                '<span style="color:#fff;">' +
+                escapeHtml(fileName) +
+                '</span>' +
+                '<span style="font-size:10px; color:var(--text-muted);">出 ' +
+                outDeg +
+                ' | 入 ' +
+                inDeg +
+                '</span>' +
+                '</div>';
+            });
 
-            async function init() {
-              setupEvents();
+            card.innerHTML = html;
+            container.appendChild(card);
+          });
+      }
 
-              try {
-                var mRes = await fetch('/api/models');
-                var mData = await mRes.json();
-                var mSelect = document.getElementById('modelSelect');
-                if (mSelect && mData.models) {
-                  mSelect.innerHTML = '';
-                  mData.models.forEach(function (m) {
-                    var opt = document.createElement('option');
-                    opt.value = m.id;
-                    opt.textContent = m.name;
-                    if (m.id === mData.defaultModel) opt.selected = true;
-                    mSelect.appendChild(opt);
-                  });
-                  onModelChange();
-                }
+      async function selectNode(path) {
+        if (!currentGraphData) return;
+        currentSelectedPath = path;
 
-                var tRes = await fetch('/api/templates');
-                var tData = await tRes.json();
-                var tSelect = document.getElementById('templateSelect');
-                if (tSelect && tData.templates) {
-                  tData.templates.forEach(function (t) {
-                    var opt = document.createElement('option');
-                    opt.value = t.id;
-                    opt.textContent = t.name + ' (' + t.id + ')';
-                    tSelect.appendChild(opt);
-                  });
-                }
-              } catch (e) {
-                console.error('初始化数据加载失败:', e);
-              }
-            }
+        var deps = currentGraphData.dependencies[path] || [];
+        var upstreams = currentGraphData.dependents[path] || [];
+        var relatedSet = new Set([path, ...deps, ...upstreams]);
 
-            function onModelChange() {
-              var modelSelect = document.getElementById('modelSelect');
-              if (!modelSelect) return;
-              var model = modelSelect.value;
-              var isLocal = model.indexOf('local') !== -1;
-              var localCfg = document.getElementById('localConfig');
-              var apiGrp = document.getElementById('apiKeyGroup');
-              if (localCfg) localCfg.style.display = isLocal ? 'block' : 'none';
-              if (apiGrp) apiGrp.style.display = isLocal ? 'none' : 'block';
-            }
+        // 1. 高亮与淡化处理
+        document.querySelectorAll('.node-item').forEach(function (n) {
+          var p = n.getAttribute('data-path');
+          n.classList.remove('selected', 'dep-node', 'upstream-node');
+          if (p === path) {
+            n.classList.add('selected');
+          } else if (deps.indexOf(p) !== -1) {
+            n.classList.add('dep-node');
+          } else if (upstreams.indexOf(p) !== -1) {
+            n.classList.add('upstream-node');
+          }
+        });
 
-            async function detectLocalModels() {
-              var base = document.getElementById('localBaseUrl').value;
-              var btn = document.getElementById('detectBtn');
-              if (btn) {
-                btn.disabled = true;
-                btn.textContent = '探测中...';
-              }
-              try {
-                var res = await fetch('/api/local-models', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({ baseUrl: base }),
-                });
-                var data = await res.json();
-                if (data.models && data.models.length) {
-                  var sel = document.getElementById('localModelSelect');
-                  if (sel) {
-                    sel.innerHTML = '';
-                    data.models.forEach(function (m) {
-                      var opt = document.createElement('option');
-                      opt.value = m.id;
-                      opt.textContent = m.name;
-                      sel.appendChild(opt);
-                    });
-                    sel.style.display = 'block';
-                    var inp = document.getElementById('localModelInput');
-                    if (inp) inp.style.display = 'none';
-                  }
-                }
-              } catch (e) {
-                alert('探测失败: ' + e.message);
-              } finally {
-                if (btn) {
-                  btn.disabled = false;
-                  btn.textContent = '🔍 探测模型';
-                }
-              }
-            }
+        document.querySelectorAll('.module-card').forEach(function (c) {
+          var hasRelated = Array.from(c.querySelectorAll('.node-item')).some(
+            function (n) {
+              return relatedSet.has(n.getAttribute('data-path'));
+            },
+          );
+          if (hasRelated) {
+            c.classList.remove('dimmed');
+            c.classList.add('highlighted');
+          } else {
+            c.classList.add('dimmed');
+            c.classList.remove('highlighted');
+          }
+        });
 
-            async function generateSkill() {
-              hideStatus('skillStatus');
-              var btn = document.getElementById('generateBtn');
-              if (btn) {
-                btn.disabled = true;
-                btn.textContent = '⏳ 正在提炼生成技能包...';
-              }
+        // 2. 渲染可点击跳转的依赖标签
+        document.getElementById('detailNodeTitle').textContent = '📄 ' + path;
 
-              try {
-                var formData = new FormData();
-                if (currentFile) {
-                  formData.append('file', currentFile);
-                  formData.append('fileName', currentFile.name);
-                } else {
-                  var src = document.getElementById('sourceInput').value.trim();
-                  if (!src) throw new Error('请提供文档内容、URL 或上传文件');
-                  formData.append('source', src);
-                }
-                var selectedModel = document.getElementById('modelSelect').value;
-                formData.append(
-                  'agentType',
-                  document.getElementById('agentType').value,
+        var depsPillsEl = document.getElementById('detailDepsPills');
+        if (depsPillsEl) {
+          if (deps.length > 0) {
+            depsPillsEl.innerHTML = deps
+              .map(function (d) {
+                return (
+                  '<span class="link-pill" data-path="' +
+                  escapeHtml(d) +
+                  '">➜ ' +
+                  escapeHtml(d) +
+                  '</span>'
                 );
-                formData.append('modelName', selectedModel);
-                formData.append(
-                  'apiKey',
-                  document.getElementById('apiKeyInput').value,
+              })
+              .join('');
+          } else {
+            depsPillsEl.innerHTML =
+              '<span style="font-size:12px; color:var(--text-muted);">无内部依赖 (叶子模块)</span>';
+          }
+        }
+
+        var upstreamsPillsEl = document.getElementById('detailUpstreamsPills');
+        if (upstreamsPillsEl) {
+          if (upstreams.length > 0) {
+            upstreamsPillsEl.innerHTML = upstreams
+              .map(function (u) {
+                return (
+                  '<span class="link-pill" style="background:rgba(168,85,247,0.15); color:var(--purple); border-color:rgba(168,85,247,0.3);" data-path="' +
+                  escapeHtml(u) +
+                  '">⬅ ' +
+                  escapeHtml(u) +
+                  '</span>'
                 );
-                formData.append(
-                  'template',
-                  document.getElementById('templateSelect').value,
+              })
+              .join('');
+          } else {
+            upstreamsPillsEl.innerHTML =
+              '<span style="font-size:12px; color:var(--text-muted);">顶层入口 / 无上游调用方</span>';
+          }
+        }
+
+        // 3. 异步读取并展示文件源码
+        var viewerEl = document.getElementById('sourceCodeViewer');
+        if (viewerEl) {
+          viewerEl.textContent = '正在读取文件源码...';
+          document.getElementById('nodeDetailCard').style.display = 'block';
+          document
+            .getElementById('nodeDetailCard')
+            .scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+          try {
+            var res = await fetch('/api/file/read', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-DevToolkit-Token': SESSION_TOKEN,
+              },
+              body: JSON.stringify({ path: path }),
+            });
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            document.getElementById('detailFileStats').textContent =
+              '(' +
+              data.lines +
+              ' 行代码 | ' +
+              (data.size / 1024).toFixed(1) +
+              ' KB)';
+            viewerEl.textContent = data.content;
+          } catch (e) {
+            viewerEl.textContent = '无法读取源码: ' + e.message;
+          }
+        }
+      }
+
+      function toggleGraphView() {
+        showingMermaidSource = !showingMermaidSource;
+        var visual = document.getElementById('visualModulesContainer');
+        var source = document.getElementById('mermaidSourceContainer');
+        var btn = document.getElementById('toggleGraphViewBtn');
+
+        if (showingMermaidSource) {
+          if (visual) visual.style.display = 'none';
+          if (source) source.style.display = 'block';
+          if (btn) btn.textContent = '🎨 切换为交互式拓扑大盘';
+        } else {
+          if (visual) visual.style.display = 'grid';
+          if (source) source.style.display = 'none';
+          if (btn) btn.textContent = '📝 切换为 Mermaid 源码';
+        }
+      }
+
+      async function buildCodeIndex() {
+        showStatus('searchStatus', 'info', '正在扫描并重建索引...');
+        try {
+          var res = await fetch('/api/search/index', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({
+              directory:
+                document.getElementById('searchDirInput').value.trim() ||
+                undefined,
+            }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          showStatus(
+            'searchStatus',
+            'success',
+            '索引构建完成: ' +
+              data.stats.totalFiles +
+              ' 文件 / ' +
+              data.stats.totalLines +
+              ' 行 / ' +
+              data.stats.totalChunks +
+              ' 分块',
+          );
+        } catch (e) {
+          showStatus('searchStatus', 'error', e.message);
+        }
+      }
+
+      async function detectEnv() {
+        showStatus('envStatus', 'info', '正在扫描当前环境资产...');
+        try {
+          var res = await fetch('/api/env/detect', {
+            method: 'POST',
+            headers: { 'X-DevToolkit-Token': SESSION_TOKEN },
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          currentEnvSnapshot = data.snapshot;
+          hideStatus('envStatus');
+
+          var sys = data.snapshot.system;
+          document.getElementById('envSystemStats').innerHTML =
+            '<div class="stat-card"><div class="label">操作系统</div><div class="num" style="font-size:15px">' +
+            escapeHtml(sys.platform) +
+            ' (' +
+            escapeHtml(sys.arch) +
+            ')</div></div>' +
+            '<div class="stat-card"><div class="label">主机名</div><div class="num" style="font-size:15px">' +
+            escapeHtml(sys.hostname) +
+            '</div></div>' +
+            '<div class="stat-card"><div class="label">当前用户</div><div class="num" style="font-size:15px">' +
+            escapeHtml(sys.username) +
+            '</div></div>' +
+            '<div class="stat-card"><div class="label">默认 Shell</div><div class="num" style="font-size:15px">' +
+            escapeHtml(sys.shell) +
+            '</div></div>';
+
+          var brew = data.snapshot.brew || { formulae: [], casks: [] };
+          document.getElementById('envBrewList').innerHTML =
+            brew.formulae
+              .map(function (f) {
+                return '🍺 ' + escapeHtml(f);
+              })
+              .concat(
+                brew.casks.map(function (c) {
+                  return '🍷 ' + escapeHtml(c);
+                }),
+              )
+              .join('<br>') || '无';
+
+          var npm = data.snapshot.npmGlobal || [];
+          document.getElementById('envNpmList').innerHTML =
+            npm
+              .map(function (n) {
+                return (
+                  escapeHtml(n.name) +
+                  ' <span style="color:var(--text-muted)">@' +
+                  escapeHtml(n.version) +
+                  '</span>'
                 );
-                formData.append(
-                  'skillName',
-                  document.getElementById('skillNameInput').value,
+              })
+              .join('<br>') || '无';
+
+          var pip = data.snapshot.pipPackages || [];
+          document.getElementById('envPipList').innerHTML =
+            pip
+              .map(function (p) {
+                return (
+                  escapeHtml(p.name) +
+                  ' <span style="color:var(--text-muted)">==' +
+                  escapeHtml(p.version) +
+                  '</span>'
                 );
+              })
+              .join('<br>') || '无';
 
-                if (selectedModel.indexOf('local') !== -1) {
-                  var localBase = getLocalBaseUrl();
-                  var localName = getLocalModelName();
-                  if (localBase) formData.append('localBaseUrl', localBase);
-                  if (localName) formData.append('localModelName', localName);
-                }
-
-                var res = await fetch('/api/generate', {
-                  method: 'POST',
-                  headers: { 'X-DevToolkit-Token': SESSION_TOKEN },
-                  body: formData,
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || '生成失败');
-
-                showStatus('skillStatus', 'success', '✨ 技能包提炼完成！');
-                document.getElementById('skillResultCard').style.display = 'block';
-                lastZip = data.zip;
-                typewriter(data.content, document.getElementById('skillContentPreview'));
-
-                var statsEl = document.getElementById('skillStats');
-                if (statsEl) {
-                  statsEl.innerHTML =
-                    '<div class="stat-card"><div class="label">目标 Agent</div><div class="num" style="font-size:16px">' +
-                    escapeHtml(data.agentType) +
-                    '</div></div>' +
-                    '<div class="stat-card"><div class="label">产物大小</div><div class="num">' +
-                    escapeHtml(data.size) +
-                    ' 字符</div></div>' +
-                    '<div class="stat-card"><div class="label">质量得分</div><div class="num" style="color:var(--green)">' +
-                    escapeHtml(data.quality ? data.quality.score : 100) +
-                    ' 分</div></div>';
-                }
-              } catch (e) {
-                showStatus('skillStatus', 'error', e.message);
-              } finally {
-                if (btn) {
-                  btn.disabled = false;
-                  btn.textContent = '🚀 开始提炼技能包';
-                }
-              }
-            }
-
-            async function evaluateCurrentSkill() {
-              hideStatus('skillStatus');
-              var content = document.getElementById(
-                'skillContentPreview',
-              ).textContent;
-              if (!content) {
-                showStatus('skillStatus', 'error', '请先提炼生成技能包');
-                return;
-              }
-
-              var btn = document.getElementById('evalSkillBtn');
-              if (btn) {
-                btn.disabled = true;
-                btn.textContent = '⏳ 正在并发进行 Benchmark 评测...';
-              }
-              try {
-                var selectedModel = document.getElementById('modelSelect').value;
-                var evalPayload = {
-                  skillContent: content,
-                  model: selectedModel,
-                  apiKey: document.getElementById('apiKeyInput').value,
-                };
-                if (selectedModel.indexOf('local') !== -1) {
-                  evalPayload.baseURL = getLocalBaseUrl() || undefined;
-                  evalPayload.localModelName = getLocalModelName() || undefined;
-                }
-
-                var res = await fetch('/api/eval', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify(evalPayload),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || '评测执行失败');
-
-                var card = document.getElementById('skillEvalCard');
-                card.style.display = 'block';
-                document.getElementById('skillEvalPreview').textContent =
-                  data.markdown;
-                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                showStatus(
-                  'skillStatus',
-                  'success',
-                  '✨ Benchmark 自动化评测完成！综合得分: ' +
-                    data.report.overallScore +
-                    ' 分 (' +
-                    data.report.grade +
-                    ' 级)',
+          var vscode = data.snapshot.vscodeExtensions || [];
+          document.getElementById('envVscodeList').innerHTML =
+            vscode
+              .map(function (v) {
+                return (
+                  escapeHtml(v.id) +
+                  ' <span style="color:var(--text-muted)">@' +
+                  escapeHtml(v.version) +
+                  '</span>'
                 );
-              } catch (e) {
-                showStatus('skillStatus', 'error', '评测失败: ' + e.message);
-              } finally {
-                if (btn) {
-                  btn.disabled = false;
-                  btn.textContent = '📊 技能效果自动化评测';
-                }
-              }
-            }
+              })
+              .join('<br>') || '无';
+        } catch (e) {
+          showStatus('envStatus', 'error', e.message);
+        }
+      }
 
-            async function executeConvert() {
-              hideStatus('convertStatus');
-              var content = document.getElementById('convertInput').value.trim();
-              if (!content)
-                return showStatus('convertStatus', 'error', '请粘贴要转换的规则内容');
+      function exportEnvSnapshot() {
+        if (!currentEnvSnapshot) return alert('请先扫描环境');
+        var blob = new Blob([JSON.stringify(currentEnvSnapshot, null, 2)], {
+          type: 'application/json',
+        });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'devtoolkit-env.json';
+        a.click();
+        setTimeout(function () {
+          URL.revokeObjectURL(url);
+        }, 0);
+      }
 
-              try {
-                var res = await fetch('/api/convert', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({
-                    content: content,
-                    to: document.getElementById('convertToSelect').value,
-                    name:
-                      document.getElementById('convertNameInput').value.trim() ||
-                      undefined,
-                  }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
+      async function executeEnvDiff() {
+        var raw = document.getElementById('diffJsonInput').value.trim();
+        if (!raw) return alert('请粘贴快照 JSON 内容');
+        try {
+          var snap = JSON.parse(raw);
+          var res = await fetch('/api/env/diff', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-DevToolkit-Token': SESSION_TOKEN,
+            },
+            body: JSON.stringify({ snapshot: snap }),
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.error);
 
-                showStatus('convertStatus', 'success', '✨ 规则转换成功！');
-                document.getElementById('convertResultCard').style.display = 'block';
-                document.getElementById('convertPreview').textContent = data.preview;
-              } catch (e) {
-                showStatus('convertStatus', 'error', e.message);
-              }
-            }
+          document.getElementById('envDiffResult').style.display = 'block';
+          document.getElementById('envDiffPreview').textContent = data.preview;
+        } catch (e) {
+          alert('比对失败: ' + e.message);
+        }
+      }
 
-            async function executeSyncProject() {
-              showStatus('convertStatus', 'info', '正在扫描并预览项目规则变更...');
-              try {
-                var headers = {
-                  'Content-Type': 'application/json',
-                  'X-DevToolkit-Token': SESSION_TOKEN,
-                };
-                var previewRes = await fetch('/api/sync', {
-                  method: 'POST',
-                  headers: headers,
-                  body: JSON.stringify({ dryRun: true }),
-                });
-                var preview = await previewRes.json();
-                if (!previewRes.ok) throw new Error(preview.error);
-                var count = preview.summary.totalSynced;
-                if (!count) {
-                  showStatus(
-                    'convertStatus',
-                    'success',
-                    '规则已是最新状态，无需写入。',
-                  );
-                  return;
-                }
-                if (
-                  !window.confirm('将创建或更新 ' + count + ' 项规则产物，是否继续？')
-                ) {
-                  showStatus('convertStatus', 'info', '已取消同步，未写入任何文件。');
-                  return;
-                }
-
-                var res = await fetch('/api/sync', {
-                  method: 'POST',
-                  headers: headers,
-                  body: JSON.stringify({ dryRun: false }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                showStatus(
-                  'convertStatus',
-                  'success',
-                  '✨ 项目全量规则同步完成！共分发 ' +
-                    data.summary.totalSynced +
-                    ' 项产物。',
-                );
-              } catch (e) {
-                showStatus('convertStatus', 'error', e.message);
-              }
-            }
-
-            function triggerDownload() {
-              if (!lastZip || !lastZip.id) return alert('未找到可下载的 ZIP 产物');
-              window.location.href = '/api/download/' + lastZip.id;
-            }
-
-            function copySkillContent() {
-              navigator.clipboard.writeText(
-                document.getElementById('skillContentPreview').textContent,
-              );
-              alert('已复制到剪贴板！');
-            }
-
-            async function executeSearch() {
-              hideStatus('searchStatus');
-              var query = document.getElementById('searchQueryInput').value.trim();
-              if (!query)
-                return showStatus('searchStatus', 'error', '请输入搜索内容');
-
-              var btn = document.getElementById('searchBtn');
-              if (btn) {
-                btn.disabled = true;
-                btn.textContent = '搜索中...';
-              }
-
-              try {
-                var res = await fetch('/api/search', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({
-                    query: query,
-                    directory:
-                      document.getElementById('searchDirInput').value.trim() ||
-                      undefined,
-                    explain: document.getElementById('searchExplainCheck').checked,
-                  }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || '搜索失败');
-
-                if (data.explanation) {
-                  document.getElementById('searchExplainCard').style.display =
-                    'block';
-                  document.getElementById('searchExplanation').textContent =
-                    data.explanation;
-                } else {
-                  document.getElementById('searchExplainCard').style.display = 'none';
-                }
-
-                var area = document.getElementById('searchResultsArea');
-                area.innerHTML = '';
-                if (!data.results || data.results.length === 0) {
-                  area.innerHTML =
-                    '<div class="card" style="text-align:center; color:var(--text-muted)">未找到匹配的代码片段</div>';
-                  return;
-                }
-
-                data.results.forEach(function (r) {
-                  var item = document.createElement('div');
-                  item.className = 'search-item';
-                  item.innerHTML =
-                    '<div class="search-item-header">' +
-                    '<div class="file-badge">📄 ' +
-                    escapeHtml(r.file) +
-                    ' :' +
-                    escapeHtml(r.startLine) +
-                    '-' +
-                    escapeHtml(r.endLine) +
-                    '</div>' +
-                    '<div class="score-badge">相关度: ' +
-                    (r.score * 100).toFixed(0) +
-                    '%</div>' +
-                    '</div>' +
-                    '<div style="margin-bottom:10px;">' +
-                    r.matchedSymbols
-                      .map(function (s) {
-                        return (
-                          '<span class="tag" style="color:var(--accent-hover);">' +
-                          escapeHtml(s) +
-                          '</span>'
-                        );
-                      })
-                      .join('') +
-                    r.matchedKeywords
-                      .map(function (k) {
-                        return '<span class="tag">' + escapeHtml(k) + '</span>';
-                      })
-                      .join('') +
-                    '</div>' +
-                    '<div class="code-box" style="max-height:220px;">' +
-                    escapeHtml(r.content) +
-                    '</div>';
-                  area.appendChild(item);
-                });
-              } catch (e) {
-                showStatus('searchStatus', 'error', e.message);
-              } finally {
-                if (btn) {
-                  btn.disabled = false;
-                  btn.textContent = '🔎 搜索代码';
-                }
-              }
-            }
-
-            async function executeImpactAnalysis() {
-              var file =
-                document.getElementById('searchQueryInput').value.trim() ||
-                document.getElementById('searchDirInput').value.trim();
-              if (!file)
-                return alert(
-                  '请在搜索框输入要分析的目标文件路径（如 src/utils/logger.ts）',
-                );
-
-              showStatus('searchStatus', 'info', '正在推演改动影响链路...');
-              try {
-                var res = await fetch('/api/impact', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({ targetFile: file }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-
-                document.getElementById('impactResultCard').style.display = 'block';
-                document.getElementById('impactReportText').textContent = data.report;
-                hideStatus('searchStatus');
-              } catch (e) {
-                showStatus('searchStatus', 'error', e.message);
-              }
-            }
-
-            async function loadGraph() {
-              showStatus('graphStatus', 'info', '正在构建代码架构拓扑图...');
-              try {
-                var res = await fetch('/api/graph', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({}),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                hideStatus('graphStatus');
-                currentGraphData = data.graph;
-
-                var s = data.graph.stats;
-                document.getElementById('graphStats').innerHTML =
-                  '<div class="stat-card"><div class="label">源码文件数</div><div class="num">' +
-                  s.totalFiles +
-                  '</div></div>' +
-                  '<div class="stat-card"><div class="label">依赖引用边</div><div class="num" style="color:var(--accent)">' +
-                  s.totalEdges +
-                  '</div></div>' +
-                  '<div class="stat-card"><div class="label">独立模块数</div><div class="num">' +
-                  s.isolatedFiles +
-                  '</div></div>';
-
-                document.getElementById('graphMermaidCode').textContent =
-                  data.mermaid;
-
-                renderVisualModules(data.graph);
-              } catch (e) {
-                showStatus('graphStatus', 'error', e.message);
-              }
-            }
-
-            function renderVisualModules(graph) {
-              var container = document.getElementById('visualModulesContainer');
-              if (!container) return;
-              container.innerHTML = '';
-
-              var modules = {};
-              Object.keys(graph.nodes).forEach(function (path) {
-                var parts = path.split('/');
-                var mod = parts.length > 1 ? parts.slice(0, 2).join('/') : 'root';
-                if (!modules[mod]) modules[mod] = [];
-                modules[mod].push(path);
-              });
-
-              Object.keys(modules)
-                .sort()
-                .forEach(function (mod) {
-                  var card = document.createElement('div');
-                  card.className = 'module-card';
-                  card.setAttribute('data-module', mod);
-                  var html =
-                    '<div class="module-header"><span>📁 ' +
-                    escapeHtml(mod) +
-                    '</span><span style="font-size:11px; font-weight:normal; color:var(--text-muted);">' +
-                    escapeHtml(modules[mod].length) +
-                    ' 个文件</span></div>';
-
-                  modules[mod].forEach(function (filePath) {
-                    var fileName = filePath.split('/').pop() || filePath;
-                    var outDeg = (graph.dependencies[filePath] || []).length;
-                    var inDeg = (graph.dependents[filePath] || []).length;
-                    html +=
-                      '<div class="node-item" data-path="' +
-                      escapeHtml(filePath) +
-                      '">' +
-                      '<span style="color:#fff;">' +
-                      escapeHtml(fileName) +
-                      '</span>' +
-                      '<span style="font-size:10px; color:var(--text-muted);">出 ' +
-                      outDeg +
-                      ' | 入 ' +
-                      inDeg +
-                      '</span>' +
-                      '</div>';
-                  });
-
-                  card.innerHTML = html;
-                  container.appendChild(card);
-                });
-            }
-
-            async function selectNode(path) {
-              if (!currentGraphData) return;
-              currentSelectedPath = path;
-
-              var deps = currentGraphData.dependencies[path] || [];
-              var upstreams = currentGraphData.dependents[path] || [];
-              var relatedSet = new Set([path, ...deps, ...upstreams]);
-
-              // 1. 高亮与淡化处理
-              document.querySelectorAll('.node-item').forEach(function (n) {
-                var p = n.getAttribute('data-path');
-                n.classList.remove('selected', 'dep-node', 'upstream-node');
-                if (p === path) {
-                  n.classList.add('selected');
-                } else if (deps.indexOf(p) !== -1) {
-                  n.classList.add('dep-node');
-                } else if (upstreams.indexOf(p) !== -1) {
-                  n.classList.add('upstream-node');
-                }
-              });
-
-              document.querySelectorAll('.module-card').forEach(function (c) {
-                var hasRelated = Array.from(c.querySelectorAll('.node-item')).some(
-                  function (n) {
-                    return relatedSet.has(n.getAttribute('data-path'));
-                  },
-                );
-                if (hasRelated) {
-                  c.classList.remove('dimmed');
-                  c.classList.add('highlighted');
-                } else {
-                  c.classList.add('dimmed');
-                  c.classList.remove('highlighted');
-                }
-              });
-
-              // 2. 渲染可点击跳转的依赖标签
-              document.getElementById('detailNodeTitle').textContent = '📄 ' + path;
-
-              var depsPillsEl = document.getElementById('detailDepsPills');
-              if (depsPillsEl) {
-                if (deps.length > 0) {
-                  depsPillsEl.innerHTML = deps
-                    .map(function (d) {
-                      return (
-                        '<span class="link-pill" data-path="' +
-                        escapeHtml(d) +
-                        '">➜ ' +
-                        escapeHtml(d) +
-                        '</span>'
-                      );
-                    })
-                    .join('');
-                } else {
-                  depsPillsEl.innerHTML =
-                    '<span style="font-size:12px; color:var(--text-muted);">无内部依赖 (叶子模块)</span>';
-                }
-              }
-
-              var upstreamsPillsEl = document.getElementById('detailUpstreamsPills');
-              if (upstreamsPillsEl) {
-                if (upstreams.length > 0) {
-                  upstreamsPillsEl.innerHTML = upstreams
-                    .map(function (u) {
-                      return (
-                        '<span class="link-pill" style="background:rgba(168,85,247,0.15); color:var(--purple); border-color:rgba(168,85,247,0.3);" data-path="' +
-                        escapeHtml(u) +
-                        '">⬅ ' +
-                        escapeHtml(u) +
-                        '</span>'
-                      );
-                    })
-                    .join('');
-                } else {
-                  upstreamsPillsEl.innerHTML =
-                    '<span style="font-size:12px; color:var(--text-muted);">顶层入口 / 无上游调用方</span>';
-                }
-              }
-
-              // 3. 异步读取并展示文件源码
-              var viewerEl = document.getElementById('sourceCodeViewer');
-              if (viewerEl) {
-                viewerEl.textContent = '正在读取文件源码...';
-                document.getElementById('nodeDetailCard').style.display = 'block';
-                document
-                  .getElementById('nodeDetailCard')
-                  .scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-                try {
-                  var res = await fetch('/api/file/read', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'X-DevToolkit-Token': SESSION_TOKEN,
-                    },
-                    body: JSON.stringify({ path: path }),
-                  });
-                  var data = await res.json();
-                  if (!res.ok) throw new Error(data.error);
-
-                  document.getElementById('detailFileStats').textContent =
-                    '(' +
-                    data.lines +
-                    ' 行代码 | ' +
-                    (data.size / 1024).toFixed(1) +
-                    ' KB)';
-                  viewerEl.textContent = data.content;
-                } catch (e) {
-                  viewerEl.textContent = '无法读取源码: ' + e.message;
-                }
-              }
-            }
-
-            function toggleGraphView() {
-              showingMermaidSource = !showingMermaidSource;
-              var visual = document.getElementById('visualModulesContainer');
-              var source = document.getElementById('mermaidSourceContainer');
-              var btn = document.getElementById('toggleGraphViewBtn');
-
-              if (showingMermaidSource) {
-                if (visual) visual.style.display = 'none';
-                if (source) source.style.display = 'block';
-                if (btn) btn.textContent = '🎨 切换为交互式拓扑大盘';
-              } else {
-                if (visual) visual.style.display = 'grid';
-                if (source) source.style.display = 'none';
-                if (btn) btn.textContent = '📝 切换为 Mermaid 源码';
-              }
-            }
-
-            async function buildCodeIndex() {
-              showStatus('searchStatus', 'info', '正在扫描并重建索引...');
-              try {
-                var res = await fetch('/api/search/index', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({
-                    directory:
-                      document.getElementById('searchDirInput').value.trim() ||
-                      undefined,
-                  }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                showStatus(
-                  'searchStatus',
-                  'success',
-                  '索引构建完成: ' +
-                    data.stats.totalFiles +
-                    ' 文件 / ' +
-                    data.stats.totalLines +
-                    ' 行 / ' +
-                    data.stats.totalChunks +
-                    ' 分块',
-                );
-              } catch (e) {
-                showStatus('searchStatus', 'error', e.message);
-              }
-            }
-
-            async function detectEnv() {
-              showStatus('envStatus', 'info', '正在扫描当前环境资产...');
-              try {
-                var res = await fetch('/api/env/detect', {
-                  method: 'POST',
-                  headers: { 'X-DevToolkit-Token': SESSION_TOKEN },
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                currentEnvSnapshot = data.snapshot;
-                hideStatus('envStatus');
-
-                var sys = data.snapshot.system;
-                document.getElementById('envSystemStats').innerHTML =
-                  '<div class="stat-card"><div class="label">操作系统</div><div class="num" style="font-size:15px">' +
-                  escapeHtml(sys.platform) +
-                  ' (' +
-                  escapeHtml(sys.arch) +
-                  ')</div></div>' +
-                  '<div class="stat-card"><div class="label">主机名</div><div class="num" style="font-size:15px">' +
-                  escapeHtml(sys.hostname) +
-                  '</div></div>' +
-                  '<div class="stat-card"><div class="label">当前用户</div><div class="num" style="font-size:15px">' +
-                  escapeHtml(sys.username) +
-                  '</div></div>' +
-                  '<div class="stat-card"><div class="label">默认 Shell</div><div class="num" style="font-size:15px">' +
-                  escapeHtml(sys.shell) +
-                  '</div></div>';
-
-                var brew = data.snapshot.brew || { formulae: [], casks: [] };
-                document.getElementById('envBrewList').innerHTML =
-                  brew.formulae
-                    .map(function (f) {
-                      return '🍺 ' + escapeHtml(f);
-                    })
-                    .concat(
-                      brew.casks.map(function (c) {
-                        return '🍷 ' + escapeHtml(c);
-                      }),
-                    )
-                    .join('<br>') || '无';
-
-                var npm = data.snapshot.npmGlobal || [];
-                document.getElementById('envNpmList').innerHTML =
-                  npm
-                    .map(function (n) {
-                      return (
-                        escapeHtml(n.name) +
-                        ' <span style="color:var(--text-muted)">@' +
-                        escapeHtml(n.version) +
-                        '</span>'
-                      );
-                    })
-                    .join('<br>') || '无';
-
-                var pip = data.snapshot.pipPackages || [];
-                document.getElementById('envPipList').innerHTML =
-                  pip
-                    .map(function (p) {
-                      return (
-                        escapeHtml(p.name) +
-                        ' <span style="color:var(--text-muted)">==' +
-                        escapeHtml(p.version) +
-                        '</span>'
-                      );
-                    })
-                    .join('<br>') || '无';
-
-                var vscode = data.snapshot.vscodeExtensions || [];
-                document.getElementById('envVscodeList').innerHTML =
-                  vscode
-                    .map(function (v) {
-                      return (
-                        escapeHtml(v.id) +
-                        ' <span style="color:var(--text-muted)">@' +
-                        escapeHtml(v.version) +
-                        '</span>'
-                      );
-                    })
-                    .join('<br>') || '无';
-              } catch (e) {
-                showStatus('envStatus', 'error', e.message);
-              }
-            }
-
-            function exportEnvSnapshot() {
-              if (!currentEnvSnapshot) return alert('请先扫描环境');
-              var blob = new Blob([JSON.stringify(currentEnvSnapshot, null, 2)], {
-                type: 'application/json',
-              });
-              var url = URL.createObjectURL(blob);
-              var a = document.createElement('a');
-              a.href = url;
-              a.download = 'devtoolkit-env.json';
-              a.click();
-              setTimeout(function () {
-                URL.revokeObjectURL(url);
-              }, 0);
-            }
-
-            async function executeEnvDiff() {
-              var raw = document.getElementById('diffJsonInput').value.trim();
-              if (!raw) return alert('请粘贴快照 JSON 内容');
-              try {
-                var snap = JSON.parse(raw);
-                var res = await fetch('/api/env/diff', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-DevToolkit-Token': SESSION_TOKEN,
-                  },
-                  body: JSON.stringify({ snapshot: snap }),
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-
-                document.getElementById('envDiffResult').style.display = 'block';
-                document.getElementById('envDiffPreview').textContent = data.preview;
-              } catch (e) {
-                alert('比对失败: ' + e.message);
-              }
-            }
-
-            // 保证无论页面何时加载完成都能立即挂载事件
-            if (document.readyState === 'loading') {
-              document.addEventListener('DOMContentLoaded', init);
-            } else {
-              init();
-            }
+      // 保证无论页面何时加载完成都能立即挂载事件
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
     </script>
   </body>
 </html>

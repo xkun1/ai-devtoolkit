@@ -6,9 +6,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  preflight:
+    name: 发布前完整校验
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 安装 Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 运行完整发布校验
+        run: npm run verify:release
+
   publish-gpr:
     name: Publish to GitHub Packages
     runs-on: ubuntu-latest
+    needs: preflight
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -18,7 +41,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
           registry-url: https://npm.pkg.github.com
 
       - run: npm ci
@@ -35,20 +59,34 @@ jobs:
   publish-npm:
     name: Publish to npmjs.org
     runs-on: ubuntu-latest
+    needs: preflight
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
 
       - run: npm run build
 
+      - name: 检查 npm 发布凭据
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::缺少 NPM_TOKEN secret，已阻止 npmjs.org 发布。请在仓库 Secrets 配置 NPM_TOKEN 后重试。"
+            exit 1
+          fi
+
       - name: Publish to npmjs
-        if: env.NPM_TOKEN != ''
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
