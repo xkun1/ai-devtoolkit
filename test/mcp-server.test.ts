@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const CLI_SOURCE = join(process.cwd(), 'src', 'cli.ts');
 const TMP = join(tmpdir(), `devtoolkit-mcp-test-${Date.now()}`);
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
+) as { version: string };
 
 beforeEach(async () => {
   await mkdir(TMP, { recursive: true });
@@ -96,7 +100,7 @@ describe('MCP Server — 协议握手', () => {
     expect(init.jsonrpc).toBe('2.0');
     expect(init.id).toBe(1);
     expect(init.result.serverInfo.name).toBe('devtoolkit');
-    expect(init.result.serverInfo.version).toBe('0.9.0');
+    expect(init.result.serverInfo.version).toBe(PACKAGE_VERSION.version);
     expect(init.result.protocolVersion).toBe('2024-11-05');
     expect(init.result.capabilities.tools).toBeDefined();
   });
