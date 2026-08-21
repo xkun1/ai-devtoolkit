@@ -70,8 +70,10 @@ export async function initCodeIndex(
   let index: SearchIndex;
   try {
     index = await buildIndex(options);
-  } catch (err: any) {
-    failSpinner(`扫描失败: ${err.message}`);
+  } catch (err: unknown) {
+    failSpinner(
+      `扫描失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
 
@@ -159,14 +161,16 @@ export async function searchAndPrint(
         maxOutputChars: runtime?.maxOutputChars,
       });
       succeedSpinner('分析完成');
-      console.log('\n' + explanation);
-    } catch (err: any) {
-      failSpinner(`LLM 分析失败: ${err.message}`);
+      info('\n' + explanation);
+    } catch (err: unknown) {
+      failSpinner(
+        `LLM 分析失败: ${err instanceof Error ? err.message : String(err)}`,
+      );
       if (isAbortError(err) || err instanceof ResourceLimitError) throw err;
-      console.log(formatResultsPlain(results, index.projectRoot));
+      info(formatResultsPlain(results, index.projectRoot));
     }
   } else {
-    console.log(formatResultsPlain(results, index.projectRoot));
+    info(formatResultsPlain(results, index.projectRoot));
   }
 }
 

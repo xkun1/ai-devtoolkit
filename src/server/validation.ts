@@ -70,8 +70,12 @@ export async function resolveProjectPath(
   let canonicalPath: string;
   try {
     canonicalPath = await realpath(candidate);
-  } catch (err: any) {
-    if (err?.code === 'ENOENT') {
+  } catch (err: unknown) {
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? err.code
+        : undefined;
+    if (code === 'ENOENT') {
       throw new HttpError(404, `路径不存在: ${requested}`);
     }
     throw err;

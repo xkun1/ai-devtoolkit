@@ -20,7 +20,7 @@ export function serveHTML(res: ServerResponse, sessionToken: string): void {
 export function serveJSON(
   res: ServerResponse,
   status: number,
-  data: any,
+  data: unknown,
 ): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(data));
@@ -45,19 +45,18 @@ export function serveZip(
  *
  * 使用 Buffer 拼接而非 string +=，避免大文档跨 chunk 时的多字节字符截断。
  */
-export async function readBody(
-  req: IncomingMessage,
-  limit: number,
-): Promise<any> {
+export async function readBody<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(req: IncomingMessage, limit: number): Promise<T> {
   const buffer = await readRequestBuffer(req, limit);
   const data = buffer.toString('utf-8');
-  if (!data) return {};
+  if (!data) return {} as T;
   try {
     const parsed: unknown = JSON.parse(data);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new HttpError(400, '请求体必须是 JSON 对象');
     }
-    return parsed;
+    return parsed as T;
   } catch {
     throw new HttpError(400, '请求体必须是合法 JSON 对象');
   }

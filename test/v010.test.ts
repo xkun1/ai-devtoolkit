@@ -307,7 +307,9 @@ describe('v0.10 — 多模型对比评测', () => {
       ],
       bestModel: 'model-b',
     };
-    const md = formatMultiModelReport(mockResult as any);
+    const md = formatMultiModelReport(
+      mockResult as Parameters<typeof formatMultiModelReport>[0],
+    );
     expect(md).toContain('| model-a | ❌ 失败 |');
     expect(md).toContain('| model-b | 88 | A |');
     expect(md).toContain('🏆 **最佳模型**: model-b');

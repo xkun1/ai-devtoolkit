@@ -3,6 +3,17 @@
  * 启发式策略：移除噪声标签 → 定位正文容器 → 转换为干净的 Markdown
  */
 import { fetchPublicText, type SafeFetchOptions } from '../utils/safe-fetch.js';
+type CheerioSelection = {
+  length: number;
+  remove(): void;
+  first(): CheerioSelection;
+  text(): string;
+  attr(name: string): string | undefined;
+  each(callback: (index: number, element: unknown) => void): void;
+  find(selector: string): CheerioSelection;
+  html(): string | null;
+};
+type CheerioApiLike = (selector: string | unknown) => CheerioSelection;
 
 /** 从 HTML 字符串提取正文（cheerio 清洗 + turndown 转 Markdown） */
 export async function extractFromHtml(html: string): Promise<{
@@ -10,7 +21,7 @@ export async function extractFromHtml(html: string): Promise<{
   title: string;
   meta: Record<string, string>;
 }> {
-  const $ = (await import('cheerio')).load(html);
+  const $ = (await import('cheerio')).load(html) as unknown as CheerioApiLike;
 
   // 提取标题
   const title =
@@ -139,9 +150,9 @@ async function fetchHtml(
 }
 
 /** 启发式：找文本密度最高的块级容器 */
-function findDensestContent($: any): string {
+function findDensestContent($: CheerioApiLike): string {
   let best = { score: 0, html: '' };
-  $('div, section').each((_: any, el: any) => {
+  $('div, section').each((_: number, el: unknown) => {
     const $el = $(el);
     const text = $el.text().trim();
     const len = text.length;

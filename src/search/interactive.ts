@@ -116,7 +116,7 @@ export function startInteractiveSearch(
       fallbackOutput = formatResultsPlain(results, index.projectRoot);
 
       if (plainMode || !llm) {
-        console.log(fallbackOutput);
+        info(fallbackOutput);
       } else {
         // LLM 解释模式
         info('🤖 正在分析...');
@@ -129,9 +129,9 @@ export function startInteractiveSearch(
           timeoutMs: options.timeoutMs,
           maxOutputChars: options.maxOutputChars,
         });
-        console.log('\n' + explanation);
+        info('\n' + explanation);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (isAbortError(err)) {
         rl.close();
         return;
@@ -139,9 +139,11 @@ export function startInteractiveSearch(
       if (err instanceof ResourceLimitError) {
         warn(`LLM 解释受资源限制: ${err.message}`);
       } else {
-        warn(`LLM 解释失败: ${err.message}，回退到纯文本模式`);
+        warn(
+          `LLM 解释失败: ${err instanceof Error ? err.message : String(err)}，回退到纯文本模式`,
+        );
       }
-      if (fallbackOutput) console.log(fallbackOutput);
+      if (fallbackOutput) info(fallbackOutput);
     } finally {
       busy = false;
       if (!closed) rl.prompt();

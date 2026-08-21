@@ -15,7 +15,7 @@ export interface OpenApiParameter {
   required?: boolean;
   type?: string;
   description?: string;
-  schema?: any;
+  schema?: unknown;
 }
 
 export interface OpenApiField {
@@ -24,7 +24,7 @@ export interface OpenApiField {
   required: boolean;
   description?: string;
   enum?: string[];
-  example?: any;
+  example?: unknown;
 }
 
 export interface OpenApiEndpoint {
@@ -68,16 +68,13 @@ export interface ParsedOpenApi {
 }
 
 /** 检测内容或文件名是否符合 OpenAPI / Swagger 特征 */
-export function isOpenApiSpec(
-  content: string | any,
-  filename?: string,
-): boolean {
+export function isOpenApiSpec(content: unknown, filename?: string): boolean {
   if (typeof content === 'object' && content !== null) {
+    const obj = content as Record<string, unknown>;
     return Boolean(
-      content.openapi ||
-      content.swagger ||
-      (content.paths &&
-        (content.info || content.components || content.definitions)),
+      obj.openapi ||
+      obj.swagger ||
+      (obj.paths && (obj.info || obj.components || obj.definitions)),
     );
   }
 
@@ -143,39 +140,51 @@ export function isOpenApiSpec(
 }
 
 /** 解析 OpenAPI / Swagger 原始文本为结构化规范 */
-export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
+export function parseOpenApiSpec(raw: unknown): ParsedOpenApi {
   const rawString = typeof raw === 'string' ? raw : JSON.stringify(raw);
-  const spec = typeof raw === 'string' ? parseYamlOrJson(raw) : raw;
+  const parsedSpec: unknown =
+    typeof raw === 'string' ? parseYamlOrJson(raw) : raw;
 
-  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+  if (
+    !parsedSpec ||
+    typeof parsedSpec !== 'object' ||
+    Array.isArray(parsedSpec)
+  ) {
     throw new Error('无效的 OpenAPI / Swagger 数据结构');
   }
+  const spec = parsedSpec as Record<string, unknown>;
   if (typeof spec.openapi !== 'string' && typeof spec.swagger !== 'string') {
     throw new Error('OpenAPI / Swagger 规范缺少版本字段');
   }
 
   const specType: 'openapi' | 'swagger' = spec.swagger ? 'swagger' : 'openapi';
   const version = String(spec.openapi || spec.swagger || '3.0.0');
-  const info = spec.info || {};
-  const title = info.title || 'API Specification';
-  const description = info.description || '';
+  const info = (spec.info as Record<string, unknown> | undefined) || {};
+  const title = (info.title as string) || 'API Specification';
+  const description = (info.description as string) || '';
 
   // 提取服务器列表 / BaseURL
   const servers: string[] = [];
   if (spec.servers && Array.isArray(spec.servers)) {
-    for (const s of spec.servers) {
+    for (const s of spec.servers as Array<{
+      url?: string;
+      description?: string;
+    }>) {
       if (s?.url)
         servers.push(s.url + (s.description ? ' (' + s.description + ')' : ''));
     }
   } else if (spec.host) {
     const schemes =
-      spec.schemes && spec.schemes.length ? spec.schemes : ['https'];
+      (spec.schemes as string[] | undefined) &&
+      (spec.schemes as string[]).length
+        ? (spec.schemes as string[])
+        : ['https'];
     const basePath = spec.basePath || '';
     for (const scheme of schemes) {
-      servers.push(scheme + '://' + spec.host + basePath);
+      servers.push(scheme + '://' + (spec.host as string) + basePath);
     }
   } else if (spec.basePath) {
-    servers.push(spec.basePath);
+    servers.push(spec.basePath as string);
   }
 
   // 提取鉴权机制
@@ -185,15 +194,19 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
     in?: string;
     description?: string;
   }> = [];
-  const secDefs =
-    spec.components?.securitySchemes || spec.securityDefinitions || {};
-  for (const [secName, secVal] of Object.entries<any>(secDefs)) {
+  const secDefs: Record<string, unknown> =
+    ((spec.components as Record<string, unknown> | undefined)
+      ?.securitySchemes as Record<string, unknown> | undefined) ||
+    (spec.securityDefinitions as Record<string, unknown> | undefined) ||
+    {};
+  for (const [secName, secValRaw] of Object.entries(secDefs)) {
+    const secVal = secValRaw as Record<string, unknown> | null;
     if (secVal && typeof secVal === 'object') {
       securitySchemes.push({
         name: secName,
-        type: secVal.type || 'apiKey',
-        in: secVal.in,
-        description: secVal.description,
+        type: (secVal.type as string) || 'apiKey',
+        in: secVal.in as string | undefined,
+        description: secVal.description as string | undefined,
       });
     }
   }
@@ -213,10 +226,10 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
     'head',
   ];
 
-  for (const [pathStr, pathItem] of Object.entries<any>(paths)) {
+  for (const [pathStr, pathItem] of Object.entries(paths)) {
     if (!pathItem || typeof pathItem !== 'object') continue;
 
-    const commonParams: any[] = Array.isArray(pathItem.parameters)
+    const commonParams: unknown[] = Array.isArray(pathItem.parameters)
       ? pathItem.parameters
       : [];
 
@@ -241,18 +254,21 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
         const resolved = resolveRef(p, spec);
         if (!resolved || !resolved.name) continue;
 
-        let pType = resolved.type;
+        let pType =
+          typeof resolved.type === 'string' ? resolved.type : undefined;
         if (!pType && resolved.schema) {
           const s = resolveRef(resolved.schema, spec);
           pType = formatSchemaType(s, spec);
         }
 
         parameters.push({
-          name: resolved.name,
-          in: resolved.in || 'query',
-          required: resolved.required ?? resolved.in === 'path',
+          name: typeof resolved.name === 'string' ? resolved.name : '',
+          in: (resolved.in as OpenApiParameter['in']) || 'query',
+          required:
+            (resolved.required as boolean | undefined) ??
+            (resolved.in as string) === 'path',
           type: pType || 'string',
-          description: resolved.description,
+          description: resolved.description as string | undefined,
         });
       }
 
@@ -261,16 +277,18 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
 
       if (operation.requestBody) {
         const rb = resolveRef(operation.requestBody, spec);
-        if (rb && rb.content) {
+        const rbContent = rb?.content as
+          Record<string, { schema?: unknown }> | undefined;
+        if (rb && rbContent) {
           const firstContentType =
-            Object.keys(rb.content)[0] || 'application/json';
-          const contentObj = rb.content[firstContentType];
+            Object.keys(rbContent)[0] || 'application/json';
+          const contentObj = rbContent[firstContentType];
           const schema = resolveRef(contentObj?.schema, spec);
           const fields = extractFieldsFromSchema(schema, spec);
           requestBody = {
             contentType: firstContentType,
-            required: rb.required ?? false,
-            description: rb.description,
+            required: (rb.required as boolean | undefined) ?? false,
+            description: rb.description as string | undefined,
             fields,
           };
         }
@@ -281,12 +299,13 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
         });
         if (bodyParam) {
           const resolved = resolveRef(bodyParam, spec);
-          const schema = resolveRef(resolved.schema, spec);
+          if (!resolved) continue;
+          const schema = resolveRef(resolved.schema as unknown, spec);
           const fields = extractFieldsFromSchema(schema, spec);
           requestBody = {
             contentType: 'application/json',
-            required: resolved.required ?? false,
-            description: resolved.description,
+            required: (resolved.required as boolean | undefined) ?? false,
+            description: resolved.description as string | undefined,
             fields,
           };
         }
@@ -296,16 +315,18 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
       const responses: OpenApiEndpoint['responses'] = [];
       const responsesObj = operation.responses || {};
 
-      for (const [status, respRaw] of Object.entries<any>(responsesObj)) {
+      for (const [status, respRaw] of Object.entries(responsesObj)) {
         const resp = resolveRef(respRaw, spec);
         if (!resp || typeof resp !== 'object') continue;
 
         let contentType = 'application/json';
-        let schema: any = null;
+        let schema: unknown = null;
 
-        if (resp.content) {
-          contentType = Object.keys(resp.content)[0] || 'application/json';
-          schema = resolveRef(resp.content[contentType]?.schema, spec);
+        const content = resp.content as
+          Record<string, { schema?: unknown }> | undefined;
+        if (content) {
+          contentType = Object.keys(content)[0] || 'application/json';
+          schema = resolveRef(content[contentType]?.schema, spec);
         } else if (resp.schema) {
           schema = resolveRef(resp.schema, spec);
         }
@@ -314,7 +335,7 @@ export function parseOpenApiSpec(raw: string | any): ParsedOpenApi {
 
         responses.push({
           status,
-          description: resp.description || '',
+          description: (resp.description as string) || '',
           contentType: schema ? contentType : undefined,
           fields,
         });
@@ -495,15 +516,17 @@ export function renderOpenApiToMarkdown(parsed: ParsedOpenApi): string {
 
 /** 递归解引用 $ref */
 function resolveRef(
-  obj: any,
-  root: any,
+  obj: unknown,
+  root: unknown,
   depth = 0,
   visited = new Set<string>(),
-): any {
-  if (!obj || typeof obj !== 'object' || depth > 10) return obj;
+): Record<string, unknown> | null {
+  if (!obj || typeof obj !== 'object' || depth > 10) return null;
 
-  if (obj.$ref && typeof obj.$ref === 'string') {
-    const refPath = obj.$ref;
+  const record = obj as Record<string, unknown>;
+
+  if (typeof record.$ref === 'string') {
+    const refPath = record.$ref;
     if (visited.has(refPath)) {
       return {
         type: 'object',
@@ -513,15 +536,15 @@ function resolveRef(
     visited.add(refPath);
 
     const parts = refPath.replace(/^#\//, '').split('/');
-    let target = root;
+    let target: unknown = root;
     for (const part of parts) {
       if (!target || typeof target !== 'object') break;
-      target = target[part];
+      target = (target as Record<string, unknown>)[part];
     }
 
     if (target) {
       return resolveRef(
-        { ...target, ...obj, $ref: undefined },
+        { ...(target as Record<string, unknown>), ...record, $ref: undefined },
         root,
         depth + 1,
         new Set(visited),
@@ -529,11 +552,11 @@ function resolveRef(
     }
   }
 
-  return obj;
+  return record;
 }
 
 /** 格式化 Schema 类型表示 */
-function formatSchemaType(schema: any, root: any): string {
+function formatSchemaType(schema: unknown, root: unknown): string {
   if (!schema) return 'any';
   const resolved = resolveRef(schema, root);
   if (!resolved) return 'any';
@@ -544,9 +567,12 @@ function formatSchemaType(schema: any, root: any): string {
     return 'Array<' + itemType + '>';
   }
 
-  if (resolved.type) {
-    if (resolved.format) return resolved.type + '(' + resolved.format + ')';
-    return resolved.type;
+  const sType = typeof resolved.type === 'string' ? resolved.type : null;
+  if (sType) {
+    const sFormat =
+      typeof resolved.format === 'string' ? resolved.format : null;
+    if (sFormat) return sType + '(' + sFormat + ')';
+    return sType;
   }
 
   if (resolved.properties) return 'object';
@@ -559,8 +585,8 @@ function formatSchemaType(schema: any, root: any): string {
 
 /** 从 Schema 展平提取字段属性 */
 function extractFieldsFromSchema(
-  schemaRaw: any,
-  root: any,
+  schemaRaw: unknown,
+  root: unknown,
   prefix = '',
   depth = 0,
   visited = new Set<string>(),
@@ -587,7 +613,7 @@ function extractFieldsFromSchema(
     ? schema.required
     : [];
 
-  for (const [propName, propSchemaRaw] of Object.entries<any>(properties)) {
+  for (const [propName, propSchemaRaw] of Object.entries(properties)) {
     const propSchema = resolveRef(propSchemaRaw, root, depth + 1, visited);
     const fullName = prefix ? prefix + '.' + propName : propName;
     const isRequired = requiredList.includes(propName);
@@ -597,7 +623,7 @@ function extractFieldsFromSchema(
       name: fullName,
       type: propType,
       required: isRequired,
-      description: propSchema?.description,
+      description: propSchema?.description as string | undefined,
       enum: Array.isArray(propSchema?.enum)
         ? propSchema.enum.map(String)
         : undefined,
@@ -620,7 +646,7 @@ function extractFieldsFromSchema(
 }
 
 /** 简易 YAML / JSON 混合解析器 */
-function parseYamlOrJson(raw: string): any {
+function parseYamlOrJson(raw: string): unknown {
   const trimmed = raw.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {

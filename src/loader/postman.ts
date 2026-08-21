@@ -73,29 +73,36 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
     throw new Error('无效的 Postman Collection 数据');
   }
 
-  const obj = raw as Record<string, any>;
-  const info = obj.info || {};
-  const collectionName = info.name || 'Postman API Collection';
-  const description = info.description || '';
-  const schema = info.schema || '';
+  const obj = raw as Record<string, unknown>;
+  const info = asRecord(obj.info) ?? {};
+  const collectionName = stringValue(info.name) || 'Postman API Collection';
+  const description = stringValue(info.description) || '';
+  const schema = stringValue(info.schema) || '';
 
   const endpoints: PostmanEndpoint[] = [];
 
-  function walkItems(items: any[], currentFolder: string) {
+  function walkItems(items: unknown[], currentFolder: string) {
     if (!Array.isArray(items)) return;
 
     for (const item of items) {
       if (!item || typeof item !== 'object') continue;
 
-      if (Array.isArray(item.item)) {
+      const itemRecord = asRecord(item);
+      if (!itemRecord) continue;
+      if (Array.isArray(itemRecord.item)) {
         const folderName = currentFolder
-          ? `${currentFolder} / ${item.name || 'Folder'}`
-          : item.name || 'General';
-        walkItems(item.item, folderName);
-      } else if (item.request) {
-        const req = item.request;
+          ? `${currentFolder} / ${stringValue(itemRecord.name) || 'Folder'}`
+          : stringValue(itemRecord.name) || 'General';
+        walkItems(itemRecord.item, folderName);
+      } else if (itemRecord.request) {
+        const reqValue = itemRecord.request;
+        const req =
+          typeof reqValue === 'string' ? reqValue : (asRecord(reqValue) ?? {});
+        const reqRecord = typeof req === 'string' ? undefined : req;
         const method =
-          typeof req === 'string' ? 'GET' : (req.method || 'GET').toUpperCase();
+          typeof req === 'string'
+            ? 'GET'
+            : (stringValue(req.method) || 'GET').toUpperCase();
 
         let urlStr = '';
         const queryParams: PostmanQueryParam[] = [];
@@ -103,18 +110,21 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
 
         if (typeof req === 'string') {
           urlStr = req;
-        } else if (typeof req.url === 'string') {
-          urlStr = req.url;
-        } else if (req.url && typeof req.url === 'object') {
-          urlStr = req.url.raw || '';
-          if (Array.isArray(req.url.query)) {
-            for (const q of req.url.query) {
-              if (q && q.key) {
+        } else if (typeof reqRecord?.url === 'string') {
+          urlStr = reqRecord.url;
+        } else if (reqRecord?.url && typeof reqRecord.url === 'object') {
+          const reqUrl = asRecord(reqRecord.url) ?? {};
+          urlStr = stringValue(reqUrl.raw) || '';
+          if (Array.isArray(reqUrl.query)) {
+            for (const q of reqUrl.query) {
+              const query = asRecord(q);
+              if (query && query.key) {
                 queryParams.push({
-                  key: String(q.key),
-                  value: q.value !== undefined ? String(q.value) : undefined,
-                  description: q.description
-                    ? String(q.description)
+                  key: String(query.key),
+                  value:
+                    query.value !== undefined ? String(query.value) : undefined,
+                  description: query.description
+                    ? String(query.description)
                     : undefined,
                 });
               }
@@ -122,13 +132,16 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
           }
         }
 
-        if (req && Array.isArray(req.header)) {
-          for (const h of req.header) {
-            if (h && h.key) {
+        if (reqRecord && Array.isArray(reqRecord.header)) {
+          for (const h of reqRecord.header) {
+            const header = asRecord(h);
+            if (header && header.key) {
               headers.push({
-                key: String(h.key),
-                value: String(h.value || ''),
-                description: h.description ? String(h.description) : undefined,
+                key: String(header.key),
+                value: String(header.value || ''),
+                description: header.description
+                  ? String(header.description)
+                  : undefined,
               });
             }
           }
@@ -142,46 +155,50 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
           description?: string;
         }> = [];
 
-        if (req && req.body && typeof req.body === 'object') {
-          bodyMode = req.body.mode;
-          if (req.body.mode === 'raw' && req.body.raw) {
-            bodyRaw = String(req.body.raw);
+        const reqBody = asRecord(reqRecord?.body);
+        if (reqBody) {
+          bodyMode = stringValue(reqBody.mode);
+          if (reqBody.mode === 'raw' && reqBody.raw) {
+            bodyRaw = String(reqBody.raw);
           } else if (
-            req.body.mode === 'urlencoded' &&
-            Array.isArray(req.body.urlencoded)
+            reqBody.mode === 'urlencoded' &&
+            Array.isArray(reqBody.urlencoded)
           ) {
-            for (const p of req.body.urlencoded) {
-              if (p && p.key)
+            for (const p of reqBody.urlencoded) {
+              const param = asRecord(p);
+              if (param && param.key)
                 formParams.push({
-                  key: p.key,
-                  value: p.value || '',
-                  description: p.description,
+                  key: String(param.key),
+                  value: String(param.value || ''),
+                  description: stringValue(param.description),
                 });
             }
           } else if (
-            req.body.mode === 'formdata' &&
-            Array.isArray(req.body.formdata)
+            reqBody.mode === 'formdata' &&
+            Array.isArray(reqBody.formdata)
           ) {
-            for (const p of req.body.formdata) {
-              if (p && p.key)
+            for (const p of reqBody.formdata) {
+              const param = asRecord(p);
+              if (param && param.key)
                 formParams.push({
-                  key: p.key,
-                  value: p.value || '',
-                  description: p.description,
+                  key: String(param.key),
+                  value: String(param.value || ''),
+                  description: stringValue(param.description),
                 });
             }
           }
         }
 
         const exampleResponses: PostmanEndpoint['exampleResponses'] = [];
-        if (Array.isArray(item.response)) {
-          for (const resp of item.response) {
-            if (resp && typeof resp === 'object') {
+        if (Array.isArray(itemRecord.response)) {
+          for (const resp of itemRecord.response) {
+            const response = asRecord(resp);
+            if (response) {
               exampleResponses.push({
-                name: resp.name || 'Example Response',
-                code: resp.code || 200,
-                status: resp.status || 'OK',
-                body: resp.body ? String(resp.body) : undefined,
+                name: stringValue(response.name) || 'Example Response',
+                code: typeof response.code === 'number' ? response.code : 200,
+                status: stringValue(response.status) || 'OK',
+                body: response.body ? String(response.body) : undefined,
               });
             }
           }
@@ -189,10 +206,13 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
 
         endpoints.push({
           folder: currentFolder || 'General',
-          name: item.name || urlStr || 'API Request',
+          name: stringValue(itemRecord.name) || urlStr || 'API Request',
           method,
           url: urlStr,
-          description: req.description || item.description || '',
+          description:
+            stringValue(reqRecord?.description) ||
+            stringValue(itemRecord.description) ||
+            '',
           headers,
           queryParams,
           bodyMode,
@@ -204,7 +224,7 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
     }
   }
 
-  walkItems(obj.item || [], '');
+  walkItems(Array.isArray(obj.item) ? obj.item : [], '');
 
   return {
     name: collectionName,
@@ -212,6 +232,16 @@ export function parsePostmanCollection(raw: unknown): ParsedPostmanCollection {
     version: schema.includes('v2.1') ? '2.1.0' : '2.0.0',
     endpoints,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** 将解析后的 Postman Collection 渲染为高质量 API 手册 Markdown */

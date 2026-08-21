@@ -10,6 +10,11 @@ import { extractFromHtml } from './readability.js';
 import type { LoadedDocument } from '../types/index.js';
 import { fetchPublicText } from '../utils/safe-fetch.js';
 import { isAbortError, throwIfAborted } from '../utils/abort.js';
+type CheerioSelection = {
+  attr(name: string): string | undefined;
+  each(callback: (index: number, element: unknown) => void): void;
+};
+type CheerioApiLike = (selector: string | unknown) => CheerioSelection;
 
 export interface CrawlOptions {
   /** 最大深度（根页面 = 0） */
@@ -129,7 +134,7 @@ async function parseLinks(
   const $ = await cheerioLoad(html);
   const links = new Set<string>();
 
-  $('a[href]').each((_: any, el: any) => {
+  $('a[href]').each((_: number, el: unknown) => {
     const href = $(el).attr('href');
     if (!href) return;
     if (/^(#|javascript:|mailto:|tel:)/i.test(href)) return;
@@ -148,9 +153,9 @@ async function parseLinks(
 }
 
 /** 延迟加载 cheerio */
-async function cheerioLoad(html: string): Promise<any> {
+async function cheerioLoad(html: string): Promise<CheerioApiLike> {
   const cheerio = await import('cheerio');
-  return cheerio.load(html);
+  return cheerio.load(html) as unknown as CheerioApiLike;
 }
 
 /** 规范化 URL：去 hash、去 trailing slash（根路径除外） */

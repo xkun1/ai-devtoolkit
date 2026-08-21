@@ -62,7 +62,7 @@ export async function printProjectGraph(
   info('');
   info('📊 项目架构依赖图 (Mermaid):');
   info('```mermaid');
-  console.log(mermaid);
+  info(mermaid);
   info('```');
   info('');
   return mermaid;
@@ -77,6 +77,6 @@ export async function printImpactAnalysis(
   const result = analyzeImpact(graph, targetFile);
   succeedSpinner('影响面分析完成');
 
-  console.log(formatImpactReport(result));
+  info(formatImpactReport(result));
   return result;
 }

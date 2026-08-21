@@ -518,8 +518,12 @@ async function ensureIndexIgnored(dir: string): Promise<void> {
   let content = '';
   try {
     content = await readFile(ignorePath, 'utf-8');
-  } catch (err: any) {
-    if (err?.code !== 'ENOENT') throw err;
+  } catch (err: unknown) {
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? err.code
+        : undefined;
+    if (code !== 'ENOENT') throw err;
   }
   const entries = new Set(
     content

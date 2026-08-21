@@ -51,8 +51,10 @@ export function startWatch(
         success('检测到变更，重新生成...');
         await runPipeline(sources, options);
         info(`  👀 继续监控...`);
-      } catch (err: any) {
-        error(`重新生成失败: ${err.message}`);
+      } catch (err: unknown) {
+        error(
+          `重新生成失败: ${err instanceof Error ? err.message : String(err)}`,
+        );
       } finally {
         running = false;
       }
@@ -79,8 +81,10 @@ export function startWatch(
         trigger();
       });
       watchers.push(w);
-    } catch (err: any) {
-      warn(`无法监控 ${file}: ${err.message}`);
+    } catch (err: unknown) {
+      warn(
+        `无法监控 ${file}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

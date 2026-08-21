@@ -62,13 +62,15 @@ export async function evalSkillFile(
     succeedSpinner(
       `评测完成！得分: ${report.overallScore} 分 (${report.grade} 级)`,
     );
-  } catch (err: any) {
-    failSpinner(`评测失败: ${err.message}`);
+  } catch (err: unknown) {
+    failSpinner(
+      `评测失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
 
   const markdown = formatEvalReportMarkdown(report);
-  console.log('\n' + markdown);
+  info('\n' + markdown);
 
   if (saveReport) {
     const reportPath = join(

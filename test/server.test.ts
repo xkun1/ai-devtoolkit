@@ -23,10 +23,10 @@ interface MockResponse {
   statusCode: number;
   headers: {
     get: (name: string) => string | null;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   text: () => Promise<string>;
-  json: () => Promise<any>;
+  json: () => Promise<Record<string, unknown>>;
 }
 
 async function invokeRequest(
@@ -65,10 +65,9 @@ async function invokeRequest(
   let statusCode = 200;
 
   const res = new ServerResponse(req);
-  res.writeHead = function (
-    this: ServerResponse,
+  (res as unknown as Record<string, unknown>).writeHead = function (
     code: number,
-    ...args: any[]
+    ...args: unknown[]
   ) {
     statusCode = code;
     for (const arg of args) {
@@ -78,10 +77,10 @@ async function invokeRequest(
         }
       }
     }
-    return this;
-  } as any;
+    return res as unknown as Record<string, unknown>;
+  };
 
-  res.setHeader = function (name: string, value: any) {
+  res.setHeader = function (name: string, value: unknown) {
     resHeaders[name.toLowerCase()] = String(value);
     return this;
   };
@@ -91,25 +90,28 @@ async function invokeRequest(
   };
 
   const endPromise = new Promise<void>((resolve) => {
-    res.end = function (this: ServerResponse, chunk?: any) {
+    (res as unknown as Record<string, unknown>).end = function (
+      chunk?: string | Uint8Array,
+    ) {
       if (chunk) {
         responseBody += Buffer.isBuffer(chunk)
           ? chunk.toString('utf-8')
           : String(chunk);
       }
       resolve();
-      return this;
-    } as any;
+    };
   });
 
-  res.write = function (chunk: any) {
+  (res as unknown as Record<string, unknown>).write = function (
+    chunk?: string | Uint8Array,
+  ) {
     if (chunk) {
       responseBody += Buffer.isBuffer(chunk)
         ? chunk.toString('utf-8')
         : String(chunk);
     }
     return true;
-  } as any;
+  };
 
   const handlerPromise = handler(req, res);
 
@@ -616,7 +618,9 @@ describe('Web UI — 代码搜索与环境资产 API', () => {
     expect(detectRes.status).toBe(200);
     const detectBody = await detectRes.json();
     expect(detectBody.snapshot).toBeDefined();
-    expect(detectBody.snapshot.version).toBe('1.0.0');
+    expect((detectBody.snapshot as Record<string, unknown>).version).toBe(
+      '1.0.0',
+    );
 
     // 比对 diff
     const diffRes = await invokeRequest(

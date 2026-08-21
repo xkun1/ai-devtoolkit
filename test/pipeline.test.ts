@@ -192,10 +192,10 @@ describe('Pipeline E2E (mocked LLM)', () => {
     // 拦截 stdout 写入
     const chunks: string[] = [];
     const originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = ((chunk: any) => {
+    process.stdout.write = ((chunk: string | Uint8Array) => {
       chunks.push(String(chunk));
       return true;
-    }) as any;
+    }) as unknown as typeof process.stdout.write;
 
     try {
       const result = await runPipeline(mdPath, {

@@ -20,6 +20,7 @@ import {
 } from '../validation.js';
 import type { ServerTaskLimits } from '../types.js';
 import { ResourceLimitError, isAbortError } from '../../utils/abort.js';
+import type { AgentType } from '../../types/index.js';
 
 export async function handleLocalModels(
   req: IncomingMessage,
@@ -27,7 +28,7 @@ export async function handleLocalModels(
   maxBodyBytes: number,
   limits?: ServerTaskLimits,
 ): Promise<void> {
-  const body = await readBody(req, maxBodyBytes);
+  const body = await readBody<{ baseUrl?: unknown }>(req, maxBodyBytes);
   const { baseUrl } = body;
   if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
     serveJSON(res, 400, { error: '缺少 baseUrl 参数' });
@@ -55,11 +56,25 @@ export async function handleGenerate(
 ): Promise<void> {
   const contentType = req.headers['content-type'] || '';
 
-  let body: any;
+  type GenerateBody = {
+    source?: string;
+    agentType?: string;
+    template?: string;
+    modelName?: string;
+    apiKey?: string;
+    skillName?: string;
+    localBaseUrl?: string;
+    localModelName?: string;
+    fileContent?: string;
+    fileName?: string;
+    binaryContent?: string;
+    mimeType?: string;
+  };
+  let body: GenerateBody;
   if (contentType.includes('multipart/form-data')) {
     body = await readMultipartBody(req, maxBodyBytes);
   } else {
-    body = await readBody(req, maxBodyBytes);
+    body = await readBody<GenerateBody>(req, maxBodyBytes);
   }
 
   const {
@@ -175,7 +190,7 @@ export async function handleGenerate(
     }
 
     const result = await runPipeline('__preloaded__', {
-      agentType: agentType || 'codex',
+      agentType: (agentType || 'codex') as AgentType,
       llm: llmConfig,
       name: (skillName || fileName || '').replace(/\.[^.]+$/, '') || undefined,
       stdout: false,
@@ -246,7 +261,7 @@ export async function handleEstimate(
   maxBodyBytes: number,
 ): Promise<void> {
   const body = await readBody(req, maxBodyBytes);
-  const { text } = body;
+  const { text } = await readBody<{ text?: unknown }>(req, maxBodyBytes);
   if (typeof text !== 'string' || !text) {
     serveJSON(res, 400, { error: '缺少 text 参数' });
     return;

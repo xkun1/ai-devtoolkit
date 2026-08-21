@@ -7,6 +7,7 @@ import {
   diffEnvironment,
   formatDiffPreview,
 } from '../../env/index.js';
+import { validateEnvSnapshot } from '../../env/validate.js';
 import {
   convertRule,
   parseRule,
@@ -32,10 +33,15 @@ export async function handleEnvDiff(
   maxBodyBytes: number,
 ): Promise<void> {
   const body = (await readBody(req, maxBodyBytes)) as {
-    snapshot?: any;
+    snapshot?: unknown;
   };
   if (!body.snapshot || typeof body.snapshot !== 'object') {
     throw new HttpError(400, '缺少快照数据');
+  }
+  try {
+    validateEnvSnapshot(body.snapshot);
+  } catch (err) {
+    throw new HttpError(400, `环境快照无效: ${getErrorMessage(err)}`);
   }
   let diff: Awaited<ReturnType<typeof diffEnvironment>>;
   try {

@@ -87,9 +87,12 @@ export function detectNpmGlobal(): NpmGlobalPackage[] | undefined {
   try {
     const data = JSON.parse(output);
     const deps = data.dependencies || {};
-    return Object.entries(deps).map(([name, info]: [string, any]) => ({
+    return Object.entries(deps).map(([name, info]) => ({
       name,
-      version: info.version || 'unknown',
+      version:
+        typeof info === 'object' && info !== null && 'version' in info
+          ? String(info.version)
+          : 'unknown',
     }));
   } catch {
     // 降级到文本解析

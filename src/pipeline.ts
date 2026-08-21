@@ -165,7 +165,7 @@ async function runPipelineSingle(
           processed = result.content;
           title = result.title || title;
           meta = { format: 'pdf' };
-        } catch (err: any) {
+        } catch (err: unknown) {
           // 兼容'假 PDF'：文件名是 .pdf 但内容实际是 HTML（某些网页'另存为 PDF'产物）
           const rawText = buffer.toString('utf-8');
           if (/^\s*<!doctype|<html/i.test(rawText)) {
@@ -184,7 +184,7 @@ async function runPipelineSingle(
           } else {
             throw new Error(
               'PDF 解析失败: ' +
-                err.message +
+                (err instanceof Error ? err.message : String(err)) +
                 '（请确认文件是有效的 PDF 格式）',
               { cause: err },
             );
@@ -199,10 +199,10 @@ async function runPipelineSingle(
           processed = result.content;
           title = result.title || title;
           meta = { format: 'docx' };
-        } catch (err: any) {
+        } catch (err: unknown) {
           throw new Error(
             'DOCX 解析失败: ' +
-              err.message +
+              (err instanceof Error ? err.message : String(err)) +
               '（请确认文件是有效的 .docx 格式）',
             { cause: err },
           );
@@ -275,8 +275,10 @@ async function runPipelineSingle(
       debug(
         `爬取完成: ${doc.meta?.crawledPages} 页, ${doc.content.length} 字符`,
       );
-    } catch (err: any) {
-      failSpinner(`爬取失败: ${err.message}`);
+    } catch (err: unknown) {
+      failSpinner(
+        `爬取失败: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw err;
     }
     succeedSpinner(
@@ -293,8 +295,10 @@ async function runPipelineSingle(
       const docs = await loadDocuments(sourceList, { signal: options.signal });
       doc = mergeDocuments(docs);
       debug(`文档类型: ${doc.type}, 长度: ${doc.content.length} 字符`);
-    } catch (err: any) {
-      failSpinner(`加载失败: ${err.message}`);
+    } catch (err: unknown) {
+      failSpinner(
+        `加载失败: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw err;
     }
     succeedSpinner(
@@ -389,8 +393,10 @@ async function runPipelineSingle(
       },
     );
     debug(`LLM 输出长度: ${transformed.content.length} 字符`);
-  } catch (err: any) {
-    failSpinner(`LLM 提炼失败: ${err.message}`);
+  } catch (err: unknown) {
+    failSpinner(
+      `LLM 提炼失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
   succeedSpinner(
@@ -448,9 +454,14 @@ async function runPipelineSingle(
           throw new Error(
             `文件已存在: ${artifact.path}\n  使用 --force 覆盖，或 --out 指定其他路径`,
           );
-        } catch (err: any) {
-          if (err.message?.startsWith('文件已存在')) throw err;
-          if (err.code !== 'ENOENT') throw err;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.startsWith('文件已存在')) throw err;
+          const code =
+            typeof err === 'object' && err !== null && 'code' in err
+              ? err.code
+              : undefined;
+          if (code !== 'ENOENT') throw err;
         }
       }
     }

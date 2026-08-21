@@ -71,8 +71,9 @@ export async function loadConfig(
           const raw = await readFile(filepath, 'utf-8');
           const parsed = JSON.parse(raw);
           return validateConfig(parsed, filepath);
-        } catch (err: any) {
-          throw new Error(`配置文件解析失败 ${filepath}: ${err.message}`, {
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`配置文件解析失败 ${filepath}: ${message}`, {
             cause: err,
           });
         }
@@ -84,11 +85,12 @@ export async function loadConfig(
 }
 
 /** 校验配置对象，忽略不认识的字段 */
-function validateConfig(raw: any, filepath: string): DevToolkitConfig {
+function validateConfig(raw: unknown, filepath: string): DevToolkitConfig {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`配置文件 ${filepath} 顶层必须是 JSON 对象`);
   }
   const config: DevToolkitConfig = {};
+  const rawRecord = raw as Record<string, unknown>;
   const validKeys: (keyof DevToolkitConfig)[] = [
     'type',
     'out',
@@ -106,8 +108,8 @@ function validateConfig(raw: any, filepath: string): DevToolkitConfig {
   ];
 
   for (const key of validKeys) {
-    if (key in raw) {
-      (config as any)[key] = raw[key];
+    if (key in rawRecord) {
+      (config[key] as unknown) = rawRecord[key];
     }
   }
 

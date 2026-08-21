@@ -31,17 +31,19 @@ export interface CallLLMOptions {
 }
 
 /** 判断错误是否可重试：429 限流 / 5xx 服务端错误 / 网络层错误 */
-export function isRetryableError(err: any): boolean {
+export function isRetryableError(err: unknown): boolean {
+  const error = isRecord(err) ? err : {};
   // OpenAI SDK 的 APIError 带 status
-  const status = err?.status ?? err?.response?.status;
+  const response = isRecord(error.response) ? error.response : undefined;
+  const status = error.status ?? response?.status;
   if (typeof status === 'number') {
     if (status === 429) return true;
     if (status >= 500 && status < 600) return true;
     return false; // 4xx 客户端错误（认证失败等）重试无意义
   }
   // 网络层错误（无 HTTP 状态码）
-  const code = err?.code || '';
-  const message = err?.message || '';
+  const code = typeof error.code === 'string' ? error.code : '';
+  const message = typeof error.message === 'string' ? error.message : '';
   return (
     ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND'].includes(
       code,
@@ -152,59 +154,94 @@ export async function callLLM(
  * 变体4:       { data: { content: "..." } }                 (自定义封装)
  * 变体5:       直接返回字符串
  */
-function extractContent(res: any): string | null {
+function extractContent(res: unknown): string | null {
   if (!res) return null;
 
   // 直接返回字符串
   if (typeof res === 'string') return res;
 
   // 标准 OpenAI 格式: choices[0].message.content
-  if (res.choices?.[0]?.message?.content) {
-    return res.choices[0].message.content;
+  const record = isRecord(res) ? res : undefined;
+  if (!record) return null;
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const firstChoice = isRecord(choices[0]) ? choices[0] : undefined;
+  const message =
+    firstChoice && isRecord(firstChoice.message)
+      ? firstChoice.message
+      : undefined;
+  if (typeof message?.content === 'string') {
+    return message.content;
   }
 
   // 旧版 completions 格式: choices[0].text
-  if (res.choices?.[0]?.text) {
-    return res.choices[0].text;
+  if (typeof firstChoice?.text === 'string') {
+    return firstChoice.text;
   }
 
   // 直接 message.content（部分本地服务）
-  if (res.message?.content) {
-    return res.message.content;
+  const directMessage = isRecord(record.message) ? record.message : undefined;
+  if (typeof directMessage?.content === 'string') {
+    return directMessage.content;
   }
 
   // 直接 content 字段
-  if (typeof res.content === 'string') {
-    return res.content;
+  if (typeof record.content === 'string') {
+    return record.content;
   }
 
   // data.content 封装
-  if (res.data?.content) {
-    return res.data.content;
+  const data = isRecord(record.data) ? record.data : undefined;
+  if (typeof data?.content === 'string') {
+    return data.content;
   }
 
   // data.message.content 封装
-  if (res.data?.message?.content) {
-    return res.data.message.content;
+  const dataMessage = data && isRecord(data.message) ? data.message : undefined;
+  if (typeof dataMessage?.content === 'string') {
+    return dataMessage.content;
   }
 
   // 最后兜底：尝试 res.response / res.output 等
-  if (res.response?.choices?.[0]?.message?.content) {
-    return res.response.choices[0].message.content;
+  const responseRecord = isRecord(record.response)
+    ? record.response
+    : undefined;
+  const responseChoices =
+    responseRecord && Array.isArray(responseRecord.choices)
+      ? responseRecord.choices
+      : [];
+  const responseChoice = isRecord(responseChoices[0])
+    ? responseChoices[0]
+    : undefined;
+  const responseMessage =
+    responseChoice && isRecord(responseChoice.message)
+      ? responseChoice.message
+      : undefined;
+  if (typeof responseMessage?.content === 'string') {
+    return responseMessage.content;
   }
 
-  if (res.output) {
-    if (typeof res.output === 'string') return res.output;
-    if (Array.isArray(res.output)) {
+  if (record.output) {
+    if (typeof record.output === 'string') return record.output;
+    if (Array.isArray(record.output)) {
       // 可能是 output 数组，拼接文本
-      return res.output
-        .map((item: any) =>
-          typeof item === 'string' ? item : item?.content || item?.text || '',
-        )
+      return record.output
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          const itemRecord = isRecord(item) ? item : {};
+          return typeof itemRecord.content === 'string'
+            ? itemRecord.content
+            : typeof itemRecord.text === 'string'
+              ? itemRecord.text
+              : '';
+        })
         .filter(Boolean)
         .join('\n');
     }
   }
 
   return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

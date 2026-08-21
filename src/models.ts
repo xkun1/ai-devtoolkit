@@ -231,7 +231,7 @@ export async function detectLocalModels(
     try {
       const res = await fetch(url, { signal: scope.signal });
       if (!res.ok) continue;
-      const data: any = await res.json();
+      const data: unknown = await res.json();
 
       const models = parseModelList(data);
       if (models.length > 0) return models;
@@ -256,62 +256,54 @@ export async function detectLocalModels(
  * - result:  { result: ['model1'] }
  * - 单模型:  { model: 'xxx' } 或 { id: 'xxx' }
  */
-function parseModelList(data: any): LocalModelInfo[] {
+function parseModelList(data: unknown): LocalModelInfo[] {
   if (!data) return [];
 
   // 直接数组
   if (Array.isArray(data)) {
     return data
-      .map((m: any) =>
-        typeof m === 'string'
-          ? { id: m, name: m }
-          : {
-              id: String(m.id || m.name || m.model || ''),
-              name: String(m.id || m.name || m.model || ''),
-            },
-      )
+      .map((m: unknown) => modelInfoFromValue(m))
       .filter((m: LocalModelInfo) => m.id);
   }
 
   // OpenAI 格式: { data: [{ id }] }
-  if (Array.isArray(data.data) && data.data.length > 0) {
-    return data.data
-      .map((m: any) => ({
-        id: String(m.id || m.name || m.model || ''),
-        name: String(m.id || m.name || m.model || ''),
-      }))
+  const record = isRecord(data) ? data : undefined;
+  if (Array.isArray(record?.data) && record.data.length > 0) {
+    return record.data
+      .map((m: unknown) => modelInfoFromValue(m))
       .filter((m: LocalModelInfo) => m.id);
   }
 
   // Ollama 格式: { models: [{ name }] }
-  if (Array.isArray(data.models) && data.models.length > 0) {
-    return data.models
-      .map((m: any) => ({
-        id: String(m.name || m.model || m.id || ''),
-        name: String(m.name || m.model || m.id || ''),
-      }))
+  if (Array.isArray(record?.models) && record.models.length > 0) {
+    return record.models
+      .map((m: unknown) => modelInfoFromValue(m))
       .filter((m: LocalModelInfo) => m.id);
   }
 
   // result 格式: { result: [...] }
-  if (Array.isArray(data.result)) {
-    return data.result
-      .map((m: any) =>
-        typeof m === 'string'
-          ? { id: m, name: m }
-          : {
-              id: String(m.id || m.name || m.model || ''),
-              name: String(m.id || m.name || m.model || ''),
-            },
-      )
+  if (Array.isArray(record?.result)) {
+    return record.result
+      .map((m: unknown) => modelInfoFromValue(m))
       .filter((m: LocalModelInfo) => m.id);
   }
 
   // 单模型格式: { model: 'xxx' } 或 { id: 'xxx' }
-  if (data.model || data.id) {
-    const id = String(data.model || data.id || '');
+  if (record?.model || record?.id) {
+    const id = String(record.model || record.id || '');
     if (id) return [{ id, name: id }];
   }
 
   return [];
+}
+
+function modelInfoFromValue(value: unknown): LocalModelInfo {
+  if (typeof value === 'string') return { id: value, name: value };
+  const item = isRecord(value) ? value : {};
+  const id = String(item.id || item.name || item.model || '');
+  return { id, name: id };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

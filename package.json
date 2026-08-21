@@ -41,6 +41,7 @@
     "check:ui": "node scripts/embed-ui.cjs --check",
     "prebuild": "npm run generate:ui",
     "build": "tsup",
+    "bench": "node scripts/benchmark.mjs",
     "dev": "tsx src/cli.ts",
     "start": "node bin/cli.js",
     "test": "vitest run",
@@ -93,10 +94,10 @@
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
     "cheerio": "^1.0.0",
-    "commander": "^12.1.0",
+    "commander": "^15.0.0",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
-    "openai": "^4.77.0",
+    "openai": "^6.49.0",
     "ora": "^8.1.1",
     "pdf-parse": "^1.1.1",
     "turndown": "^7.2.0",
@@ -105,10 +106,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^20.10.0",
+    "@types/node": "^26.2.0",
     "@types/turndown": "^5.0.5",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
@@ -117,7 +118,7 @@
     "prettier": "^3.9.6",
     "tsup": "^8.0.1",
     "tsx": "^4.6.0",
-    "typescript": "^5.3.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
   "overrides": {

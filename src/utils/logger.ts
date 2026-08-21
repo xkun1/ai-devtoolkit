@@ -1,9 +1,12 @@
 import ora from 'ora';
+import type { Ora } from 'ora';
 
 type LogLevel = 'silent' | 'error' | 'info' | 'debug';
 
-let currentLevel: LogLevel = 'info';
-let spinner: any = null;
+const isTestEnvironment =
+  process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined;
+let currentLevel: LogLevel = isTestEnvironment ? 'silent' : 'info';
+let spinner: Ora | null = null;
 // stdout 模式下所有日志转 stderr，避免污染管道输出
 let logToStderr = false;
 
@@ -17,6 +20,7 @@ export function setLogToStderr(value: boolean) {
 
 /** 普通日志输出：遵循 stdout 重定向 */
 function print(msg: string) {
+  if (currentLevel === 'silent') return;
   if (logToStderr) {
     console.error(msg);
   } else {
@@ -25,6 +29,7 @@ function print(msg: string) {
 }
 
 export function startSpinner(text: string) {
+  if (currentLevel === 'silent') return null;
   stopSpinner();
   spinner = ora(text).start();
   return spinner;
@@ -64,6 +69,7 @@ export function debug(msg: string) {
 }
 
 export function error(msg: string) {
+  if (currentLevel === 'silent') return;
   console.error(`\x1b[31m✖ ${msg}\x1b[0m`);
 }
 

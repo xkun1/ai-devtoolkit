@@ -32,10 +32,11 @@ function exec(
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
     return { success: true, output };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { stderr?: string; stdout?: string; message?: string };
     return {
       success: false,
-      output: (err.stderr || err.stdout || err.message || '')
+      output: (error.stderr || error.stdout || error.message || '')
         .trim()
         .slice(0, 500),
     };

@@ -34,7 +34,7 @@ describe('loadConfig', () => {
     const config = await loadConfig(dir);
     expect(config.type).toBe('claude');
     expect(config.verbose).toBe(true);
-    expect((config as any).unknownField).toBeUndefined();
+    expect((config as Record<string, unknown>).unknownField).toBeUndefined();
   });
 
   it('无效 type 抛错', async () => {

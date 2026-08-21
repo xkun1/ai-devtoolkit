@@ -98,10 +98,12 @@ export async function handleSearch(
           timeoutMs: limits.llmTimeoutMs,
           maxOutputChars: limits.maxOutputChars,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof HttpError) throw err;
         if (isAbortError(err) || err instanceof ResourceLimitError) throw err;
-        explanation = 'LLM 解释生成失败: ' + err.message;
+        explanation =
+          'LLM 解释生成失败: ' +
+          (err instanceof Error ? err.message : String(err));
       }
     }
   }
