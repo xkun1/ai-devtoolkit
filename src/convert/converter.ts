@@ -197,6 +197,7 @@ function convertToClaude(
 
   const rulePath = join(outputDir, '.claude', 'rules', `${slug}.md`);
   const claudePath = join(outputDir, 'CLAUDE.md');
+
   const title = parsed.title || parsed.meta.name || '项目规则';
 
   const claudeMain =
@@ -237,11 +238,9 @@ function convertToCopilot(
 ): GeneratedArtifact[] {
   const outputDir = options.outputDir || '.';
   const path = join(outputDir, '.github', 'copilot-instructions.md');
-  const title = parsed.title || parsed.meta.name || '项目规则';
-  const content = `# ${title}
-
-${parsed.body.trim()}
-`;
+  const content = parsed.body.startsWith('#')
+    ? parsed.body.trim() + '\n'
+    : `# ${parsed.title || parsed.meta.name || '项目规则'}\n\n${parsed.body.trim()}\n`;
   return [{ path, content, kind: 'primary' }];
 }
 
@@ -253,11 +252,9 @@ function convertToGemini(
 ): GeneratedArtifact[] {
   const outputDir = options.outputDir || '.';
   const path = join(outputDir, 'GEMINI.md');
-  const title = parsed.title || parsed.meta.name || '项目规则';
-  const content = `# ${title}
-
-${parsed.body.trim()}
-`;
+  const content = parsed.body.startsWith('#')
+    ? parsed.body.trim() + '\n'
+    : `# ${parsed.title || parsed.meta.name || '项目规则'}\n\n${parsed.body.trim()}\n`;
   return [{ path, content, kind: 'primary' }];
 }
 
@@ -269,11 +266,9 @@ function convertToAider(
 ): GeneratedArtifact[] {
   const outputDir = options.outputDir || '.';
   const path = join(outputDir, 'CONVENTIONS.md');
-  const title = parsed.title || parsed.meta.name || '项目规则';
-  const content = `# ${title}
-
-${parsed.body.trim()}
-`;
+  const content = parsed.body.startsWith('#')
+    ? parsed.body.trim() + '\n'
+    : `# ${parsed.title || parsed.meta.name || '项目规则'}\n\n${parsed.body.trim()}\n`;
   return [{ path, content, kind: 'primary' }];
 }
 
