@@ -5,7 +5,7 @@
 > 将任意网页或 PDF 文档，1 秒转化为 AI Agent（Cursor / Codex / Claude）的专属技能包！
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxkun1%2Fai-devtoolkit%2Fmain%2Fpackage.json&query=%24.devDependencies.typescript&label=TypeScript&color=blue)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
 [![CI](https://github.com/xkun1/ai-devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/ai-devtoolkit/actions)
 
@@ -20,13 +20,15 @@
 |------|:---:|------|
 | 📄 网页 URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
-| ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token） |
+| ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token，[Benchmark](docs/benchmark.md)） |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
 | 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
 | 📂 批量目录处理 | → | 🤖 每个文件独立技能包（或 `--merge` 合并） |
 | 🔌 MCP Server | → | 🤖 AI Agent 原生工具调用 |
 
 ## 🎬 快速开始
+
+![devtoolkit 终端演示](docs/assets/demo.gif)
 
 ```bash
 # 零安装直接用

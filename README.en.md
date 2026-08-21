@@ -3,7 +3,7 @@
 > Turn any webpage or PDF into an AI Agent skill pack (Cursor / Codex / Claude) — in seconds!
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxkun1%2Fai-devtoolkit%2Fmain%2Fpackage.json&query=%24.devDependencies.typescript&label=TypeScript&color=blue)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20.19-green.svg)](https://nodejs.org/)
 [![CI](https://github.com/xkun1/ai-devtoolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/xkun1/ai-devtoolkit/actions)
 
@@ -20,13 +20,15 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 |-------|:---:|-------|
 | 📄 Web URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF Document | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
-| ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens) |
+| ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens, [Benchmark](docs/benchmark.md)) |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/` (when long) |
 | 📚 Multi-doc Merge | → | 🧩 Fused skill pack after chunked extraction |
 | 📂 Batch Directory | → | 🤖 One skill pack per file (or `--merge` to combine) |
 | 🔌 MCP Server | → | 🤖 Native tool call for AI Agents |
 
 ## 🎬 Quick Start
+
+![devtoolkit demo](docs/assets/demo.gif)
 
 ```bash
 # Zero-install, run directly

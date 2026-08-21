@@ -27,9 +27,9 @@ npm install
 3. 提交代码（pre-commit hook 会自动跑 lint-staged）
 4. 提交 PR，描述变更原因和影响
 
-### 📝 提交规范
+### 📝 提交规范（Conventional Commits）
 
-使用中文提交信息，格式：
+使用 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/) 格式，描述可用中文或英文：
 
 ```
 <type>: <描述>
