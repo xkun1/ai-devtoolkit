@@ -102,7 +102,15 @@ export function validateGenerateInput(input: {
 }): void {
   if (
     input.agentType !== undefined &&
-    !['codex', 'cursor', 'claude'].includes(String(input.agentType))
+    ![
+      'codex',
+      'cursor',
+      'claude',
+      'windsurf',
+      'copilot',
+      'gemini',
+      'aider',
+    ].includes(String(input.agentType))
   ) {
     throw new HttpError(400, '无效的 Agent 类型');
   }

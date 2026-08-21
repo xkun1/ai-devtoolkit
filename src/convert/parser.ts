@@ -19,6 +19,11 @@ export function detectRuleFormat(
       return 'codex';
     if (norm.endsWith('claude.md') || norm.includes('.claude/rules/'))
       return 'claude';
+    if (norm.includes('.windsurf/rules/') || norm.endsWith('windsurfrules'))
+      return 'windsurf';
+    if (norm.includes('copilot-instructions.md')) return 'copilot';
+    if (norm.endsWith('gemini.md')) return 'gemini';
+    if (norm.endsWith('conventions.md')) return 'aider';
   }
 
   if (content) {

@@ -401,7 +401,16 @@ async function handleSyncRules(
   validateOptionalBooleans(args, ['dryRun']);
   if (
     fromAgent !== undefined &&
-    !['auto', 'codex', 'cursor', 'claude'].includes(String(fromAgent))
+    ![
+      'auto',
+      'codex',
+      'cursor',
+      'claude',
+      'windsurf',
+      'copilot',
+      'gemini',
+      'aider',
+    ].includes(String(fromAgent))
   ) {
     throw new Error(`无效的同步源 Agent: ${String(fromAgent)}`);
   }

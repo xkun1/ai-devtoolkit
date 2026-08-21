@@ -14,7 +14,15 @@ const GENERATE_SKILL_SCHEMA = {
     },
     agentType: {
       type: 'string',
-      enum: ['codex', 'cursor', 'claude'],
+      enum: [
+        'codex',
+        'cursor',
+        'claude',
+        'windsurf',
+        'copilot',
+        'gemini',
+        'aider',
+      ],
       description: '目标 AI Agent 类型（默认 codex）',
     },
     name: {
@@ -167,7 +175,15 @@ const CONVERT_RULE_SCHEMA = {
     },
     to: {
       type: 'string',
-      enum: ['cursor', 'codex', 'claude'],
+      enum: [
+        'cursor',
+        'codex',
+        'claude',
+        'windsurf',
+        'copilot',
+        'gemini',
+        'aider',
+      ],
       description: '转换目标 Agent 类型',
     },
     name: {
@@ -197,12 +213,32 @@ const SYNC_RULES_SCHEMA = {
     },
     from: {
       type: 'string',
-      enum: ['cursor', 'codex', 'claude', 'auto'],
+      enum: [
+        'cursor',
+        'codex',
+        'claude',
+        'windsurf',
+        'copilot',
+        'gemini',
+        'aider',
+        'auto',
+      ],
       description: '同步源 Agent 规则（默认 auto 自动检测）',
     },
     to: {
       type: 'array',
-      items: { type: 'string', enum: ['cursor', 'codex', 'claude'] },
+      items: {
+        type: 'string',
+        enum: [
+          'cursor',
+          'codex',
+          'claude',
+          'windsurf',
+          'copilot',
+          'gemini',
+          'aider',
+        ],
+      },
       description: '同步目标 Agent 列表（默认同步到其他未配置的全部 Agent）',
     },
     dryRun: {

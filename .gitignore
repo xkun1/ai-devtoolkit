@@ -13,3 +13,4 @@ playwright-report/
 *.tsbuildinfo
 .devtoolkit-index.json
 .devtoolkit-graph.json
+.devtoolkit-skills.json

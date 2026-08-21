@@ -275,6 +275,8 @@ export {
   runSkillEval,
   formatEvalReportMarkdown,
   evalSkillFile,
+  runMultiModelEval,
+  formatMultiModelReport,
 } from './eval/index.js';
 export type {
   EvalCase,
@@ -299,6 +301,38 @@ export {
   GRAPH_CACHE_FILENAME,
   GRAPH_CACHE_VERSION,
 } from './graph/index.js';
+
+// ── 技能包生命周期管理 API ──
+export {
+  loadRegistry,
+  saveRegistry,
+  registerSkill,
+  listSkills,
+  removeSkill,
+  REGISTRY_FILENAME,
+  REGISTRY_VERSION,
+} from './lifecycle/index.js';
+export type {
+  InstalledSkill,
+  SkillRegistry,
+  SkillStatus,
+} from './lifecycle/index.js';
+
+// ── 敏感信息防护 API ──
+export { redactContent, detectSensitiveInfo } from './security/index.js';
+export type { RedactResult } from './security/index.js';
+
+// ── 诊断 API ──
+export { runDoctor, printDoctorReport } from './doctor/index.js';
+export type { DoctorCheck, DoctorReport } from './doctor/index.js';
+
+// ── Repo Map API ──
+export { generateRepoMap } from './repomap/index.js';
+export type { RepoMapOptions, RepoMapEntry } from './repomap/index.js';
+
+// ── 自动刷新 API ──
+export { generateRefreshWorkflow } from './refresh/index.js';
+export type { RefreshWorkflowOptions } from './refresh/index.js';
 export type {
   DependencyGraph,
   GraphNode,

@@ -2,6 +2,25 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.10.0] — 2026-08-21
+
+### 新功能
+
+- **🔌 多 Agent 支持**：从 3 种扩展到 7 种目标 Agent（新增 Windsurf / GitHub Copilot / Gemini CLI / Aider），覆盖生成、互转、同步全链路
+- **📦 技能包生命周期管理**：`--list-skills` 列出已安装技能包、`--remove-skill <name>` 安全卸载、自动注册表跟踪版本与指纹
+- **🔒 敏感信息防护**：内置 8 种脱敏规则（API Key / Bearer Token / AWS Key / GitHub Token / 私钥块 / 连接串等），生成前自动扫描并脱敏
+- **🩺 devtoolkit doctor**：一键诊断 API Key 配置、索引健康度、技能包注册表、Node.js 版本
+- **📊 多模型对比评测**：同一技能 × 多个模型的评测矩阵，输出 Markdown 对比报告表格
+- **🗺️ Repo Map 生成器**：一键输出项目结构摘要（文件 + 符号 + 行数），可直接粘贴给任何 AI Agent 当上下文
+- **🔄 定时自动刷新**：生成 GitHub Actions workflow YAML，定期重抓源文档并自动 PR 更新技能包
+- **🌐 生成语言控制**：`--lang zh|en|auto` 强制技能包输出指定语言
+
+### 改进
+
+- MCP Server 工具 Schema 同步支持全部 7 种 Agent 类型
+- Web UI 验证层同步扩展 Agent 类型白名单
+- 编程式 API 导出生命周期、安全、诊断、Repo Map 和自动刷新模块
+
 ## [0.9.1] — 2026-08-21
 
 ### 修复与加固

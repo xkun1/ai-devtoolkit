@@ -18,8 +18,22 @@ import { convertFile, syncRules } from './convert/index.js';
 import { evalSkillFile } from './eval/index.js';
 import { printProjectGraph, printImpactAnalysis } from './graph/index.js';
 import { isLocalModel, resolveModel, resolveLocalModelName } from './models.js';
-import { setVerbose, setLogToStderr, error, info } from './utils/logger.js';
+import {
+  setVerbose,
+  setLogToStderr,
+  error,
+  info,
+  success,
+} from './utils/logger.js';
 import { isValidTemplate, listTemplates } from './templates/index.js';
+import {
+  runDoctor,
+  printDoctorReport,
+  listSkills,
+  removeSkill,
+} from './index.js';
+import { generateRepoMap } from './repomap/index.js';
+import { generateRefreshWorkflow } from './refresh/index.js';
 import type {
   AgentType,
   LLMConfig,
@@ -73,6 +87,12 @@ interface CliOptions {
   maxBatchFiles?: number;
   evalConcurrency?: number;
   evalMaxCases?: number;
+  doctor?: boolean;
+  listSkills?: boolean;
+  removeSkill?: string;
+  lang?: string;
+  repoMap?: boolean;
+  generateRefreshWorkflow?: boolean;
   cache?: boolean;
   searchMode?: 'hybrid' | 'exact' | 'semantic';
 }
@@ -220,6 +240,18 @@ export function createProgram(): Command {
       '--execute',
       '配合 --env-import 使用：实际执行安装命令（不加则只预览）',
     )
+    .option('--doctor', '一键诊断：检查 API Key、索引、技能包健康度')
+    .option('--list-skills', '列出项目中所有已生成的技能包')
+    .option('--remove-skill <name>', '移除指定技能包及其产物文件')
+    .option(
+      '--lang <lang>',
+      '强制技能包输出语言: zh | en | auto (默认 auto 跟随源文档)',
+    )
+    .option('--repo-map', '生成项目 Repo Map（项目结构摘要）')
+    .option(
+      '--generate-refresh-workflow',
+      '生成 GitHub Actions 定时刷新技能包 workflow',
+    )
     .action(runCommand);
 
   return program;
@@ -234,6 +266,50 @@ async function runCommand(
     return;
   }
 
+  // ── 诊断 ──
+  if (options.doctor) {
+    const report = await runDoctor();
+    printDoctorReport(report);
+    return;
+  }
+
+  // ── 技能包生命周期 ──
+  if (options.listSkills) {
+    const skills = await listSkills();
+    info('');
+    info('  📦 已安装技能包');
+    info('  ─────────────────────────────────');
+    if (skills.length === 0) {
+      info('  （空）尚未生成任何技能包');
+    } else {
+      for (const s of skills) {
+        const icon = s.exists ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✖\x1b[0m';
+        info(`  ${icon} ${s.name}  [${s.agentType}]  ${s.primaryPath}`);
+      }
+    }
+    info('');
+    return;
+  }
+
+  if (options.removeSkill) {
+    const removed = await removeSkill(options.removeSkill);
+    if (removed) {
+      success(`已移除技能包: ${options.removeSkill}`);
+    } else {
+      error(`未找到技能包: ${options.removeSkill}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  // ── Repo Map ──
+  if (options.repoMap) {
+    const root = sources.length > 0 ? resolve(sources[0]) : process.cwd();
+    const map = await generateRepoMap({ root });
+    console.log(map);
+    return;
+  }
+
   const cfg = await loadConfig();
   const model = options.model || cfg.model || 'deepseek-chat';
   const baseUrl = options.baseUrl || cfg.baseUrl;
@@ -243,6 +319,25 @@ async function runCommand(
   const batchConcurrency = options.batchConcurrency ?? cfg.batchConcurrency;
   const maxBatchFiles = options.maxBatchFiles ?? cfg.maxBatchFiles;
   setVerbose(options.verbose ?? cfg.verbose ?? false);
+
+  // ── 生成刷新工作流 ──
+  if (options.generateRefreshWorkflow) {
+    if (sources.length === 0) {
+      error('请提供至少一个源 URL 或文件路径');
+      process.exitCode = 1;
+      return;
+    }
+    const yaml = generateRefreshWorkflow({
+      sources,
+      agentType: (options.type as string) || 'codex',
+      model,
+    });
+    const { writeFileAtomic } = await import('./utils/atomic-write.js');
+    const workflowPath = '.github/workflows/devtoolkit-refresh.yml';
+    await writeFileAtomic(workflowPath, yaml);
+    success(`已生成: ${workflowPath}`);
+    return;
+  }
 
   // ── 技能效果评测 ──
   if (options.eval) {
@@ -293,7 +388,18 @@ async function runCommand(
     const projectRoot =
       sources.length > 0 ? resolve(sources[0]) : process.cwd();
     const fromAgent = options.syncFrom || 'auto';
-    if (!['auto', 'codex', 'cursor', 'claude'].includes(fromAgent)) {
+    if (
+      ![
+        'auto',
+        'codex',
+        'cursor',
+        'claude',
+        'windsurf',
+        'copilot',
+        'gemini',
+        'aider',
+      ].includes(fromAgent)
+    ) {
       throw new Error(`无效的同步源 Agent: ${fromAgent}`);
     }
     const toAgents = options.syncTo
@@ -518,6 +624,7 @@ async function runCommand(
     llmTimeoutMs,
     batchConcurrency,
     maxBatchFiles,
+    lang: (options.lang as 'zh' | 'en' | 'auto') || undefined,
   };
 
   if (options.watch) {

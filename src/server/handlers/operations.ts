@@ -124,7 +124,16 @@ export async function handleSync(
   };
   if (
     body.from !== undefined &&
-    !['auto', 'codex', 'cursor', 'claude'].includes(String(body.from))
+    ![
+      'auto',
+      'codex',
+      'cursor',
+      'claude',
+      'windsurf',
+      'copilot',
+      'gemini',
+      'aider',
+    ].includes(String(body.from))
   ) {
     throw new HttpError(400, '无效的同步源 Agent 类型');
   }

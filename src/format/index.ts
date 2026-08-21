@@ -6,6 +6,10 @@ export const DEFAULT_OUTPUT_PATHS: Record<AgentType, string> = {
   codex: './SKILL.md',
   cursor: './.cursorrules',
   claude: './CLAUDE.md',
+  windsurf: './.windsurf/rules/default.md',
+  copilot: './.github/copilot-instructions.md',
+  gemini: './GEMINI.md',
+  aider: './CONVENTIONS.md',
 };
 
 /** 格式化最终结果 */
@@ -26,5 +30,13 @@ export function formatResult(
 
 /** 校验 AgentType */
 export function isValidAgentType(value: string): value is AgentType {
-  return ['codex', 'cursor', 'claude'].includes(value);
+  return [
+    'codex',
+    'cursor',
+    'claude',
+    'windsurf',
+    'copilot',
+    'gemini',
+    'aider',
+  ].includes(value);
 }

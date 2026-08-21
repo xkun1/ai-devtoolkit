@@ -61,6 +61,19 @@ const AGENT_CHOICES = [
     name: '🧠 Claude  → CLAUDE.md        (Claude Code 项目记忆)',
     value: 'claude',
   },
+  {
+    name: '🏄 Windsurf → .windsurf/rules/  (Windsurf 项目规则)',
+    value: 'windsurf',
+  },
+  {
+    name: '🤝 Copilot → .github/copilot-instructions.md  (GitHub Copilot)',
+    value: 'copilot',
+  },
+  {
+    name: '✨ Gemini  → GEMINI.md        (Gemini CLI 项目记忆)',
+    value: 'gemini',
+  },
+  { name: '🔧 Aider   → CONVENTIONS.md   (Aider 项目约定)', value: 'aider' },
 ];
 
 const MAIN_MENU_CHOICES = [

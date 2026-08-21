@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import { generateEvalSuite, generateFallbackCases } from './generator.js';
 import { runSkillEval, formatEvalReportMarkdown } from './runner.js';
+import { runMultiModelEval, formatMultiModelReport } from './multi-model.js';
 import { writeFileAtomic } from '../utils/atomic-write.js';
 import {
   info,
@@ -27,6 +28,8 @@ export {
   generateFallbackCases,
   runSkillEval,
   formatEvalReportMarkdown,
+  runMultiModelEval,
+  formatMultiModelReport,
 };
 
 export type {
@@ -37,6 +40,8 @@ export type {
   GenerateEvalOptions,
   RunEvalOptions,
 };
+
+export type { MultiModelOptions, MultiModelResult } from './multi-model.js';
 
 /**
  * 评测指定技能文件（CLI 包装）

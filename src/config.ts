@@ -112,9 +112,20 @@ function validateConfig(raw: any, filepath: string): DevToolkitConfig {
   }
 
   // 校验 type
-  if (config.type && !['codex', 'cursor', 'claude'].includes(config.type)) {
+  if (
+    config.type &&
+    ![
+      'codex',
+      'cursor',
+      'claude',
+      'windsurf',
+      'copilot',
+      'gemini',
+      'aider',
+    ].includes(config.type)
+  ) {
     throw new Error(
-      `配置文件 ${filepath} 中 type 无效: ${config.type}（可选: codex, cursor, claude）`,
+      `配置文件 ${filepath} 中 type 无效: ${config.type}（可选: codex, cursor, claude, windsurf, copilot, gemini, aider）`,
     );
   }
 

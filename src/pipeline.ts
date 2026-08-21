@@ -31,10 +31,26 @@ import {
 } from './utils/logger.js';
 import { estimateTokens, estimateCost, formatCost } from './utils/token.js';
 import { ResourceLimitError, throwIfAborted } from './utils/abort.js';
+import {
+  loadRegistry,
+  saveRegistry,
+  registerSkill,
+} from './lifecycle/index.js';
 
 const DEFAULT_BATCH_CONCURRENCY = 2;
 const DEFAULT_MAX_BATCH_FILES = 100;
 let outputWriteQueue: Promise<void> = Promise.resolve();
+
+/** 从产物路径中提取技能 slug */
+function artifactPrimaryPathToSlug(path: string): string {
+  const parts = path.replaceAll('\\', '/').split('/');
+  if (parts.includes('SKILL.md')) {
+    const idx = parts.indexOf('SKILL.md');
+    return parts[idx - 1] || 'skill';
+  }
+  const base = parts[parts.length - 1] || 'skill';
+  return base.replace(/\.[^.]+$/, '');
+}
 
 /** 核心管线：sources → load → merge → transform → format → output */
 export async function runPipeline(
@@ -444,6 +460,27 @@ async function runPipelineSingle(
       await writeFileAtomic(artifact.path, artifact.content);
       success(`已生成: ${artifact.path}`);
     }
+
+    // 注册到技能包生命周期注册表
+    try {
+      const projectRoot = process.cwd();
+      const registry = await loadRegistry(projectRoot);
+      const skillName =
+        options.name ||
+        artifactPrimaryPathToSlug(artifacts[0]?.path || 'skill');
+      registerSkill(registry, {
+        name: skillName,
+        agentType: options.agentType,
+        primaryPath: artifacts[0]?.path || '',
+        artifactPaths: artifacts.map((a) => a.path),
+        sourceFingerprint: fingerprint,
+        generatedAt: Date.now(),
+      });
+      await saveRegistry(registry);
+    } catch {
+      // 注册表写入失败不影响主流程
+    }
+
     // 所有产物写完后再原子更新缓存。
     if (options.incremental) {
       saveGeneratedResult(cachePath, cacheKey, fingerprint, result);

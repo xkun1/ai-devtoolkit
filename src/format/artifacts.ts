@@ -38,6 +38,11 @@ export function resolvePrimaryPath(
   const slug = resolveSlug(doc, name);
   if (agentType === 'codex') return join('.agents', 'skills', slug, 'SKILL.md');
   if (agentType === 'cursor') return join('.cursor', 'rules', `${slug}.mdc`);
+  if (agentType === 'windsurf') return join('.windsurf', 'rules', `${slug}.md`);
+  if (agentType === 'copilot')
+    return join('.github', 'copilot-instructions.md');
+  if (agentType === 'gemini') return 'GEMINI.md';
+  if (agentType === 'aider') return 'CONVENTIONS.md';
   return 'CLAUDE.md';
 }
 
@@ -89,6 +94,18 @@ export function buildArtifacts(options: ArtifactOptions): SkillResult {
           : cleanContent,
       ),
     ]);
+  }
+  if (options.agentType === 'windsurf') {
+    return makeResult(options.agentType, [artifact(primaryPath, cleanContent)]);
+  }
+  if (options.agentType === 'copilot') {
+    return makeResult(options.agentType, [artifact(primaryPath, cleanContent)]);
+  }
+  if (options.agentType === 'gemini') {
+    return makeResult(options.agentType, [artifact(primaryPath, cleanContent)]);
+  }
+  if (options.agentType === 'aider') {
+    return makeResult(options.agentType, [artifact(primaryPath, cleanContent)]);
   }
   return makeResult(
     options.agentType,
@@ -213,6 +230,10 @@ function resolveSlug(
 function legacyPath(agentType: AgentType): string {
   if (agentType === 'codex') return 'SKILL.md';
   if (agentType === 'cursor') return '.cursorrules';
+  if (agentType === 'windsurf') return '.windsurfrules';
+  if (agentType === 'copilot') return 'copilot-instructions.md';
+  if (agentType === 'gemini') return 'GEMINI.md';
+  if (agentType === 'aider') return 'CONVENTIONS.md';
   return 'CLAUDE.md';
 }
 

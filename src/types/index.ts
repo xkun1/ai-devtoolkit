@@ -1,4 +1,5 @@
-export type AgentType = 'codex' | 'cursor' | 'claude';
+export type AgentType =
+  'codex' | 'cursor' | 'claude' | 'windsurf' | 'copilot' | 'gemini' | 'aider';
 
 /** 输出格式：modern 使用各 Agent 当前推荐目录结构，legacy 保留旧版单文件。 */
 export type OutputMode = 'modern' | 'legacy';
@@ -129,6 +130,8 @@ export interface PipelineOptions {
   batchConcurrency?: number;
   /** 目录批处理文件数上限，默认 100。 */
   maxBatchFiles?: number;
+  /** 强制技能包输出语言：'zh' | 'en' | 'auto'（默认 auto 跟随源文档）。 */
+  lang?: 'zh' | 'en' | 'auto';
 }
 
 /** 预加载的文档内容（Web UI 文件上传用，跳过 loader 直接传入内容） */

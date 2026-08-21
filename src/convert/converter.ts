@@ -39,6 +39,18 @@ export function convertRule(
     case 'claude':
       artifacts = convertToClaude(parsed, slug, options);
       break;
+    case 'windsurf':
+      artifacts = convertToWindsurf(parsed, slug, options);
+      break;
+    case 'copilot':
+      artifacts = convertToCopilot(parsed, slug, options);
+      break;
+    case 'gemini':
+      artifacts = convertToGemini(parsed, slug, options);
+      break;
+    case 'aider':
+      artifacts = convertToAider(parsed, slug, options);
+      break;
     default:
       throw new Error(`不支持的目标 Agent 类型: ${targetAgent}`);
   }
@@ -197,6 +209,72 @@ function convertToClaude(
     { path: claudePath, content: claudeMain, kind: 'primary' },
     { path: rulePath, content: parsed.body.trim() + '\n', kind: 'rule' },
   ];
+}
+
+/** 转换为 Windsurf .windsurf/rules/<name>.md 格式 */
+function convertToWindsurf(
+  parsed: ParsedRule,
+  slug: string,
+  options: ConvertOptions,
+): GeneratedArtifact[] {
+  const outputDir = options.outputDir || '.';
+  const path = join(outputDir, '.windsurf', 'rules', `${slug}.md`);
+  const desc = parsed.meta.description || parsed.title || '项目开发规则';
+  const content = `---
+description: "${yamlEscape(desc)}"
+---
+
+${parsed.body.trim()}
+`;
+  return [{ path, content, kind: 'primary' }];
+}
+
+/** 转换为 GitHub Copilot .github/copilot-instructions.md 格式 */
+function convertToCopilot(
+  parsed: ParsedRule,
+  _slug: string,
+  options: ConvertOptions,
+): GeneratedArtifact[] {
+  const outputDir = options.outputDir || '.';
+  const path = join(outputDir, '.github', 'copilot-instructions.md');
+  const title = parsed.title || parsed.meta.name || '项目规则';
+  const content = `# ${title}
+
+${parsed.body.trim()}
+`;
+  return [{ path, content, kind: 'primary' }];
+}
+
+/** 转换为 Gemini CLI GEMINI.md 格式 */
+function convertToGemini(
+  parsed: ParsedRule,
+  _slug: string,
+  options: ConvertOptions,
+): GeneratedArtifact[] {
+  const outputDir = options.outputDir || '.';
+  const path = join(outputDir, 'GEMINI.md');
+  const title = parsed.title || parsed.meta.name || '项目规则';
+  const content = `# ${title}
+
+${parsed.body.trim()}
+`;
+  return [{ path, content, kind: 'primary' }];
+}
+
+/** 转换为 Aider CONVENTIONS.md 格式 */
+function convertToAider(
+  parsed: ParsedRule,
+  _slug: string,
+  options: ConvertOptions,
+): GeneratedArtifact[] {
+  const outputDir = options.outputDir || '.';
+  const path = join(outputDir, 'CONVENTIONS.md');
+  const title = parsed.title || parsed.meta.name || '项目规则';
+  const content = `# ${title}
+
+${parsed.body.trim()}
+`;
+  return [{ path, content, kind: 'primary' }];
 }
 
 function parseSections(content: string): string[] {

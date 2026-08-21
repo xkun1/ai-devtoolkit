@@ -17,7 +17,15 @@ import { parseRule } from './parser.js';
 import { convertRule } from './converter.js';
 import { writeFileAtomic } from '../utils/atomic-write.js';
 
-const ALL_AGENTS: AgentType[] = ['codex', 'cursor', 'claude'];
+const ALL_AGENTS: AgentType[] = [
+  'codex',
+  'cursor',
+  'claude',
+  'windsurf',
+  'copilot',
+  'gemini',
+  'aider',
+];
 
 /** 发现项目中存在的规则定义 */
 export async function discoverProjectRules(
@@ -109,6 +117,72 @@ export async function discoverProjectRules(
       format: 'claude',
       baseDir: projectRoot,
       files: claudeFiles,
+    });
+  }
+
+  // 4. 检查 Windsurf: .windsurf/rules/*.md 或 .windsurfrules
+  const windsurfDir = join(projectRoot, '.windsurf', 'rules');
+  const windsurfFile = join(projectRoot, '.windsurfrules');
+  const windsurfFiles: { path: string; name: string }[] = [];
+
+  if (existsSync(windsurfDir)) {
+    try {
+      const entries = await readdir(windsurfDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isFile() && e.name.endsWith('.md')) {
+          windsurfFiles.push({
+            path: join(windsurfDir, e.name),
+            name: basename(e.name, '.md'),
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (existsSync(windsurfFile)) {
+    windsurfFiles.push({ path: windsurfFile, name: 'windsurfrules' });
+  }
+
+  if (windsurfFiles.length > 0) {
+    discovered.push({
+      agentType: 'windsurf',
+      format: 'windsurf',
+      baseDir: projectRoot,
+      files: windsurfFiles,
+    });
+  }
+
+  // 5. 检查 Copilot: .github/copilot-instructions.md
+  const copilotFile = join(projectRoot, '.github', 'copilot-instructions.md');
+  if (existsSync(copilotFile)) {
+    discovered.push({
+      agentType: 'copilot',
+      format: 'copilot',
+      baseDir: projectRoot,
+      files: [{ path: copilotFile, name: 'copilot-instructions' }],
+    });
+  }
+
+  // 6. 检查 Gemini: GEMINI.md
+  const geminiFile = join(projectRoot, 'GEMINI.md');
+  if (existsSync(geminiFile)) {
+    discovered.push({
+      agentType: 'gemini',
+      format: 'gemini',
+      baseDir: projectRoot,
+      files: [{ path: geminiFile, name: 'GEMINI' }],
+    });
+  }
+
+  // 7. 检查 Aider: CONVENTIONS.md
+  const aiderFile = join(projectRoot, 'CONVENTIONS.md');
+  if (existsSync(aiderFile)) {
+    discovered.push({
+      agentType: 'aider',
+      format: 'aider',
+      baseDir: projectRoot,
+      files: [{ path: aiderFile, name: 'CONVENTIONS' }],
     });
   }
 

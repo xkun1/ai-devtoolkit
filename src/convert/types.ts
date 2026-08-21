@@ -3,7 +3,15 @@
  */
 import type { AgentType, GeneratedArtifact } from '../types/index.js';
 
-export type RuleFormat = 'cursor' | 'codex' | 'claude' | 'generic';
+export type RuleFormat =
+  | 'cursor'
+  | 'codex'
+  | 'claude'
+  | 'windsurf'
+  | 'copilot'
+  | 'gemini'
+  | 'aider'
+  | 'generic';
 
 export interface RuleMetadata {
   name?: string;
