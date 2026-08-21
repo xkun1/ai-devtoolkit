@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [未发布]
+## [0.9.1] — 2026-08-21
 
 ### 修复与加固
 
@@ -18,6 +18,14 @@
 - 目录批处理改为受控并发，并通过写入临界区消除并发覆盖竞态。
 - 增加覆盖率硬门槛、完全离线的 URL 加载测试、Chromium Web UI E2E，以及 macOS/Windows 跨平台 CI。
 - 拆分 Web 路由、请求工具、业务处理器、MCP 协议/Schema/处理器；Web UI 改用可维护的 HTML 源文件与可校验内嵌产物。
+
+### 开源社区建设
+
+- 新增 `SECURITY.md` 安全披露渠道与安全设计说明、`CODE_OF_CONDUCT.md` 贡献者公约。
+- 提交规范改为 Conventional Commits（中英文均可），README TypeScript 徽章改为动态版本。
+- 新增可复现 OpenAPI Token 节省 Benchmark（`scripts/benchmark.ts` + `docs/benchmark.md`，实测节省 81%~87%）。
+- 新增终端演示动图 `docs/assets/demo.gif` 并嵌入双语 README。
+- 修复环境探测测试用例在并发执行时偶发超时的问题。
 
 ## [0.9.0] — 2026-08-14
 
