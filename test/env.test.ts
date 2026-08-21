@@ -86,7 +86,8 @@ describe('环境迁移 — 探测与安全脱敏', () => {
     expect(masked).toContain('regular_setting = standard_value');
   });
 
-  it('detectEnvironment 返回有效系统信息', async () => {
+  // SDK 探测串行执行多个外部命令，并发跑测试时可能超过默认 5s 超时
+  it('detectEnvironment 返回有效系统信息', { timeout: 20_000 }, async () => {
     const env = await detectEnvironment({ modules: ['sdks'] });
     expect(env.version).toBe('1.0.0');
     expect(env.system.platform).toBeDefined();

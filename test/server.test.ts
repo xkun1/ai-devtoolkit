@@ -603,7 +603,8 @@ describe('Web UI — 代码搜索与环境资产 API', () => {
     expect(Array.isArray(body.results)).toBe(true);
   });
 
-  it('环境探测与比对接口正常响应', async () => {
+  // /api/env/detect 内部调用 SDK 探测，并发跑测试时可能超过默认 5s 超时
+  it('环境探测与比对接口正常响应', { timeout: 20_000 }, async () => {
     const detectRes = await invokeRequest(
       {},
       {
