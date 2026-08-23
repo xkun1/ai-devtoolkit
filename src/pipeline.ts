@@ -1,5 +1,10 @@
-import { access } from 'node:fs/promises';
-import type { PipelineOptions, SkillResult } from './types/index.js';
+import { access, realpath } from 'node:fs/promises';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import type {
+  PipelineOptions,
+  SensitivePolicy,
+  SkillResult,
+} from './types/index.js';
 import {
   loadDocuments,
   mergeDocuments,
@@ -19,7 +24,7 @@ import {
 import { buildArtifacts, resolvePrimaryPath } from './format/artifacts.js';
 import { PROMPT_VERSION } from './transform/prompts.js';
 import { assertValidSkillResult } from './quality/validate.js';
-import { writeFileAtomic } from './utils/atomic-write.js';
+import { writeFilesAtomic } from './utils/atomic-write.js';
 import {
   startSpinner,
   succeedSpinner,
@@ -36,6 +41,7 @@ import {
   saveRegistry,
   registerSkill,
 } from './lifecycle/index.js';
+import { detectSensitiveInfo, redactContent } from './security/redact.js';
 
 const DEFAULT_BATCH_CONCURRENCY = 2;
 const DEFAULT_MAX_BATCH_FILES = 100;
@@ -49,7 +55,8 @@ function artifactPrimaryPathToSlug(path: string): string {
     return parts[idx - 1] || 'skill';
   }
   const base = parts[parts.length - 1] || 'skill';
-  return base.replace(/\.[^.]+$/, '');
+  if (/^\.[^.]+$/.test(base)) return base.slice(1) || 'skill';
+  return base.replace(/\.[^.]+$/, '') || 'skill';
 }
 
 /** 核心管线：sources → load → merge → transform → format → output */
@@ -313,6 +320,16 @@ async function runPipelineSingle(
     checkSpaShell(doc.content, doc.source);
   }
 
+  const sensitivePolicy = normalizeSensitivePolicy(options.sensitivePolicy);
+  doc = {
+    ...doc,
+    content: protectSensitiveContent(
+      doc.content,
+      sensitivePolicy,
+      '源文档（发送给 LLM 前）',
+    ),
+  };
+
   if (doc.content.trim().length < 50) {
     throw new Error('文档内容过短（<50字符），可能加载失败或页面无正文内容');
   }
@@ -339,6 +356,8 @@ async function runPipelineSingle(
     name: options.name,
     outputMode,
     promptVersion: PROMPT_VERSION,
+    lang: options.lang,
+    sensitivePolicy,
   });
 
   // Step 2: LLM 提炼
@@ -390,7 +409,13 @@ async function runPipelineSingle(
         llmTimeoutMs: options.llmTimeoutMs,
         maxOutputChars: options.maxOutputChars,
         maxLLMCalls: options.maxLLMCalls,
+        lang: options.lang,
       },
+    );
+    transformed.content = protectSensitiveContent(
+      transformed.content,
+      sensitivePolicy,
+      'LLM 输出（产物写入前）',
     );
     debug(`LLM 输出长度: ${transformed.content.length} 字符`);
   } catch (err: unknown) {
@@ -446,6 +471,9 @@ async function runPipelineSingle(
   ];
 
   await withOutputWriteLock(async () => {
+    const projectRoot = resolve(process.cwd());
+    await assertSafeProjectArtifactPaths(projectRoot, artifacts);
+
     // 覆盖保护与写入必须在同一临界区，避免并发批处理发生检查后覆盖竞态。
     if (!options.force) {
       for (const artifact of artifacts) {
@@ -466,35 +494,49 @@ async function runPipelineSingle(
       }
     }
 
+    throwIfAborted(options.signal, '技能生成');
+    await writeFilesAtomic(artifacts);
     for (const artifact of artifacts) {
-      throwIfAborted(options.signal, '技能生成');
-      await writeFileAtomic(artifact.path, artifact.content);
       success(`已生成: ${artifact.path}`);
     }
 
-    // 注册到技能包生命周期注册表
-    try {
-      const projectRoot = process.cwd();
-      const registry = await loadRegistry(projectRoot);
-      const skillName =
-        options.name ||
-        artifactPrimaryPathToSlug(artifacts[0]?.path || 'skill');
-      registerSkill(registry, {
-        name: skillName,
-        agentType: options.agentType,
-        primaryPath: artifacts[0]?.path || '',
-        artifactPaths: artifacts.map((a) => a.path),
-        sourceFingerprint: fingerprint,
-        generatedAt: Date.now(),
-      });
-      await saveRegistry(registry);
-    } catch {
-      // 注册表写入失败不影响主流程
+    // 仅注册项目根目录内的相对路径，避免把外部文件纳入删除生命周期。
+    const registryPaths = artifacts.map((artifact) =>
+      toProjectRelativePath(projectRoot, artifact.path),
+    );
+    if (registryPaths.some((path) => path === undefined)) {
+      warn('产物位于项目根目录外，已跳过技能注册表登记');
+    } else {
+      try {
+        const registry = await loadRegistry(projectRoot);
+        const skillName =
+          options.name ||
+          artifactPrimaryPathToSlug(artifacts[0]?.path || 'skill');
+        registerSkill(registry, {
+          name: skillName,
+          agentType: options.agentType,
+          primaryPath: registryPaths[0]!,
+          artifactPaths: registryPaths as string[],
+          sourceFingerprint: fingerprint,
+          generatedAt: Date.now(),
+        });
+        await saveRegistry(registry);
+      } catch (error: unknown) {
+        warn(
+          `技能注册表写入失败，产物已保留：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     // 所有产物写完后再原子更新缓存。
     if (options.incremental) {
-      saveGeneratedResult(cachePath, cacheKey, fingerprint, result);
+      try {
+        saveGeneratedResult(cachePath, cacheKey, fingerprint, result);
+      } catch (error: unknown) {
+        warn(
+          `增量缓存写入失败，产物已保留：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   });
 
@@ -505,6 +547,35 @@ async function runPipelineSingle(
   info('');
 
   return result;
+}
+
+async function assertSafeProjectArtifactPaths(
+  projectRoot: string,
+  artifacts: readonly { path: string }[],
+): Promise<void> {
+  const rootRealPath = await realpath(projectRoot);
+  for (const artifact of artifacts) {
+    const absolutePath = resolve(projectRoot, artifact.path);
+    if (toProjectRelativePath(projectRoot, absolutePath) === undefined)
+      continue;
+
+    let ancestor = dirname(absolutePath);
+    while (true) {
+      try {
+        const ancestorRealPath = await realpath(ancestor);
+        const rel = relative(rootRealPath, ancestorRealPath);
+        if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+          throw new Error(`产物路径通过符号链接越过项目边界: ${artifact.path}`);
+        }
+        break;
+      } catch (error: unknown) {
+        if (getErrorCode(error) !== 'ENOENT') throw error;
+        const parent = dirname(ancestor);
+        if (parent === ancestor) throw error;
+        ancestor = parent;
+      }
+    }
+  }
 }
 
 function normalizeBatchConcurrency(value?: number): number {
@@ -525,6 +596,52 @@ function normalizeMaxBatchFiles(value?: number): number {
     throw new RangeError('maxBatchFiles 必须是 1-10000 的整数');
   }
   return normalized;
+}
+
+function normalizeSensitivePolicy(value?: SensitivePolicy): SensitivePolicy {
+  const normalized = value ?? 'redact';
+  if (!['redact', 'error', 'off'].includes(normalized)) {
+    throw new RangeError('sensitivePolicy 必须是 redact、error 或 off');
+  }
+  return normalized;
+}
+
+function toProjectRelativePath(
+  projectRoot: string,
+  artifactPath: string,
+): string | undefined {
+  const absolutePath = resolve(projectRoot, artifactPath);
+  const rel = relative(projectRoot, absolutePath);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    return undefined;
+  }
+  return rel;
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+function protectSensitiveContent(
+  content: string,
+  policy: SensitivePolicy,
+  stage: string,
+): string {
+  if (policy === 'off') return content;
+  const detected = detectSensitiveInfo(content);
+  if (!detected.found) return content;
+  const summary = `${detected.count} 处（${detected.rules.join(', ')}）`;
+  if (policy === 'error') {
+    throw new Error(`${stage}检测到敏感信息 ${summary}，已阻止处理`);
+  }
+  const redacted = redactContent(content);
+  warn(`${stage}已自动脱敏 ${summary}`);
+  return redacted.content;
 }
 
 async function mapWithConcurrency<T, R>(

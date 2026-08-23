@@ -60,6 +60,38 @@ describe('transformDocumentToSkill', () => {
     expect(prompts.at(-1)).toContain('Long-document synthesis constraints');
   });
 
+  it('短文档与长文档最终合成都遵循强制输出语言', async () => {
+    const shortDoc = {
+      source: 'short.md',
+      type: 'markdown' as const,
+      content: '# 中文文档\n\n' + '内容说明。'.repeat(30),
+    };
+    await transformDocumentToSkill(
+      shortDoc,
+      { apiKey: 'mock', model: 'mock' },
+      'codex',
+      undefined,
+      undefined,
+      { lang: 'en' },
+    );
+    expect(vi.mocked(callLLM).mock.calls.at(-1)?.[0]).toContain(
+      'entire skill file in English',
+    );
+
+    vi.mocked(callLLM).mockClear();
+    await transformDocumentToSkill(
+      { ...shortDoc, content: shortDoc.content.repeat(20) },
+      { apiKey: 'mock', model: 'mock' },
+      'codex',
+      undefined,
+      undefined,
+      { chunkChars: 1_000, lang: 'zh' },
+    );
+    expect(vi.mocked(callLLM).mock.calls.at(-1)?.[0]).toContain(
+      'entire skill file in Simplified Chinese',
+    );
+  });
+
   it('超过 LLM 调用预算时立即停止', async () => {
     const content = Array.from(
       { length: 4 },

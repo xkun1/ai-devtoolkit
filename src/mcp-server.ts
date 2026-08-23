@@ -18,8 +18,6 @@
  *   }
  */
 import { createInterface } from 'node:readline';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { info, setLogToStderr } from './utils/logger.js';
 import { TOOLS } from './mcp/tools.js';
 import { handleToolCall } from './mcp/handlers.js';
@@ -41,6 +39,7 @@ import {
   DEFAULT_MAX_OUTPUT_CHARS,
   DEFAULT_MAX_OUTPUT_TOKENS,
 } from './transform/llm.js';
+import { PACKAGE_VERSION } from './version.js';
 
 export type { McpServerOptions } from './mcp/types.js';
 
@@ -61,7 +60,7 @@ interface McpRuntime {
 
 const SERVER_INFO = {
   name: 'devtoolkit',
-  version: readPackageVersion(),
+  version: PACKAGE_VERSION,
 };
 
 const CAPABILITIES = {
@@ -348,16 +347,4 @@ function normalizePositiveInteger(
     throw new RangeError(`${label} 必须是 1-${maximum} 的整数`);
   }
   return normalized;
-}
-
-function readPackageVersion(): string {
-  try {
-    const packagePath = join(__dirname, '..', 'package.json');
-    const parsed = JSON.parse(readFileSync(packagePath, 'utf-8')) as {
-      version?: unknown;
-    };
-    return typeof parsed.version === 'string' ? parsed.version : '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
 }

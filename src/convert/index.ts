@@ -18,7 +18,7 @@ import type {
 import { parseRule, detectRuleFormat } from './parser.js';
 import { convertRule } from './converter.js';
 import { discoverProjectRules, syncProjectRules } from './syncer.js';
-import { writeFileAtomic } from '../utils/atomic-write.js';
+import { writeFilesAtomic } from '../utils/atomic-write.js';
 import { info, success, warn } from '../utils/logger.js';
 
 export {
@@ -60,8 +60,8 @@ export async function convertFile(
   });
 
   if (options.write !== false) {
+    await writeFilesAtomic(result.artifacts);
     for (const art of result.artifacts) {
-      await writeFileAtomic(art.path, art.content);
       success(`已生成 ${targetAgent} 规则: ${art.path}`);
     }
   }

@@ -260,7 +260,6 @@ export async function handleEstimate(
   res: ServerResponse,
   maxBodyBytes: number,
 ): Promise<void> {
-  const body = await readBody(req, maxBodyBytes);
   const { text } = await readBody<{ text?: unknown }>(req, maxBodyBytes);
   if (typeof text !== 'string' || !text) {
     serveJSON(res, 400, { error: '缺少 text 参数' });

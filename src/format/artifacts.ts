@@ -12,6 +12,7 @@ import {
   normalizeSkillName,
   slugify,
 } from './frontmatter.js';
+import { normalizeMarkdown } from './normalize.js';
 
 const CODEX_MAIN_MAX_LINES = 360;
 const CLAUDE_MAIN_MAX_LINES = 200;
@@ -283,10 +284,6 @@ function parseMarkdownDocument(content: string): {
         .trim(),
     })),
   };
-}
-
-function normalizeMarkdown(content: string): string {
-  return content.replace(/\n{3,}$/g, '\n\n').trim() + '\n';
 }
 
 function unwrapMarkdownFence(content: string): string {

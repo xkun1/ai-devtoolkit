@@ -1,8 +1,11 @@
-export type AgentType =
-  'codex' | 'cursor' | 'claude' | 'windsurf' | 'copilot' | 'gemini' | 'aider';
+import type { AgentType } from '../agents.js';
+export type { AgentType } from '../agents.js';
 
 /** 输出格式：modern 使用各 Agent 当前推荐目录结构，legacy 保留旧版单文件。 */
 export type OutputMode = 'modern' | 'legacy';
+
+/** 敏感信息处理策略：默认脱敏，也可选择阻断或显式关闭。 */
+export type SensitivePolicy = 'redact' | 'error' | 'off';
 
 export type SourceType =
   'url' | 'pdf' | 'html' | 'markdown' | 'text' | 'openapi' | 'postman';
@@ -132,6 +135,8 @@ export interface PipelineOptions {
   maxBatchFiles?: number;
   /** 强制技能包输出语言：'zh' | 'en' | 'auto'（默认 auto 跟随源文档）。 */
   lang?: 'zh' | 'en' | 'auto';
+  /** 敏感信息策略：默认 redact，在调用 LLM 前及产物落盘前脱敏。 */
+  sensitivePolicy?: SensitivePolicy;
 }
 
 /** 预加载的文档内容（Web UI 文件上传用，跳过 loader 直接传入内容） */

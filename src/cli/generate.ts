@@ -1,10 +1,15 @@
 import type { Command } from 'commander';
-import { parseInteger } from './parse.js';
+import { AGENT_TYPES, AGENT_TYPE_HELP } from '../agents.js';
+import { parseChoice, parseInteger } from './parse.js';
 
 /** 注册技能包生成及刷新工作流相关选项。 */
 export function register(program: Command): void {
   program
-    .option('-t, --type <type>', '目标 Agent 类型 (codex, cursor, claude)')
+    .option(
+      '-t, --type <type>',
+      `目标 Agent 类型 (${AGENT_TYPE_HELP})`,
+      (value) => parseChoice(value, 'type', AGENT_TYPES),
+    )
     .option('-o, --out <path>', '输出文件路径')
     .option('-m, --model <model>', 'LLM 模型名')
     .option('-n, --name <name>', '自定义技能名（Codex frontmatter）')
@@ -56,6 +61,17 @@ export function register(program: Command): void {
     .option(
       '--lang <lang>',
       '强制技能包输出语言: zh | en | auto (默认 auto 跟随源文档)',
+      (value) => parseChoice(value, 'lang', ['zh', 'en', 'auto'] as const),
+    )
+    .option(
+      '--sensitive-policy <policy>',
+      '敏感信息策略: redact (默认脱敏) | error (阻断) | off (关闭)',
+      (value) =>
+        parseChoice(value, 'sensitive-policy', [
+          'redact',
+          'error',
+          'off',
+        ] as const),
     )
     .option(
       '--generate-refresh-workflow',

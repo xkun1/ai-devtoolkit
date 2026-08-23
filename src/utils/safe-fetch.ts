@@ -37,9 +37,15 @@ export async function fetchPublicText(
   throwIfAborted(options.signal, '远程文档抓取');
   return fetchStep(
     input,
-    options.maxBytes ?? 5 * 1024 * 1024,
-    options.timeoutMs ?? 30_000,
-    options.maxRedirects ?? 5,
+    normalizeInteger(
+      options.maxBytes,
+      5 * 1024 * 1024,
+      1,
+      100 * 1024 * 1024,
+      'maxBytes',
+    ),
+    normalizeInteger(options.timeoutMs, 30_000, 1, 600_000, 'timeoutMs'),
+    normalizeInteger(options.maxRedirects, 5, 0, 20, 'maxRedirects'),
     options.signal,
   );
 }
@@ -146,6 +152,13 @@ async function fetchStep(
 }
 
 export function validatePublicHttpUrl(input: string): URL {
+  if (
+    typeof input !== 'string' ||
+    input.length > 10_000 ||
+    input.includes('\0')
+  ) {
+    throw new SafeFetchError(400, '文档 URL 格式无效');
+  }
   let url: URL;
   try {
     url = new URL(input);
@@ -296,4 +309,22 @@ function normalizeHost(value: string): string {
 
 function formatBytes(value: number): string {
   return `${Math.ceil(value / 1024 / 1024)} MiB`;
+}
+
+function normalizeInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): number {
+  const normalized = value ?? fallback;
+  if (
+    !Number.isSafeInteger(normalized) ||
+    normalized < minimum ||
+    normalized > maximum
+  ) {
+    throw new RangeError(`${label} 必须是 ${minimum}-${maximum} 的整数`);
+  }
+  return normalized;
 }

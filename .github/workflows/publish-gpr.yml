@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +88,7 @@ jobs:
           fi
 
       - name: Publish to npmjs
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

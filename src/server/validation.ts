@@ -2,6 +2,7 @@ import { realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { isLocalModel } from '../models.js';
 import { isValidTemplate } from '../templates/index.js';
+import { isAgentType } from '../agents.js';
 import { HttpError, isLoopbackHost } from './http.js';
 
 export function validateLocalServiceUrl(value: unknown): string {
@@ -104,18 +105,7 @@ export function validateGenerateInput(input: {
   fileName?: unknown;
   mimeType?: unknown;
 }): void {
-  if (
-    input.agentType !== undefined &&
-    ![
-      'codex',
-      'cursor',
-      'claude',
-      'windsurf',
-      'copilot',
-      'gemini',
-      'aider',
-    ].includes(String(input.agentType))
-  ) {
+  if (input.agentType !== undefined && !isAgentType(input.agentType)) {
     throw new HttpError(400, '无效的 Agent 类型');
   }
   if (

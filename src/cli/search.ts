@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { parseChoice } from './parse.js';
 
 /** 注册代码搜索、依赖图谱与影响面分析选项。 */
 export function register(program: Command): void {
@@ -14,6 +15,12 @@ export function register(program: Command): void {
     .option(
       '--search-mode <mode>',
       '代码搜索模式: hybrid (默认) | exact | semantic',
+      (value) =>
+        parseChoice(value, 'search-mode', [
+          'hybrid',
+          'exact',
+          'semantic',
+        ] as const),
     )
     .option(
       '--impact <file>',

@@ -4,8 +4,8 @@
  * 初始化索引后进入持续搜索模式，用户可以反复搜索。
  */
 import { createInterface } from 'node:readline';
-import type { SearchIndex } from './types.js';
-import { searchCode } from './searcher.js';
+import type { SearchIndex, SearchOptions } from './types.js';
+import { CodeSearcher } from './searcher.js';
 import { explainResults, formatResultsPlain } from './explainer.js';
 import type { LLMConfig } from '../types/index.js';
 import { info, warn } from '../utils/logger.js';
@@ -22,6 +22,7 @@ export interface InteractiveOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxOutputChars?: number;
+  searchOptions?: SearchOptions;
   /** 自定义输入输出流，便于嵌入宿主进程与自动化测试。 */
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
@@ -34,6 +35,7 @@ export function startInteractiveSearch(
   options: InteractiveOptions,
 ): Promise<void> {
   const { index, llm, useExplain } = options;
+  const searcher = new CodeSearcher(index);
   throwIfAborted(options.signal, '交互式代码搜索');
   const sessionController = new AbortController();
   const signal = options.signal
@@ -112,7 +114,10 @@ export function startInteractiveSearch(
     try {
       throwIfAborted(signal, '交互式代码搜索');
       // 执行搜索
-      const results = searchCode(index, query, { limit: 10 });
+      const results = searcher.search(query, {
+        ...options.searchOptions,
+        limit: options.searchOptions?.limit ?? 10,
+      });
       fallbackOutput = formatResultsPlain(results, index.projectRoot);
 
       if (plainMode || !llm) {

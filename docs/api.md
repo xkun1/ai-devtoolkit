@@ -1,6 +1,6 @@
 # 编程式 API Reference
 
-包根入口 `ai-devtoolkit` 与显式入口 `ai-devtoolkit/lib` 导出相同 API。以下函数均为 ESM/CJS 可调用的公共接口；类型只在 TypeScript 编译期存在。
+包根入口 `ai-devtoolkit` 与兼容入口 `ai-devtoolkit/lib` 导出相同 API；轻量场景可使用 `ai-devtoolkit/search` 或 `ai-devtoolkit/security` 子入口。以下函数均为 ESM/CJS 可调用的公共接口；类型只在 TypeScript 编译期存在。
 
 ## 1. 生成管线
 
@@ -9,11 +9,11 @@
 | `runPipeline` / `devtoolkit` | `(sources: string \| string[], options: PipelineOptions): Promise<SkillResult>`。`sources` 为 URL、文件或目录；`options.agentType`、`options.llm` 必填，其余控制输出路径、模板、爬取、缓存、并发、`stdout`/`dryRun` 等。 |
 | `transformToSkill` | `(doc, config, agentType, name?, template?): Promise<string>`。将已加载文档交给 LLM，返回技能 Markdown。 |
 | `transformDocumentToSkill` | 同上，返回 `TransformResult`（正文和分块/调用统计）；可传 `TransformOptions` 控制分块并发、超时、响应字符和最大调用次数。 |
-| `buildPrompt` | `(doc, agentType, name?, template?): string`，构造默认技能提炼提示词。 |
+| `buildPrompt` | `(doc, agentType, name?, template?, lang?): string`，构造默认技能提炼提示词。 |
 | `callLLM` | `(prompt, config, options?): Promise<string>`。调用 OpenAI 兼容 Chat Completions；`options` 可指定 system prompt、temperature、AbortSignal、timeout 和最大输出字符。 |
 | `splitDocument` | `(content, maxChars = DEFAULT_CHUNK_CHARS): DocumentChunk[]`。按标题、段落和代码块安全边界分块，`maxChars` 不得小于 1000。 |
 | `buildArtifacts` | `(options: ArtifactOptions): SkillResult`。按 Agent 目标生成主文件、引用文件或规则文件。 |
-| `formatResult` | `(result: SkillResult): string`，将结果格式化为 CLI/日志可读文本。 |
+| `formatResult` | `(content: string, agentType: AgentType, outputPath?): SkillResult`，生成兼容旧调用方的单文件结果。 |
 | `resolvePrimaryPath` | `(agentType, doc, name?, outputPath?, outputMode?): string`，计算主产物路径。 |
 | `isValidAgentType` | `(value: string): value is AgentType`。校验 Agent 类型。 |
 | `validateSkillResult` | `(result: SkillResult): QualityReport`，返回质量评分、问题和指标。 |
@@ -21,14 +21,15 @@
 
 ### 生成相关类型
 
-- `PipelineOptions`：`agentType`、`llm` 必填；常用可选项为 `outputPath`、`name`、`stdout`、`dryRun`、`force`、`crawl`、`crawlDepth`、`crawlPages`、`template`、`incremental`、`outputMode`、`preloaded`、`mergeDir`、`dirMaxDepth`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`、`batchConcurrency`、`maxBatchFiles`、`lang`。
+- `PipelineOptions`：`agentType`、`llm` 必填；常用可选项为 `outputPath`、`name`、`stdout`、`dryRun`、`force`、`crawl`、`crawlDepth`、`crawlPages`、`template`、`incremental`、`outputMode`、`preloaded`、`mergeDir`、`dirMaxDepth`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`、`batchConcurrency`、`maxBatchFiles`、`lang`、`sensitivePolicy`。
 - `LLMConfig`：`apiKey`、`model` 必填；`baseURL`、`temperature`、`maxOutputTokens` 可选。
 - `SkillResult`：`agentType`、`content`、`suggestedPath`，以及可选 `artifacts`、`stats`、`quality`。
 - `GeneratedArtifact`：`path`、`content`、`kind: 'primary' | 'reference' | 'rule'`。
 - `LoadedDocument`：`source`、`type`、`content`，以及可选 `title`、`url`、`meta`。
-- `TransformOptions`：`chunkChars`、`concurrency`、`signal`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`。
+- `TransformOptions`：`chunkChars`、`concurrency`、`signal`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`、`lang`。
 - `TransformResult`：`content` 与 `stats`（源字符、处理字符、分块数、LLM 调用数、归并轮数）。
 - `AgentType`：`codex | cursor | claude | windsurf | copilot | gemini | aider`。
+- `SensitivePolicy`：`redact | error | off`；默认在发送给 LLM 前和产物写入前脱敏。
 - `OutputMode`：`modern | legacy`；`SourceType`：`url | pdf | html | markdown | text | openapi | postman`。
 
 ## 2. 文档加载与解析
@@ -85,7 +86,8 @@
 | `listTemplates` | `(): SkillTemplate[]`。 |
 | `listTemplatesByCategory` | `(category: string): SkillTemplate[]`。 |
 | `isValidTemplate` | `(id: string): boolean`。 |
-| `writeFileAtomic` | `(path: string, content: string): Promise<void>`，原子写入文件。 |
+| `writeFileAtomic` | `(path: string, content: string | Uint8Array): Promise<void>`，原子写入文件。 |
+| `writeFilesAtomic` | `(files: AtomicFileWrite[]): Promise<void>`，预检并批量写入；任一步失败时恢复已改动文件。 |
 | `createArtifactZip` | `(packages: ZipPackage[]): Promise<Buffer>`，把多个产物打包为 ZIP。 |
 | `DownloadStore` | 下载临时存储类；构造参数 `DownloadStoreOptions`，使用 `create/read/consume/delete` 管理 `DownloadTicket`。 |
 
@@ -120,12 +122,12 @@
 | `isCodeFile` | `(path: string): boolean`。 |
 | `extractSymbols` | `(content: string, language: LanguageId): CodeSymbol[]`。 |
 | `readCodeFile` | `(path: string): Promise<CodeFile>`。 |
-| `buildIndex` | `(root: string, options?: CodeSearchOptions): Promise<SearchIndex>`。 |
+| `buildIndex` | `(options?: ScanCodeOptions): Promise<SearchIndex>`。 |
 | `saveIndex` / `loadIndex` | `(root: string, index?): Promise<string \| SearchIndex>`，保存或读取索引。 |
 | `hasIndex` | `(root: string): Promise<boolean>`。 |
 | `initCodeIndex` | `(options?: CodeSearchOptions): Promise<SearchIndex>`。 |
 | `searchCode` | `(index: SearchIndex, query: string, options?): CodeSearchResult[]`。 |
-| `searchProjectCode` | `(query: string, options?): Promise<CodeSearchResult[]>`。 |
+| `searchProjectCode` | `(query: string, options?, root?): Promise<{ results; index }>`。 |
 | `explainResults` | `(query: string, results, llm, options?): Promise<string>`。 |
 | `formatResultsPlain` | `(results: CodeSearchResult[]): string`。 |
 | `searchAndPrint` | `(query, llm?, explain?, root?, options?): Promise<void>`。 |
@@ -180,6 +182,7 @@
 | `registerSkill` | `(registry, skill: Omit<InstalledSkill, 'version'>): void`。 |
 | `listSkills` | `(projectRoot?): Promise<SkillStatus[]>`。 |
 | `removeSkill` | `(name: string, projectRoot?): Promise<boolean>`。 |
+| `RegistryValidationError` | 注册表损坏、路径越界或条目结构不合法时抛出的显式错误。 |
 | `redactContent` | `(content: string): RedactResult`，脱敏并返回匹配规则/数量。 |
 | `detectSensitiveInfo` | `(content: string): { found; rules; count }`，只检测不修改。 |
 | `runDoctor` | `(projectRoot?): Promise<DoctorReport>`。 |
@@ -204,4 +207,3 @@
 规则/评测：`ConvertOptions`、`ConvertResult`、`ParsedRule`、`RuleFormat`、`RuleMetadata`、`SyncOptions`、`SyncResult`、`SyncOperation`、`DiscoveredRules`、`EvalCase`、`EvalSuite`、`CaseEvalResult`、`EvalReport`、`GenerateEvalOptions`、`RunEvalOptions`。
 
 服务/生命周期：`ServerOptions`、`McpServerOptions`、`InstalledSkill`、`SkillRegistry`、`SkillStatus`、`RedactResult`、`DoctorCheck`、`DoctorReport`、`RepoMapOptions`、`RepoMapEntry`、`RefreshWorkflowOptions`、`ZipPackage`、`DownloadStoreOptions`、`DownloadTicket`、`SkillTemplate`。
-

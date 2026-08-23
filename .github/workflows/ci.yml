@@ -9,7 +9,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  static:
+    name: 静态质量检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:ui
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+
   quality:
     name: Node ${{ matrix.node-version }} / Ubuntu
     runs-on: ubuntu-latest
@@ -28,14 +48,6 @@ jobs:
           cache: npm
       - name: 安装依赖
         run: npm ci
-      - name: 检查 Web UI 内嵌产物
-        run: npm run check:ui
-      - name: 类型检查
-        run: npm run typecheck
-      - name: 代码检查
-        run: npm run lint
-      - name: 格式检查
-        run: npm run format:check
       - name: 构建
         run: npm run build
       - name: 单元与集成测试
@@ -59,7 +71,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
       - run: npm run build
       - run: npm test
       - run: npm run test:package
@@ -83,6 +94,19 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  dependency-audit:
+    name: 生产依赖安全审计
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+
   browser-e2e:
     name: Chromium Web UI E2E
     runs-on: ubuntu-latest
@@ -103,7 +127,8 @@ jobs:
     name: 质量闸门
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [quality, cross-platform, coverage, browser-e2e]
+    needs:
+      [static, quality, cross-platform, coverage, dependency-audit, browser-e2e]
     steps:
       - name: 汇总质量检查结果
-        run: echo "✅ quality / cross-platform / coverage / browser-e2e 全部通过"
+        run: echo "✅ static / quality / cross-platform / coverage / dependency-audit / browser-e2e 全部通过"

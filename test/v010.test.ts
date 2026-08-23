@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { parse as parseYaml } from 'yaml';
 
 // ── 多 Agent 支持 ──
 import { isValidAgentType, DEFAULT_OUTPUT_PATHS } from '../src/format/index.js';
@@ -15,10 +16,15 @@ import {
   listSkills,
   removeSkill,
 } from '../src/lifecycle/index.js';
-import { runDoctor, printDoctorReport } from '../src/doctor/index.js';
+import {
+  isSupportedNodeVersion,
+  runDoctor,
+  printDoctorReport,
+} from '../src/doctor/index.js';
 import { generateRepoMap } from '../src/repomap/index.js';
 import { generateRefreshWorkflow } from '../src/refresh/index.js';
 import { formatMultiModelReport } from '../src/eval/multi-model.js';
+import { AGENT_TYPES } from '../src/agents.js';
 
 const TMP_DIR = join(tmpdir(), `devtoolkit-v010-test-${Date.now()}`);
 
@@ -32,15 +38,8 @@ afterEach(async () => {
 
 describe('v0.10 — 多 Agent 类型支持', () => {
   it('isValidAgentType 支持全部 7 种 Agent', () => {
-    for (const t of [
-      'codex',
-      'cursor',
-      'claude',
-      'windsurf',
-      'copilot',
-      'gemini',
-      'aider',
-    ]) {
+    expect(AGENT_TYPES).toHaveLength(7);
+    for (const t of AGENT_TYPES) {
       expect(isValidAgentType(t)).toBe(true);
     }
     expect(isValidAgentType('invalid')).toBe(false);
@@ -143,6 +142,14 @@ describe('v0.10 — 敏感信息防护', () => {
     expect(result.content).not.toContain('AKIAIOSFODNN7EXAMPLE');
   });
 
+  it('redactContent 脱敏 OpenSSH 私钥块', () => {
+    const content =
+      '-----BEGIN OPENSSH PRIVATE KEY-----\nsecret-material\n-----END OPENSSH PRIVATE KEY-----';
+    const result = redactContent(content);
+    expect(result.content).not.toContain('secret-material');
+    expect(result.matchedRules).toContain('private-key-block');
+  });
+
   it('redactContent 不修改无敏感信息的文本', () => {
     const content = '# 正常文档\n\n这是一段普通文本。';
     const result = redactContent(content);
@@ -175,6 +182,21 @@ describe('v0.10 — 技能包生命周期管理', () => {
     expect(loaded.skills['test-skill'].version).toBe(1);
   });
 
+  it('registerSkill 拒绝原型污染保留键', async () => {
+    const registry = await loadRegistry(TMP_DIR);
+    expect(() =>
+      registerSkill(registry, {
+        name: '__proto__',
+        agentType: 'codex',
+        primaryPath: 'SKILL.md',
+        artifactPaths: ['SKILL.md'],
+        sourceFingerprint: 'safe',
+        generatedAt: Date.now(),
+      }),
+    ).toThrow('技能名');
+    expect(Object.getPrototypeOf(registry.skills)).toBe(Object.prototype);
+  });
+
   it('removeSkill 删除注册表条目', async () => {
     const registry = await loadRegistry(TMP_DIR);
     registerSkill(registry, {
@@ -200,6 +222,162 @@ describe('v0.10 — 技能包生命周期管理', () => {
     expect(after.skills['to-remove']).toBeUndefined();
   });
 
+  it('removeSkill 显式拒绝上级目录越界产物路径', async () => {
+    const project = join(TMP_DIR, 'project');
+    const victim = join(TMP_DIR, 'victim.txt');
+    const maliciousPath = '../victim.txt';
+    await mkdir(project, { recursive: true });
+    await writeFile(victim, 'do not delete');
+    await writeFile(
+      join(project, '.devtoolkit-skills.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        projectRoot: TMP_DIR,
+        skills: {
+          malicious: {
+            name: 'malicious',
+            agentType: 'codex',
+            primaryPath: maliciousPath,
+            artifactPaths: [maliciousPath],
+            sourceFingerprint: 'forged',
+            generatedAt: Date.now(),
+            version: 1,
+          },
+        },
+      }),
+    );
+
+    await expect(removeSkill('malicious', project)).rejects.toThrow(
+      '上级目录段',
+    );
+    expect(existsSync(victim)).toBe(true);
+  });
+
+  it('loadRegistry 兼容忽略旧版绝对路径条目', async () => {
+    const project = join(TMP_DIR, 'project');
+    const victim = join(TMP_DIR, 'victim.txt');
+    await mkdir(project, { recursive: true });
+    await writeFile(victim, 'do not delete');
+    await writeFile(
+      join(project, '.devtoolkit-skills.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        projectRoot: TMP_DIR,
+        skills: {
+          legacy: {
+            name: 'legacy',
+            agentType: 'codex',
+            primaryPath: victim,
+            artifactPaths: [victim],
+            sourceFingerprint: 'legacy',
+            generatedAt: Date.now(),
+            version: 1,
+          },
+        },
+      }),
+    );
+
+    expect(await removeSkill('legacy', project)).toBe(false);
+    expect(existsSync(victim)).toBe(true);
+  });
+
+  it('removeSkill 忽略伪造 projectRoot 并阻止符号链接目录逃逸', async () => {
+    const project = join(TMP_DIR, 'project');
+    const outside = join(TMP_DIR, 'outside');
+    const victim = join(outside, 'victim.txt');
+    await mkdir(project, { recursive: true });
+    await mkdir(outside, { recursive: true });
+    await writeFile(victim, 'do not delete');
+    await symlink(
+      outside,
+      join(project, '.cursor'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    await writeFile(
+      join(project, '.devtoolkit-skills.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        projectRoot: outside,
+        skills: {
+          malicious: {
+            name: 'malicious',
+            agentType: 'cursor',
+            primaryPath: '.cursor/victim.txt',
+            artifactPaths: ['.cursor/victim.txt'],
+            sourceFingerprint: 'forged',
+            generatedAt: Date.now(),
+            version: 1,
+          },
+        },
+      }),
+    );
+
+    await expect(removeSkill('malicious', project)).rejects.toThrow(
+      '真实路径越过项目边界',
+    );
+    expect(existsSync(victim)).toBe(true);
+  });
+
+  it('loadRegistry 不信任持久化 projectRoot', async () => {
+    const project = join(TMP_DIR, 'project');
+    const outsideVictim = join(TMP_DIR, 'victim.txt');
+    await mkdir(project, { recursive: true });
+    await writeFile(outsideVictim, 'do not delete');
+    await writeFile(
+      join(project, '.devtoolkit-skills.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        projectRoot: TMP_DIR,
+        skills: {
+          forged: {
+            name: 'forged',
+            agentType: 'cursor',
+            primaryPath: 'victim.txt',
+            artifactPaths: ['victim.txt'],
+            sourceFingerprint: 'forged',
+            generatedAt: Date.now(),
+            version: 1,
+          },
+        },
+      }),
+    );
+
+    expect((await loadRegistry(project)).projectRoot).toBe(project);
+    expect(await removeSkill('forged', project)).toBe(true);
+    expect(existsSync(outsideVictim)).toBe(true);
+  });
+
+  it('removeSkill 仅删除登记产物，不递归删除 Codex 目录', async () => {
+    const project = join(TMP_DIR, 'project');
+    const skillDir = join(project, '.agents', 'skills', 'safe-skill');
+    const primaryPath = '.agents/skills/safe-skill/SKILL.md';
+    const referencePath = '.agents/skills/safe-skill/references/details.md';
+    await mkdir(join(skillDir, 'references'), { recursive: true });
+    await writeFile(join(project, primaryPath), '# Skill');
+    await writeFile(join(project, referencePath), '# Details');
+    await writeFile(join(skillDir, 'keep.txt'), 'untracked');
+    const registry = await loadRegistry(project);
+    registerSkill(registry, {
+      name: 'safe-skill',
+      agentType: 'codex',
+      primaryPath,
+      artifactPaths: [primaryPath, referencePath],
+      sourceFingerprint: 'safe',
+      generatedAt: Date.now(),
+    });
+    await saveRegistry(registry);
+
+    expect(await removeSkill('safe-skill', project)).toBe(true);
+    expect(existsSync(join(project, primaryPath))).toBe(false);
+    expect(existsSync(join(project, referencePath))).toBe(false);
+    expect(existsSync(join(skillDir, 'keep.txt'))).toBe(true);
+  });
+
+  it('注册表损坏时显式失败，不静默退化为空注册表', async () => {
+    await writeFile(join(TMP_DIR, '.devtoolkit-skills.json'), '{invalid');
+    await expect(loadRegistry(TMP_DIR)).rejects.toThrow('JSON 解析失败');
+  });
+
   it('listSkills 返回状态列表', async () => {
     const registry = await loadRegistry(TMP_DIR);
     registerSkill(registry, {
@@ -221,6 +399,13 @@ describe('v0.10 — 技能包生命周期管理', () => {
 });
 
 describe('v0.10 — devtoolkit doctor', () => {
+  it('严格执行 Node.js >= 20.19 版本边界', () => {
+    expect(isSupportedNodeVersion('v20.18.1')).toBe(false);
+    expect(isSupportedNodeVersion('v20.19.0')).toBe(true);
+    expect(isSupportedNodeVersion('v22.0.0')).toBe(true);
+    expect(isSupportedNodeVersion('invalid')).toBe(false);
+  });
+
   it('runDoctor 返回结构化报告', async () => {
     const report = await runDoctor(TMP_DIR);
     expect(report.checks.length).toBeGreaterThan(0);
@@ -264,6 +449,8 @@ describe('v0.10 — 自动刷新工作流生成器', () => {
     expect(yaml).toContain('cron:');
     expect(yaml).toContain('create-pull-request');
     expect(yaml).toContain('--force');
+    expect(yaml).toContain('ai-devtoolkit@0.10.0');
+    expect(parseYaml(yaml)).toHaveProperty('jobs.refresh-skills');
   });
 
   it('支持自定义 cron 和模型', () => {
@@ -273,8 +460,58 @@ describe('v0.10 — 自动刷新工作流生成器', () => {
       cron: '0 */6 * * *',
       model: 'gpt-4o',
     });
-    expect(yaml).toContain("'0 */6 * * *'");
-    expect(yaml).toContain('gpt-4o');
+    const parsed = parseYaml(yaml);
+    expect(parsed.on.schedule[0].cron).toBe('0 */6 * * *');
+    expect(
+      parsed.jobs['refresh-skills'].steps.find(
+        (step: { name?: string }) => step.name === 'Generate skill packs',
+      ).env.DEVTOOLKIT_MODEL,
+    ).toBe('gpt-4o');
+  });
+
+  it('来源参数通过 Base64 JSON 传递，不进入 shell 或 GitHub 表达式', () => {
+    const source = 'docs/$(touch injected) " ${{ secrets.DANGER }}.md';
+    const yaml = generateRefreshWorkflow({
+      sources: [source],
+      agentType: 'codex',
+      model: 'deepseek-chat',
+    });
+    expect(yaml).not.toContain(source);
+
+    const parsed = parseYaml(yaml);
+    const generateStep = parsed.jobs['refresh-skills'].steps.find(
+      (step: { name?: string }) => step.name === 'Generate skill packs',
+    );
+    expect(generateStep.run).not.toContain('touch injected');
+    const decoded = JSON.parse(
+      Buffer.from(generateStep.env.DEVTOOLKIT_SOURCES_B64, 'base64').toString(
+        'utf-8',
+      ),
+    );
+    expect(decoded).toEqual([source]);
+  });
+
+  it('拒绝可注入控制字符及非法工作流参数', () => {
+    expect(() =>
+      generateRefreshWorkflow({
+        sources: ['docs/good.md\nrun: injected'],
+        agentType: 'codex',
+      }),
+    ).toThrow('来源路径无效');
+    expect(() =>
+      generateRefreshWorkflow({
+        sources: ['docs/good.md'],
+        agentType: 'codex',
+        model: 'safe; touch injected',
+      }),
+    ).toThrow('模型名无效');
+    expect(() =>
+      generateRefreshWorkflow({
+        sources: ['docs/good.md'],
+        agentType: 'codex',
+        apiKeyEnvVar: 'KEY\nBAD',
+      }),
+    ).toThrow('环境变量名无效');
   });
 });
 

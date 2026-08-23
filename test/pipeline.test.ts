@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runPipeline } from '../src/pipeline.js';
-import { mkdtemp, readFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
@@ -67,6 +67,32 @@ describe('Pipeline E2E (mocked LLM)', () => {
     expect(written).toContain('Mocked');
   });
 
+  it('旧版隐藏文件输出使用非空注册表技能名', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-registry-name-'));
+    const mdPath = join(dir, 'doc.md');
+    await writeFile(
+      mdPath,
+      '# Cursor Rules\n\nDocumentation with enough content to verify the lifecycle registry skill name.',
+    );
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      await runPipeline(mdPath, {
+        agentType: 'cursor',
+        outputPath: '.cursorrules',
+        force: true,
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+      });
+      const registry = JSON.parse(
+        await readFile(join(dir, '.devtoolkit-skills.json'), 'utf-8'),
+      );
+      expect(registry.skills.cursorrules).toBeDefined();
+      expect(registry.skills['']).toBeUndefined();
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   it('内容过短时报错', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'devtoolkit-short-'));
     const mdPath = join(dir, 'short.md');
@@ -78,6 +104,37 @@ describe('Pipeline E2E (mocked LLM)', () => {
         llm: { apiKey: 'mock-key', model: 'mock-model' },
       }),
     ).rejects.toThrow('文档内容过短');
+  });
+
+  it('拒绝通过项目内符号链接把生成产物写到项目外', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'devtoolkit-output-root-'));
+    const outside = await mkdtemp(join(tmpdir(), 'devtoolkit-output-outside-'));
+    await symlink(
+      outside,
+      join(project, '.cursor'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const previousCwd = process.cwd();
+    process.chdir(project);
+    try {
+      await expect(
+        runPipeline('__preloaded__', {
+          agentType: 'cursor',
+          force: true,
+          llm: { apiKey: 'mock-key', model: 'mock-model' },
+          preloaded: {
+            fileName: 'safe.md',
+            content:
+              '# Safe Guide\n\nThis documentation has enough content to produce a project rule without containing secrets.',
+          },
+        }),
+      ).rejects.toThrow('符号链接越过项目边界');
+      await expect(
+        readFile(join(outside, 'rules', 'safe-guide.mdc')),
+      ).rejects.toThrow();
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   it('codex 类型自动注入 frontmatter', async () => {
@@ -428,5 +485,79 @@ describe('Pipeline E2E (mocked LLM)', () => {
     expect(vi.mocked(callLLM).mock.calls.length).toBeGreaterThan(
       callsAfterFirst,
     );
+  });
+
+  it('默认在调用 LLM 前脱敏源文档', async () => {
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz123456';
+    vi.mocked(callLLM).mockClear();
+
+    await runPipeline('__preloaded__', {
+      agentType: 'codex',
+      dryRun: true,
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+      preloaded: {
+        fileName: 'secure.md',
+        content: `# Secure Guide\n\nUse this API configuration in development environments only.\n\napi_key=${secret}`,
+      },
+    });
+
+    const prompt = vi.mocked(callLLM).mock.calls[0]?.[0] ?? '';
+    expect(prompt).not.toContain(secret);
+    expect(prompt).toContain('***REDACTED***');
+  });
+
+  it('默认在产物写入前脱敏 LLM 输出', async () => {
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz123456';
+    vi.mocked(callLLM).mockResolvedValueOnce(
+      `# Generated Skill\n\nNever expose this generated token: ${secret}`,
+    );
+
+    const result = await runPipeline('__preloaded__', {
+      agentType: 'codex',
+      dryRun: true,
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+      preloaded: {
+        fileName: 'normal.md',
+        content:
+          '# Normal Guide\n\nThis ordinary documentation contains enough safe text to generate a complete skill artifact.',
+      },
+    });
+
+    expect(result.content).not.toContain(secret);
+    expect(result.content).toContain('sk-***REDACTED***');
+  });
+
+  it('error 策略检测到敏感信息时阻止调用 LLM', async () => {
+    vi.mocked(callLLM).mockClear();
+    await expect(
+      runPipeline('__preloaded__', {
+        agentType: 'codex',
+        dryRun: true,
+        sensitivePolicy: 'error',
+        llm: { apiKey: 'mock-key', model: 'mock-model' },
+        preloaded: {
+          fileName: 'blocked.md',
+          content:
+            '# Blocked Guide\n\nThis document contains a password that must not be sent.\n\npassword=super-secret-value',
+        },
+      }),
+    ).rejects.toThrow('已阻止处理');
+    expect(callLLM).not.toHaveBeenCalled();
+  });
+
+  it('off 策略仅在显式选择后保留原文', async () => {
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz123456';
+    vi.mocked(callLLM).mockClear();
+    await runPipeline('__preloaded__', {
+      agentType: 'codex',
+      dryRun: true,
+      sensitivePolicy: 'off',
+      llm: { apiKey: 'mock-key', model: 'mock-model' },
+      preloaded: {
+        fileName: 'trusted.md',
+        content: `# Trusted Guide\n\nThis explicitly trusted document contains enough text.\n\napi_key=${secret}`,
+      },
+    });
+    expect(vi.mocked(callLLM).mock.calls[0]?.[0]).toContain(secret);
   });
 });

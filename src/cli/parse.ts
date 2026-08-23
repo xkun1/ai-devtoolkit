@@ -16,3 +16,17 @@ export function parseInteger(
   }
   return parsed;
 }
+
+/** Commander 枚举选项校验器。 */
+export function parseChoice<const T extends readonly string[]>(
+  value: string,
+  label: string,
+  choices: T,
+): T[number] {
+  if (!choices.includes(value)) {
+    throw new InvalidArgumentError(
+      `${label} 必须是以下值之一: ${choices.join(', ')}`,
+    );
+  }
+  return value as T[number];
+}

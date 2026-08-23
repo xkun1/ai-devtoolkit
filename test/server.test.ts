@@ -206,6 +206,21 @@ describe('Web UI — HTML 模板验证', () => {
     expect(WEB_UI_HTML).toContain('triggerDownload');
   });
 
+  it('生成与转换界面覆盖全部 7 种 Agent', async () => {
+    const { WEB_UI_HTML } = await import('../src/server/html.js');
+    for (const agent of [
+      'codex',
+      'cursor',
+      'claude',
+      'windsurf',
+      'copilot',
+      'gemini',
+      'aider',
+    ]) {
+      expect(WEB_UI_HTML).toContain(`value="${agent}"`);
+    }
+  });
+
   it('动态搜索与环境数据写入 innerHTML 前统一转义', async () => {
     const { WEB_UI_HTML } = await import('../src/server/html.js');
     expect(WEB_UI_HTML).toContain('escapeHtml(r.file)');
@@ -277,6 +292,23 @@ describe('Web UI — HTTP 安全边界', () => {
       },
     );
     expect(res.status).toBe(403);
+  });
+
+  it('估算接口只读取一次请求体并正常返回', async () => {
+    const res = await invokeRequest(
+      {},
+      {
+        method: 'POST',
+        url: '/api/estimate',
+        headers: {
+          'content-type': 'application/json',
+          'x-devtoolkit-token': 'test-token',
+        },
+        body: JSON.stringify({ text: 'hello world' }),
+      },
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).tokens).toBeGreaterThan(0);
   });
 
   it('拒绝读取服务端本地文件路径', async () => {

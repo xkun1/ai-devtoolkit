@@ -35,6 +35,9 @@ describe('安全远程抓取校验', () => {
     expect(() =>
       validatePublicHttpUrl('https://user:pass@example.com'),
     ).toThrow('认证信息');
+    expect(() =>
+      validatePublicHttpUrl('https://example.com/' + 'x'.repeat(10_000)),
+    ).toThrow('格式无效');
   });
 
   it('正确识别公网和保留 IP', () => {
@@ -54,5 +57,17 @@ describe('安全远程抓取校验', () => {
     await expect(
       fetchPublicText('https://example.com', { signal: controller.signal }),
     ).rejects.toThrow('停止抓取');
+  });
+
+  it('拒绝无效资源限制，避免 NaN 绕过或无限重定向', async () => {
+    await expect(
+      fetchPublicText('https://example.com', { maxBytes: Number.NaN }),
+    ).rejects.toThrow('maxBytes');
+    await expect(
+      fetchPublicText('https://example.com', { timeoutMs: 0 }),
+    ).rejects.toThrow('timeoutMs');
+    await expect(
+      fetchPublicText('https://example.com', { maxRedirects: 21 }),
+    ).rejects.toThrow('maxRedirects');
   });
 });

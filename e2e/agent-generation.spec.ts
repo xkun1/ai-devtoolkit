@@ -63,7 +63,7 @@ async function runCli(
   cwd: string,
   sourcePath: string,
   baseUrl: string,
-  agent: 'codex' | 'cursor' | 'claude',
+  agent: Agent,
   outputPath: string,
   stdout = false,
 ): Promise<{ stdout: string; stderr: string }> {
@@ -97,9 +97,15 @@ const expectedPaths = {
   codex: ['.agents', 'skills', 'e2e-skill', 'SKILL.md'],
   cursor: ['.cursor', 'rules', 'e2e-skill.mdc'],
   claude: ['CLAUDE.md'],
+  windsurf: ['.windsurf', 'rules', 'e2e-skill.md'],
+  copilot: ['.github', 'copilot-instructions.md'],
+  gemini: ['GEMINI.md'],
+  aider: ['CONVENTIONS.md'],
 } as const;
 
-for (const agent of ['codex', 'cursor', 'claude'] as const) {
+type Agent = keyof typeof expectedPaths;
+
+for (const agent of Object.keys(expectedPaths) as Agent[]) {
   test(`CLI 可生成 ${agent} 技能包并支持 stdout dry-run`, async () => {
     const workspace = await mkdtemp(join(tmpdir(), `devtoolkit-e2e-${agent}-`));
     const sourcePath = join(workspace, 'source.md');

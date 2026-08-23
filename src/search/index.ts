@@ -185,6 +185,7 @@ export async function startSearchSession(
     signal?: AbortSignal;
     llmTimeoutMs?: number;
     maxOutputChars?: number;
+    searchOptions?: SearchOptions;
   },
 ): Promise<void> {
   let index = await loadIndex(root || process.cwd());
@@ -210,5 +211,6 @@ export async function startSearchSession(
     signal: runtime?.signal,
     timeoutMs: runtime?.llmTimeoutMs,
     maxOutputChars: runtime?.maxOutputChars,
+    searchOptions: runtime?.searchOptions,
   });
 }

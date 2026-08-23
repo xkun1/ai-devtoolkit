@@ -93,7 +93,7 @@ export async function explainResults(options: ExplainOptions): Promise<string> {
  */
 export function formatResultsPlain(
   results: SearchResult[],
-  projectRoot: string,
+  _projectRoot: string,
   showContent = true,
 ): string {
   if (results.length === 0) {

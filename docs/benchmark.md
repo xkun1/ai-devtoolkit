@@ -49,10 +49,11 @@ OpenAPI/Swagger 结构化加载器的压缩效果；`pipeline.ts` 的 LLM 提炼
 
 ### 方法
 
-`scripts/benchmark.mjs` 在系统临时目录生成一个包含 TypeScript 和 Python 文件的
-小型 mock 项目，然后从 `dist/lib.mjs` 动态加载构建产物，分别测量索引构建、搜索、
-依赖分析和 Repo Map 生成。每项先预热 1 次，再重复 5 次；结果同时输出平均值、P50、
-最小值和最大值。依赖分析基准关闭持久化缓存（`useCache: false`），以反映冷分析成本。
+`scripts/benchmark.mjs` 在系统临时目录生成一个包含 400 个 TypeScript / Python
+文件、4,000+ 关键词的 mock 项目，然后从 `dist/index.mjs` 动态加载发布构建，分别
+测量索引构建、搜索器构建、热搜索、公共 API 缓存搜索、依赖分析和 Repo Map。
+索引构建重复 3 次，其余项目先预热 1 次再重复 10 次；结果报告平均值、P50、P95、
+最小值和最大值。依赖分析关闭持久化缓存（`useCache: false`），反映冷分析成本。
 
 运行命令：
 
@@ -62,12 +63,14 @@ npm run build && npm run bench
 
 ### 最近一次结果
 
-以下结果基于本机 2026-08-21 运行，机器负载和 Node.js 版本不同会导致数值变化；该表
+以下结果基于本机 2026-08-23 运行，机器负载和 Node.js 版本不同会导致数值变化；该表
 用于持续追踪趋势，不作为跨机器的绝对性能承诺。
 
-| 模块 | 平均 | P50 | 最小 | 最大 | 工作量 |
-| --- | ---: | ---: | ---: | ---: | --- |
-| 索引构建（buildIndex） | 25.38 ms | 19.76 ms | 10.93 ms | 55.45 ms | 25 文件 / 25 分块 |
-| 搜索延迟（CodeSearcher.search） | 0.56 ms | 0.35 ms | 0.21 ms | 1.59 ms | 10 条结果 |
-| 依赖分析（buildDependencyGraph） | 12.53 ms | 12.12 ms | 11.50 ms | 14.13 ms | 25 节点 / 23 边 |
-| Repo Map 生成（generateRepoMap） | 17.03 ms | 15.59 ms | 9.66 ms | 30.60 ms | 1,405 字符 |
+| 模块 | 平均 | P50 | P95 | 最小 | 最大 | 工作量 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 索引构建（buildIndex） | 60.42 ms | 59.74 ms | 61.89 ms | 59.63 ms | 61.89 ms | 400 文件 / 400 分块 |
+| 搜索器构建（CodeSearcher） | 15.30 ms | 15.18 ms | 17.35 ms | 13.99 ms | 17.35 ms | 4,386 个关键词 |
+| 热搜索（CodeSearcher.search） | 1.31 ms | 1.23 ms | 1.80 ms | 0.96 ms | 1.80 ms | 10 条结果 |
+| 公共 API 缓存搜索（searchCode） | 1.00 ms | 0.94 ms | 1.47 ms | 0.92 ms | 1.47 ms | 复用同一索引搜索器 |
+| 依赖分析（buildDependencyGraph） | 49.65 ms | 49.70 ms | 50.78 ms | 48.64 ms | 50.78 ms | 400 节点 / 398 边 |
+| Repo Map 生成（generateRepoMap） | 45.79 ms | 46.09 ms | 47.67 ms | 44.55 ms | 47.67 ms | 20,016 字符 |

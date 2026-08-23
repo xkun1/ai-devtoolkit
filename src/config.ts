@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentType, OutputMode } from './types/index.js';
+import { AGENT_TYPE_HELP, isAgentType } from './agents.js';
 
 export interface DevToolkitConfig {
   /** 默认 Agent 类型 */
@@ -114,20 +115,9 @@ function validateConfig(raw: unknown, filepath: string): DevToolkitConfig {
   }
 
   // 校验 type
-  if (
-    config.type &&
-    ![
-      'codex',
-      'cursor',
-      'claude',
-      'windsurf',
-      'copilot',
-      'gemini',
-      'aider',
-    ].includes(config.type)
-  ) {
+  if (config.type && !isAgentType(config.type)) {
     throw new Error(
-      `配置文件 ${filepath} 中 type 无效: ${config.type}（可选: codex, cursor, claude, windsurf, copilot, gemini, aider）`,
+      `配置文件 ${filepath} 中 type 无效: ${config.type}（可选: ${AGENT_TYPE_HELP}）`,
     );
   }
 

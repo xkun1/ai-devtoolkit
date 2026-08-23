@@ -9,6 +9,7 @@ export {
   removeSkill,
   REGISTRY_FILENAME,
   REGISTRY_VERSION,
+  RegistryValidationError,
 } from './registry.js';
 
 export type { InstalledSkill, SkillRegistry, SkillStatus } from './types.js';

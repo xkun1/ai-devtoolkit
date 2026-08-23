@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AgentType } from '../../types/index.js';
 import { isValidAgentType } from '../../format/index.js';
+import { AGENT_TYPES } from '../../agents.js';
 import { resolveModel } from '../../models.js';
 import {
   detectEnvironment,
@@ -20,7 +21,7 @@ import { resolveProjectPath, resolveWebModelBaseUrl } from '../validation.js';
 import type { ServerTaskLimits } from '../types.js';
 
 export async function handleEnvDetect(
-  req: IncomingMessage,
+  _req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
   const snapshot = await detectEnvironment();
@@ -130,23 +131,15 @@ export async function handleSync(
   };
   if (
     body.from !== undefined &&
-    ![
-      'auto',
-      'codex',
-      'cursor',
-      'claude',
-      'windsurf',
-      'copilot',
-      'gemini',
-      'aider',
-    ].includes(String(body.from))
+    body.from !== 'auto' &&
+    !isValidAgentType(String(body.from))
   ) {
     throw new HttpError(400, '无效的同步源 Agent 类型');
   }
   if (
     body.to !== undefined &&
     (!Array.isArray(body.to) ||
-      body.to.length > 3 ||
+      body.to.length > AGENT_TYPES.length ||
       body.to.some((agent) => !isValidAgentType(String(agent))))
   ) {
     throw new HttpError(400, '无效的同步目标 Agent 列表');

@@ -32,6 +32,7 @@ export interface TransformOptions {
   llmTimeoutMs?: number;
   maxOutputChars?: number;
   maxLLMCalls?: number;
+  lang?: 'zh' | 'en' | 'auto';
 }
 
 /** 用 LLM 将原始文档提炼为结构化技能知识 */
@@ -97,7 +98,9 @@ export async function transformDocumentToSkill(
 
   if (chunks.length <= 1) {
     return {
-      content: await invokeLLM(buildPrompt(doc, agentType, name, template)),
+      content: await invokeLLM(
+        buildPrompt(doc, agentType, name, template, options.lang),
+      ),
       stats,
     };
   }
@@ -133,7 +136,7 @@ export async function transformDocumentToSkill(
   }
 
   const content = await invokeLLM(
-    buildSynthesisPrompt(doc, notes, agentType, name, template),
+    buildSynthesisPrompt(doc, notes, agentType, name, template, options.lang),
   );
   return { content, stats };
 }

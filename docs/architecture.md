@@ -7,7 +7,7 @@
 ```mermaid
 flowchart LR
     U[用户 / CI] --> CLI[bin/cli.js\nCommander CLI]
-    U --> API[dist/lib.js\n编程式 API]
+    U --> API[包根 / lib 兼容导出\n编程式 API]
     U --> UI[Web UI\nsrc/server]
     U --> MCP[MCP Client\nsrc/mcp-server]
 
@@ -58,13 +58,14 @@ sequenceDiagram
     C->>P: sources + PipelineOptions
     P->>L: loadDocuments / crawlSite / expandSources
     L-->>P: LoadedDocument
-    P->>P: 校验正文长度、计算目标路径与指纹
+    P->>P: 源文档默认脱敏、校验长度、计算目标路径与指纹
     P->>P: 增量模式检查缓存（命中则直接返回）
     P->>T: 文档 + Agent 类型 + 模板
     T->>T: splitDocument（长文档分块）
     T->>M: buildPrompt / callLLM
     M-->>T: Markdown 技能正文
     T-->>P: TransformResult（正文 + 统计）
+    P->>P: 模型输出默认脱敏
     P->>F: buildArtifacts
     F-->>P: SkillResult（主文件及附属文件）
     P->>Q: assertValidSkillResult
@@ -74,7 +75,7 @@ sequenceDiagram
     else dry-run
         P-->>C: 预览内容，不写文件
     else 正常生成
-        P->>W: writeFileAtomic（原子写入）
+        P->>W: writeFilesAtomic（批量预检、失败回滚）
         P->>W: 保存缓存/技能注册表（可选）
         P-->>C: SkillResult
     end
@@ -85,8 +86,9 @@ sequenceDiagram
 1. 输入可以是 URL、Markdown/TXT/HTML/PDF/DOCX、OpenAPI/Swagger、Postman 或目录。
 2. `loader` 统一输出 `LoadedDocument`；目录会先扫描，再按批处理或 `--merge` 合并。
 3. `transform` 对短文档单次调用 LLM，对长文档执行“分块抽取 → 分层归并 → 最终合成”。
-4. `format` 按 Agent 输出现代目录结构：Codex 为 `.agents/skills/<slug>/SKILL.md`，Cursor 为 `.cursor/rules/<slug>.mdc`，Claude 为 `CLAUDE.md`；通过 `--legacy` 可退回旧版单文件。
-5. 生成前后都有资源、取消和质量校验；`--stdout` 与 `--dry-run` 均不会写入用户产物。
+4. `format` 覆盖 Codex、Cursor、Claude、Windsurf、Copilot、Gemini、Aider 七类 Agent 的当前推荐目录结构；通过 `--legacy` 可退回旧版单文件。
+5. 源文档发送给 LLM 前与模型输出写盘前默认脱敏；可通过 `sensitivePolicy` 选择阻断或显式关闭。
+6. 生成前后都有资源、取消和质量校验；`--stdout` 与 `--dry-run` 均不会写入用户产物，多文件落盘会预检并在运行时失败时回滚。
 
 ## 3. 模块职责
 
@@ -143,12 +145,12 @@ sequenceDiagram
 | `src/lifecycle/registry.ts` | `.devtoolkit-skills.json` 注册表读写、注册、列出、移除。 |
 | `src/lifecycle/types.ts` | 生命周期类型。 |
 | `src/utils/hash.ts` | 内容哈希、生成指纹、缓存路径和缓存读写。 |
-| `src/utils/atomic-write.ts` | 临时文件 + rename 的原子写入。 |
+| `src/utils/atomic-write.ts` | 单文件临时文件 + rename，以及多文件预检/失败回滚写入。 |
 | `src/utils/zip.ts` | 将技能产物打包为 ZIP。 |
 | `src/utils/download-store.ts` | Web 下载票据和临时文件存储。 |
 | `src/utils/token.ts` | Token/成本估算及格式化。 |
 | `src/utils/abort.ts` | 取消、超时、资源上限错误与 AbortScope。 |
-| `src/utils/safe-fetch.ts` | 带大小、重定向和超时限制的安全 fetch。 |
+| `src/utils/safe-fetch.ts` | 带公网 DNS 校验与连接固定、大小、重定向和超时限制的安全 fetch。 |
 | `src/utils/logger.ts` | spinner、日志等级、stderr/stdout 输出。 |
 
 ### 代码搜索与依赖分析
@@ -244,4 +246,3 @@ if (!detectSensitiveInfo(artifacts.content).found) {
 ```
 
 更多导出项、类型和参数见 [API Reference](./api.md)。
-

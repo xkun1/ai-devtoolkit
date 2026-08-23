@@ -2,7 +2,7 @@
 
 **简体中文 | [English](README.en.md)**
 
-> 将任意网页或 PDF 文档，1 秒转化为 AI Agent（Cursor / Codex / Claude）的专属技能包！
+> 将网页、PDF、OpenAPI 与本地文档转化为 7 类 AI Agent 的专属技能包。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxkun1%2Fai-devtoolkit%2Fmain%2Fpackage.json&query=%24.devDependencies.typescript&label=TypeScript&color=blue)](https://www.typescriptlang.org/)
@@ -20,15 +20,16 @@
 |------|:---:|------|
 | 📄 网页 URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
-| ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token，[Benchmark](docs/benchmark.md)） |
+| ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token，[Benchmark](https://github.com/xkun1/ai-devtoolkit/blob/main/docs/benchmark.md)） |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
 | 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
 | 📂 批量目录处理 | → | 🤖 每个文件独立技能包（或 `--merge` 合并） |
 | 🔌 MCP Server | → | 🤖 AI Agent 原生工具调用 |
+| 🧭 7 类 Agent | → | Codex / Cursor / Claude / Windsurf / Copilot / Gemini / Aider |
 
 ## 🎬 快速开始
 
-![devtoolkit 终端演示](docs/assets/demo.gif)
+![devtoolkit 终端演示](https://raw.githubusercontent.com/xkun1/ai-devtoolkit/main/docs/assets/demo.gif)
 
 ```bash
 # 零安装直接用
@@ -53,7 +54,7 @@ npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 npx ai-devtoolkit
 ```
 
-### 🔄 跨 Agent 规则互转与同步（Cursor / Codex / Claude）
+### 🔄 跨 Agent 规则互转与同步（全部 7 类 Agent）
 
 在任意项目中一键将 Cursor 规则、Codex 技能包、Claude 记忆相互转换，或直接全项目同步：
 
@@ -70,6 +71,8 @@ devtoolkit --sync
 # 4. 仅预览同步计划（不写入文件）
 devtoolkit --sync --dry-run
 ```
+
+支持：Codex、Cursor、Claude、Windsurf、GitHub Copilot、Gemini CLI、Aider。
 
 ### 🔍 代码搜索模式（不用打开 IDEA 了！）
 
@@ -96,6 +99,9 @@ devtoolkit --search "OrderService" --no-explain
 
 # 6. 搜索指定项目目录
 devtoolkit --scan-code --search "config" /path/to/project
+
+# 7. 选择检索策略：hybrid（默认）/ exact / semantic
+devtoolkit --search "authentication" --search-mode exact
 ```
 
 **支持的搜索场景**：
@@ -170,6 +176,25 @@ Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传�
 
 ### 🚀 进阶用法
 
+```bash
+# 强制简体中文或英文输出
+devtoolkit ./api.md --lang zh
+
+# 检出敏感信息后直接阻断；默认 redact 会在发送给 LLM 前及写盘前脱敏
+devtoolkit ./api.md --sensitive-policy error
+
+# 生成固定版本、参数化执行的 GitHub Actions 定时刷新工作流
+devtoolkit https://docs.example.com/api --generate-refresh-workflow
+
+# 生命周期与项目诊断
+devtoolkit --list-skills
+devtoolkit --remove-skill my-skill
+devtoolkit --doctor
+
+# 生成项目结构摘要
+devtoolkit ./my-project --repo-map
+```
+
 ### 🔌 MCP Server 模式
 
 让 devtoolkit 成为 AI Agent 的原生工具——通过 MCP 协议，Agent 直接调用文档转技能包能力：
@@ -214,7 +239,7 @@ MCP Server 提供 9 个工具；stdio 的 stdout 严格只输出 JSON-RPC，日�
 | `scan_directory` | 扫描目录，返回受支持的文档文件列表 |
 | `scan_code` | 扫描项目代码目录并构建搜索索引 |
 | `search_code` | 用自然语言搜索项目代码（返回代码片段+文件行号+LLM解释） |
-| `convert_rule` | 在 Cursor / Codex / Claude 规则格式间转换 |
+| `convert_rule` | 在全部 7 类 Agent 规则格式间转换 |
 | `sync_rules` | 预览或同步项目中的 Agent 规则 |
 | `export_env` | 导出开发环境快照与恢复脚本 |
 | `diff_env` | 比对环境快照与当前机器差异 |
@@ -393,7 +418,7 @@ Arguments:
   sources              文档来源：URL 或本地文件路径（可多个，将合并为一个技能包）
 
 Options:
-  -t, --type <type>    目标 Agent: codex | cursor | claude (默认: codex)
+  -t, --type <type>    目标 Agent: codex | cursor | claude | windsurf | copilot | gemini | aider
   -o, --out <path>     自定义主文件路径（默认按 Agent 推荐目录生成）
   -m, --model <model>  LLM 模型名 (默认: deepseek-chat)
   -n, --name <name>    自定义技能名（用于 Codex SKILL.md frontmatter）
@@ -420,6 +445,8 @@ Options:
   --max-output-tokens <n> 单次模型响应 Token 上限（默认 8192）
   --batch-concurrency <n> 目录批处理并发数（默认 2，最大 8）
   --max-batch-files <n> 目录批处理文件数上限（默认 100）
+  --lang <lang>        输出语言：zh | en | auto
+  --sensitive-policy <policy> 敏感信息策略：redact | error | off
   --convert <file>     转换规则文件（结合 --type 指定目标）
   --sync               自动发现并同步项目中的 Agent 规则
   --sync-from <agent>  同步源 Agent（默认 auto）
@@ -429,9 +456,16 @@ Options:
   --eval-max-cases <n> 技能评测用例上限（默认 20）
   --scan-code          扫描项目代码并构建搜索索引
   --search <query>     用自然语言搜索项目代码
+  --search-mode <mode> 检索模式：hybrid | exact | semantic
   --no-explain         搜索结果不使用 LLM 解释（仅显示代码片段）
   --graph              生成项目依赖 Mermaid 图谱
+  --no-cache           依赖图谱禁用增量缓存
   --impact <file>      分析指定文件的改动影响面
+  --repo-map           生成项目结构摘要
+  --doctor             诊断运行环境与项目状态
+  --list-skills        列出已注册技能包
+  --remove-skill <name> 安全移除已注册技能包
+  --generate-refresh-workflow 生成定时刷新 GitHub Actions workflow
   --env-export         导出开发环境快照与恢复脚本
   --env-import <file>  导入环境快照（默认仅预览）
   --env-diff <file>    比对环境快照与当前机器
@@ -472,13 +506,14 @@ Sources (URL/PDF/HTML/MD, 可多个)
   ├── 🧠 Transform     全量分块提炼 + 分层归并（内置指数退避重试）
   │   ├── Codex Prompt  → 结构化技能指令 + frontmatter
   │   ├── Cursor Prompt → 编码规则约束
-  │   └── Claude Prompt → 项目记忆格式
+  │   ├── Claude Prompt → 项目记忆格式
+  │   └── 通用 Prompt  → Windsurf / Copilot / Gemini / Aider 规则
   │
   ├── 📐 Format        Agent 原生目录 + frontmatter + 渐进披露
   │
   ├── ✅ Quality       格式、元数据、长度、重复度校验
   │
-  └── 💾 Writer        原子写入 / 完整指纹缓存 / stdout
+  └── 💾 Writer        批量预检、原子替换与失败回滚 / 完整指纹缓存 / stdout
 ```
 
 **设计原则**：
@@ -486,6 +521,7 @@ Sources (URL/PDF/HTML/MD, 可多个)
 - **可扩展** — 新增 Agent 类型只需加一个 Prompt 模板
 - **协议兼容** — 任何 OpenAI 兼容 API 即插即用
 - **健壮性** — LLM 调用内置重试（429/5xx/网络错误，1s→2s→4s 退避，最多 3 次）
+- **默认安全** — 双向脱敏，生成/删除路径限制在项目边界内，多产物失败自动回滚
 - **管道友好** — `--stdout` 模式支持与其他工具集成
 
 ## 🧪 测试
@@ -538,6 +574,8 @@ console.log(result.artifacts);     // 完整文件列表（含 references/rules�
 console.log(result.quality);       // 静态质量报告
 console.log(result.stats);         // 分块、LLM 调用与缓存统计
 ```
+
+轻量场景可使用 `ai-devtoolkit/search` 与 `ai-devtoolkit/security` 子入口，避免加载完整工具链。
 
 也支持只加载不提炼：
 

@@ -14,6 +14,7 @@
  */
 export type {
   AgentType,
+  SensitivePolicy,
   OutputMode,
   SourceType,
   LoadedDocument,
@@ -25,6 +26,8 @@ export type {
   QualityReport,
   PipelineOptions,
 } from './types/index.js';
+
+export { AGENT_TYPES, AGENT_TYPE_HELP, isAgentType } from './agents.js';
 
 export {
   crawlSite,
@@ -169,7 +172,8 @@ export {
 } from './quality/validate.js';
 
 export { estimateTokens, estimateCost, formatCost } from './utils/token.js';
-export { writeFileAtomic } from './utils/atomic-write.js';
+export { writeFileAtomic, writeFilesAtomic } from './utils/atomic-write.js';
+export type { AtomicFileWrite } from './utils/atomic-write.js';
 export { createArtifactZip } from './utils/zip.js';
 export type { ZipPackage } from './utils/zip.js';
 export { DownloadStore } from './utils/download-store.js';
@@ -311,6 +315,7 @@ export {
   removeSkill,
   REGISTRY_FILENAME,
   REGISTRY_VERSION,
+  RegistryValidationError,
 } from './lifecycle/index.js';
 export type {
   InstalledSkill,

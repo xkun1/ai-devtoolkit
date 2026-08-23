@@ -1,7 +1,8 @@
 {
   "name": "ai-devtoolkit",
   "version": "0.10.0",
-  "description": "🛠️ 开发者工具箱：AI 技能包生成 · 代码搜索 · 环境迁移（Cursor / Codex / Claude）",
+  "description": "🛠️ 开发者工具箱：面向 7 类 AI Agent 的技能包生成、代码搜索与环境迁移",
+  "sideEffects": false,
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -13,10 +14,22 @@
       "default": "./dist/index.js"
     },
     "./lib": {
-      "types": "./dist/lib.d.ts",
-      "import": "./dist/lib.mjs",
-      "require": "./dist/lib.js",
-      "default": "./dist/lib.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "import": "./dist/search.mjs",
+      "require": "./dist/search.js",
+      "default": "./dist/search.js"
+    },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "import": "./dist/security.mjs",
+      "require": "./dist/security.js",
+      "default": "./dist/security.js"
     },
     "./package.json": "./package.json"
   },
@@ -49,10 +62,10 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint src/ test/ e2e/ \"*.config.{ts,mts}\"",
+    "lint": "eslint src/ test/ e2e/ \"*.config.{ts,mts}\" --max-warnings 0",
     "lint:fix": "eslint src/ test/ e2e/ \"*.config.{ts,mts}\" --fix",
-    "format": "prettier --write \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.cjs\" \".github/**/*.yml\" \"*.{js,mjs,json,ts,mts}\" && npm run generate:ui",
-    "format:check": "npm run check:ui && prettier --check \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.cjs\" \".github/**/*.yml\" \"*.{mjs,ts,mts}\"",
+    "format": "prettier --write \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.{cjs,mjs}\" \"examples/**/*.ts\" \"docs/**/*.md\" \".github/**/*.yml\" \"*.{js,mjs,json,ts,mts,md}\" && npm run generate:ui",
+    "format:check": "npm run check:ui && prettier --check \"src/**/*.{ts,html}\" \"test/**/*.ts\" \"e2e/**/*.ts\" \"scripts/**/*.{cjs,mjs}\" \"examples/**/*.ts\" \"docs/**/*.md\" \".github/**/*.yml\" \"*.{mjs,json,ts,mts,md}\"",
     "prepublishOnly": "npm run check:ui && npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test:package",
     "verify:release": "npm run check:ui && npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test:coverage && npm run test:e2e && npm run test:package",
     "test:package": "node scripts/package-smoke.cjs",

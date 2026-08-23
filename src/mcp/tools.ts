@@ -1,4 +1,5 @@
 /** MCP 工具元数据与输入 JSON Schema。 */
+import { AGENT_TYPES } from '../agents.js';
 
 /** generate_skill 工具的 JSON Schema */
 const GENERATE_SKILL_SCHEMA = {
@@ -14,15 +15,7 @@ const GENERATE_SKILL_SCHEMA = {
     },
     agentType: {
       type: 'string',
-      enum: [
-        'codex',
-        'cursor',
-        'claude',
-        'windsurf',
-        'copilot',
-        'gemini',
-        'aider',
-      ],
+      enum: [...AGENT_TYPES],
       description: '目标 AI Agent 类型（默认 codex）',
     },
     name: {
@@ -92,6 +85,16 @@ const GENERATE_SKILL_SCHEMA = {
       minimum: 1,
       maximum: 100,
       description: '目录批处理文件数上限（默认 100）',
+    },
+    lang: {
+      type: 'string',
+      enum: ['zh', 'en', 'auto'],
+      description: '强制输出语言（默认 auto 跟随源文档）',
+    },
+    sensitivePolicy: {
+      type: 'string',
+      enum: ['redact', 'error', 'off'],
+      description: '敏感信息策略（默认 redact）',
     },
   },
   required: ['sources'],
@@ -175,15 +178,7 @@ const CONVERT_RULE_SCHEMA = {
     },
     to: {
       type: 'string',
-      enum: [
-        'cursor',
-        'codex',
-        'claude',
-        'windsurf',
-        'copilot',
-        'gemini',
-        'aider',
-      ],
+      enum: [...AGENT_TYPES],
       description: '转换目标 Agent 类型',
     },
     name: {
@@ -213,31 +208,14 @@ const SYNC_RULES_SCHEMA = {
     },
     from: {
       type: 'string',
-      enum: [
-        'cursor',
-        'codex',
-        'claude',
-        'windsurf',
-        'copilot',
-        'gemini',
-        'aider',
-        'auto',
-      ],
+      enum: ['auto', ...AGENT_TYPES],
       description: '同步源 Agent 规则（默认 auto 自动检测）',
     },
     to: {
       type: 'array',
       items: {
         type: 'string',
-        enum: [
-          'cursor',
-          'codex',
-          'claude',
-          'windsurf',
-          'copilot',
-          'gemini',
-          'aider',
-        ],
+        enum: [...AGENT_TYPES],
       },
       description: '同步目标 Agent 列表（默认同步到其他未配置的全部 Agent）',
     },
@@ -339,7 +317,7 @@ export const TOOLS = [
   {
     name: 'generate_skill',
     description:
-      '将给定的文档 URL 或本地文件转化为 AI Agent（Codex/Cursor/Claude）的高质量技能包 / 规则文件。',
+      '将给定的文档 URL 或本地文件转化为 7 类 AI Agent 的高质量技能包 / 规则文件。',
     inputSchema: GENERATE_SKILL_SCHEMA,
   },
   {
@@ -362,13 +340,13 @@ export const TOOLS = [
   {
     name: 'convert_rule',
     description:
-      '在 Cursor (.mdc)、Codex (SKILL.md)、Claude (CLAUDE.md) 之间双向无损互转规则。',
+      '在 Codex、Cursor、Claude、Windsurf、Copilot、Gemini、Aider 之间互转规则。',
     inputSchema: CONVERT_RULE_SCHEMA,
   },
   {
     name: 'sync_rules',
     description:
-      '自动扫描项目已存在的 Agent 规则，并一键同步分发到其他 Agent 平台（Cursor/Codex/Claude）。',
+      '自动扫描项目已存在的 Agent 规则，并同步分发到其余受支持平台。',
     inputSchema: SYNC_RULES_SCHEMA,
   },
   {

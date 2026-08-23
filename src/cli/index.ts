@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
 import { runPipeline } from '../pipeline.js';
 import { isValidAgentType } from '../format/index.js';
@@ -38,6 +37,8 @@ import {
 } from '../index.js';
 import { generateRepoMap } from '../repomap/index.js';
 import { generateRefreshWorkflow } from '../refresh/index.js';
+import { AGENT_TYPE_HELP, isAgentType } from '../agents.js';
+import { PACKAGE_VERSION } from '../version.js';
 import type {
   AgentType,
   LLMConfig,
@@ -53,7 +54,6 @@ import { register as registerEval } from './eval.js';
 import { register as registerServer } from './server.js';
 import { register as registerLifecycle } from './lifecycle.js';
 
-const PACKAGE_VERSION = readPackageVersion();
 let cliAbortSignal: AbortSignal | undefined;
 
 export function createProgram(): Command {
@@ -155,7 +155,7 @@ async function runCommand(
     }
     const yaml = generateRefreshWorkflow({
       sources,
-      agentType: (options.type as string) || 'codex',
+      agentType: options.type || 'codex',
       model,
     });
     const { writeFileAtomic } = await import('../utils/atomic-write.js');
@@ -198,7 +198,7 @@ async function runCommand(
 
   // ── 规则单文件转换 ──
   if (options.convert) {
-    const targetAgent = (options.type as AgentType) || 'codex';
+    const targetAgent = options.type || 'codex';
     if (!isValidAgentType(targetAgent)) {
       throw new Error(`无效的目标 Agent: ${targetAgent}`);
     }
@@ -214,18 +214,7 @@ async function runCommand(
     const projectRoot =
       sources.length > 0 ? resolve(sources[0]) : process.cwd();
     const fromAgent = options.syncFrom || 'auto';
-    if (
-      ![
-        'auto',
-        'codex',
-        'cursor',
-        'claude',
-        'windsurf',
-        'copilot',
-        'gemini',
-        'aider',
-      ].includes(fromAgent)
-    ) {
+    if (fromAgent !== 'auto' && !isAgentType(fromAgent)) {
       throw new Error(`无效的同步源 Agent: ${fromAgent}`);
     }
     const toAgents = options.syncTo
@@ -276,21 +265,17 @@ async function runCommand(
         await initCodeIndex({ root: searchRoot });
       }
       info(`🔎 搜索: "${query}"`);
-      if (cliAbortSignal || llmTimeoutMs !== undefined) {
-        await searchAndPrint(
-          query,
-          llmConfig,
-          useExplain,
-          searchRoot,
-          undefined,
-          {
-            signal: cliAbortSignal,
-            llmTimeoutMs,
-          },
-        );
-      } else {
-        await searchAndPrint(query, llmConfig, useExplain, searchRoot);
-      }
+      await searchAndPrint(
+        query,
+        llmConfig,
+        useExplain,
+        searchRoot,
+        { mode: options.searchMode ?? 'hybrid' },
+        {
+          signal: cliAbortSignal,
+          llmTimeoutMs,
+        },
+      );
       return;
     }
 
@@ -301,6 +286,7 @@ async function runCommand(
       await startSearchSession(llmConfig, useExplain, searchRoot, {
         signal: cliAbortSignal,
         llmTimeoutMs,
+        searchOptions: { mode: options.searchMode ?? 'hybrid' },
       });
       return;
     }
@@ -410,11 +396,10 @@ async function runCommand(
     maxOutputTokens,
   };
 
-  const agentType: AgentType =
-    (options.type as AgentType) || cfg.type || 'codex';
+  const agentType: AgentType = options.type || cfg.type || 'codex';
   if (!isValidAgentType(agentType)) {
     throw new Error(
-      `无效的 Agent 类型: "${agentType}"，支持: codex, cursor, claude`,
+      `无效的 Agent 类型: "${agentType}"，支持: ${AGENT_TYPE_HELP}`,
     );
   }
 
@@ -450,7 +435,8 @@ async function runCommand(
     llmTimeoutMs,
     batchConcurrency,
     maxBatchFiles,
-    lang: (options.lang as 'zh' | 'en' | 'auto') || undefined,
+    lang: options.lang,
+    sensitivePolicy: options.sensitivePolicy,
   };
 
   if (options.watch) {
@@ -489,6 +475,8 @@ async function handleWizardFlow(
         llmTimeoutMs: options.llmTimeout,
         batchConcurrency: options.batchConcurrency,
         maxBatchFiles: options.maxBatchFiles,
+        lang: options.lang,
+        sensitivePolicy: options.sensitivePolicy,
       });
       return;
     }
@@ -527,6 +515,7 @@ async function handleWizardFlow(
           {
             signal: cliAbortSignal,
             llmTimeoutMs: options.llmTimeout,
+            searchOptions: { mode: options.searchMode ?? 'hybrid' },
           },
         );
       } else if (wizardAction.query) {
@@ -535,7 +524,7 @@ async function handleWizardFlow(
           llmConfig,
           options.explain !== false && !!llmConfig,
           wizardAction.projectRoot,
-          undefined,
+          { mode: options.searchMode ?? 'hybrid' },
           {
             signal: cliAbortSignal,
             llmTimeoutMs: options.llmTimeout,
@@ -619,17 +608,6 @@ async function openBrowser(url: string): Promise<void> {
   } catch {
     // 自动打开失败不影响服务运行
   }
-}
-
-function readPackageVersion(): string {
-  // 源码测试时 __dirname 为 src/cli，打包后通常为 dist；兼容两种目录层级。
-  const directPath = join(__dirname, '..', 'package.json');
-  const packagePath = existsSync(directPath)
-    ? directPath
-    : join(__dirname, '..', '..', 'package.json');
-  const raw = readFileSync(packagePath, 'utf-8');
-  const parsed = JSON.parse(raw) as { version?: unknown };
-  return typeof parsed.version === 'string' ? parsed.version : '0.0.0';
 }
 
 function getErrorName(err: unknown): string | undefined {

@@ -1,6 +1,6 @@
 # 🚀 devtoolkit
 
-> Turn any webpage or PDF into an AI Agent skill pack (Cursor / Codex / Claude) — in seconds!
+> Turn webpages, PDFs, OpenAPI specs, and local docs into skill packs for seven AI Agents.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxkun1%2Fai-devtoolkit%2Fmain%2Fpackage.json&query=%24.devDependencies.typescript&label=TypeScript&color=blue)](https://www.typescriptlang.org/)
@@ -20,15 +20,16 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 |-------|:---:|-------|
 | 📄 Web URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF Document | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
-| ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens, [Benchmark](docs/benchmark.md)) |
+| ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens, [Benchmark](https://github.com/xkun1/ai-devtoolkit/blob/main/docs/benchmark.md)) |
 | 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/` (when long) |
 | 📚 Multi-doc Merge | → | 🧩 Fused skill pack after chunked extraction |
 | 📂 Batch Directory | → | 🤖 One skill pack per file (or `--merge` to combine) |
 | 🔌 MCP Server | → | 🤖 Native tool call for AI Agents |
+| 🧭 Seven Agents | → | Codex / Cursor / Claude / Windsurf / Copilot / Gemini / Aider |
 
 ## 🎬 Quick Start
 
-![devtoolkit demo](docs/assets/demo.gif)
+![devtoolkit demo](https://raw.githubusercontent.com/xkun1/ai-devtoolkit/main/docs/assets/demo.gif)
 
 ```bash
 # Zero-install, run directly
@@ -53,7 +54,7 @@ npx ai-devtoolkit ./api.md --stdout >> ./SKILL.md
 npx ai-devtoolkit
 ```
 
-### 🔄 Cross-Agent Rule Conversion & Sync (Cursor / Codex / Claude)
+### 🔄 Cross-Agent Rule Conversion & Sync (All Seven Agents)
 
 Convert rules between Cursor, Codex, and Claude seamlessly in any project:
 
@@ -70,6 +71,8 @@ devtoolkit --sync
 # 4. Preview sync plan only (dry-run)
 devtoolkit --sync --dry-run
 ```
+
+Supported targets: Codex, Cursor, Claude, Windsurf, GitHub Copilot, Gemini CLI, and Aider.
 
 ### 🌐 Web UI Mode
 
@@ -222,6 +225,21 @@ npx ai-devtoolkit ./api.md --dry-run
 
 # Legacy workflow: single-file output (SKILL.md / .cursorrules / CLAUDE.md)
 npx ai-devtoolkit ./api.md --type cursor --legacy
+
+# Force output language and choose the sensitive-data policy
+npx ai-devtoolkit ./api.md --lang en --sensitive-policy error
+
+# Select a code-search strategy
+npx ai-devtoolkit --search "authentication" --search-mode exact
+
+# Generate a pinned, injection-safe scheduled refresh workflow
+npx ai-devtoolkit https://docs.example.com/api --generate-refresh-workflow
+
+# Lifecycle, diagnostics, and project summary
+npx ai-devtoolkit --list-skills
+npx ai-devtoolkit --remove-skill my-skill
+npx ai-devtoolkit --doctor
+npx ai-devtoolkit ./my-project --repo-map
 ```
 
 Inputs exceeding ~24K characters are semantically chunked by Markdown structure, then processed through "per-chunk extraction → hierarchical merge → final synthesis." No silent mid-document truncation. Codex overflow automatically sinks to `references/`; Claude overflow splits into `.claude/rules/`.
@@ -308,7 +326,7 @@ Arguments:
   sources              Document sources: URLs or local file paths (multiple allowed, merged into one skill pack)
 
 Options:
-  -t, --type <type>    Target Agent: codex | cursor | claude (default: codex)
+  -t, --type <type>    Target: codex | cursor | claude | windsurf | copilot | gemini | aider
   -o, --out <path>     Custom output file path (default: Agent-recommended directory)
   -m, --model <model>  LLM model name (default: deepseek-chat)
   -n, --name <name>    Custom skill name (for Codex SKILL.md frontmatter)
@@ -331,6 +349,8 @@ Options:
   --base-url <url>     LLM API Base URL (overrides preset)
   --api-key <key>      API Key (prefer environment variables)
   --local-model <name> Real model name in local service
+  --lang <lang>        Output language: zh | en | auto
+  --sensitive-policy <policy> Sensitive-data policy: redact | error | off
   --convert <file>     Convert a rule file to the target Agent format
   --sync               Discover and synchronize project Agent rules
   --sync-from <agent>  Source Agent (default: auto)
@@ -338,9 +358,16 @@ Options:
   --eval <skillFile>   Run automated skill-vs-baseline evaluation
   --scan-code          Scan project code and build a search index
   --search <query>     Search project code with natural language
+  --search-mode <mode> Search mode: hybrid | exact | semantic
   --no-explain         Disable LLM explanations for search results
   --graph              Generate a Mermaid dependency graph
+  --no-cache           Disable incremental dependency-graph cache
   --impact <file>      Analyze the change impact of a file
+  --repo-map           Generate a project structure summary
+  --doctor             Diagnose runtime and project health
+  --list-skills        List registered skill packs
+  --remove-skill <name> Safely remove a registered skill pack
+  --generate-refresh-workflow Generate a scheduled GitHub Actions workflow
   --env-export         Export an environment snapshot and restore script
   --env-import <file>  Import an environment snapshot (preview by default)
   --env-diff <file>    Compare a snapshot with the current machine
@@ -375,13 +402,14 @@ Sources (URL/PDF/HTML/MD, multiple allowed)
   ├── 🧠 Transform     Full chunked extraction + hierarchical merge (built-in retry w/ backoff)
   │   ├── Codex Prompt  → Structured skill instructions + frontmatter
   │   ├── Cursor Prompt → Coding rule constraints
-  │   └── Claude Prompt → Project memory format
+  │   ├── Claude Prompt → Project memory format
+  │   └── Generic Prompt → Windsurf / Copilot / Gemini / Aider rules
   │
   ├── 📐 Format        Agent-native directories + frontmatter + progressive disclosure
   │
   ├── ✅ Quality       Format, metadata, length, and duplication validation
   │
-  └── 💾 Writer        Atomic writes / full-fingerprint caching / stdout
+  └── 💾 Writer        Preflight, atomic replacement, rollback / full-fingerprint caching / stdout
 ```
 
 **Design Principles**:
@@ -389,6 +417,7 @@ Sources (URL/PDF/HTML/MD, multiple allowed)
 - **Extensible** — Adding a new Agent type only requires a new prompt template
 - **Protocol Compatible** — Any OpenAI-compatible API works out of the box
 - **Robustness** — Built-in LLM call retry (429/5xx/network errors, 1s→2s→4s backoff, up to 3 retries)
+- **Secure by Default** — Redacts secrets, confines generated/deleted paths to the project, and rolls back failed multi-file writes
 - **Pipe-Friendly** — `--stdout` mode for integration with other tools
 
 ## 🧪 Testing
@@ -435,6 +464,8 @@ console.log(result.artifacts);     // Full file list (including references/rules
 console.log(result.quality);       // Static quality report
 console.log(result.stats);         // Chunking, LLM calls, and cache stats
 ```
+
+For lightweight use cases, import `ai-devtoolkit/search` or `ai-devtoolkit/security` without loading the full toolkit.
 
 Also supports load-only without extraction:
 

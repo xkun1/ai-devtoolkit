@@ -137,6 +137,10 @@ export class CodeSearcher {
   private chunkTermFrequencies: Map<string, Map<string, number>>;
   private chunkVectors: Map<string, Map<string, number>>;
   private chunkVectorNorms: Map<string, number>;
+  private chunkKinds: Map<string, Set<string>>;
+  private lowerFilePaths: Map<string, string>;
+  private keywordKeys: SubstringKeyIndex;
+  private symbolKeys: SubstringKeyIndex;
 
   constructor(index: SearchIndex) {
     this.index = index;
@@ -146,11 +150,30 @@ export class CodeSearcher {
     this.chunkTermFrequencies = new Map();
     this.chunkVectors = new Map();
     this.chunkVectorNorms = new Map();
+    this.chunkKinds = new Map();
+    this.lowerFilePaths = new Map();
+    this.keywordKeys = new SubstringKeyIndex(Object.keys(index.invertedIndex));
+    this.symbolKeys = new SubstringKeyIndex(Object.keys(index.symbolIndex));
+
+    const symbolsByFile = new Map<string, typeof index.symbols>();
+    for (const symbol of index.symbols) {
+      const symbols = symbolsByFile.get(symbol.file) ?? [];
+      symbols.push(symbol);
+      symbolsByFile.set(symbol.file, symbols);
+    }
 
     let totalLength = 0;
 
     for (const chunk of index.chunks) {
       this.chunkMap.set(chunk.id, chunk);
+      this.lowerFilePaths.set(chunk.id, chunk.file.toLowerCase());
+      const kinds = new Set<string>();
+      for (const symbol of symbolsByFile.get(chunk.file) ?? []) {
+        if (symbol.line >= chunk.startLine && symbol.line <= chunk.endLine) {
+          kinds.add(symbol.kind.toLowerCase());
+        }
+      }
+      this.chunkKinds.set(chunk.id, kinds);
 
       const tokens = this.tokenize(chunk.content);
       const docLen = Math.max(1, tokens.length);
@@ -222,14 +245,16 @@ export class CodeSearcher {
   }
 
   search(query: string, options: SearchOptions = {}): SearchResult[] {
-    const limit = options.limit ?? 10;
-    const minScore = options.minScore ?? 0;
+    const limit = normalizeInteger(options.limit, 10, 1, 100, 'limit');
+    const minScore = normalizeRatio(options.minScore, 0, 'minScore');
     const searchSymbols = options.searchSymbols ?? true;
     const searchFilePath = options.searchFilePath ?? true;
-    const mode = options.mode ?? 'hybrid';
-    const semanticWeight =
-      options.semanticWeight ??
-      (mode === 'exact' ? 0 : mode === 'semantic' ? 0.65 : 0.35);
+    const mode = normalizeMode(options.mode);
+    const semanticWeight = normalizeRatio(
+      options.semanticWeight,
+      mode === 'exact' ? 0 : mode === 'semantic' ? 0.65 : 0.35,
+      'semanticWeight',
+    );
 
     const { cleanQuery, pathFilter, langFilter, kindFilter } =
       this.parseQueryFilters(query);
@@ -292,16 +317,20 @@ export class CodeSearcher {
         }
       }
 
-      for (const [indexKey, ids] of Object.entries(this.index.invertedIndex)) {
-        if (indexKey === token) continue;
-        if (indexKey.includes(token) || token.includes(indexKey)) {
-          const idf = Math.log(1 + this.chunkCount / ids.length) * 0.4 * weight;
-          for (const chunkId of ids) {
-            bm25Scores.set(chunkId, (bm25Scores.get(chunkId) || 0) + idf);
-            if (!matchKeywordsMap.has(chunkId)) {
-              matchKeywordsMap.set(chunkId, new Set());
+      if (mode !== 'exact') {
+        for (const indexKey of this.keywordKeys.findRelated(token)) {
+          if (indexKey === token) continue;
+          const ids = this.index.invertedIndex[indexKey];
+          if (ids) {
+            const idf =
+              Math.log(1 + this.chunkCount / ids.length) * 0.4 * weight;
+            for (const chunkId of ids) {
+              bm25Scores.set(chunkId, (bm25Scores.get(chunkId) || 0) + idf);
+              if (!matchKeywordsMap.has(chunkId)) {
+                matchKeywordsMap.set(chunkId, new Set());
+              }
+              matchKeywordsMap.get(chunkId)!.add(indexKey);
             }
-            matchKeywordsMap.get(chunkId)!.add(indexKey);
           }
         }
       }
@@ -358,15 +387,21 @@ export class CodeSearcher {
             matchSymbolsMap.get(chunkId)!.add(lowerToken);
           }
         }
-        for (const [symKey, ids] of Object.entries(this.index.symbolIndex)) {
-          if (symKey === lowerToken) continue;
-          if (symKey.includes(lowerToken)) {
-            for (const chunkId of ids) {
-              symbolScores.set(chunkId, (symbolScores.get(chunkId) || 0) + 1.2);
-              if (!matchSymbolsMap.has(chunkId)) {
-                matchSymbolsMap.set(chunkId, new Set());
+        if (mode !== 'exact') {
+          for (const symKey of this.symbolKeys.findContaining(lowerToken)) {
+            if (symKey === lowerToken) continue;
+            const ids = this.index.symbolIndex[symKey];
+            if (ids) {
+              for (const chunkId of ids) {
+                symbolScores.set(
+                  chunkId,
+                  (symbolScores.get(chunkId) || 0) + 1.2,
+                );
+                if (!matchSymbolsMap.has(chunkId)) {
+                  matchSymbolsMap.set(chunkId, new Set());
+                }
+                matchSymbolsMap.get(chunkId)!.add(symKey);
               }
-              matchSymbolsMap.get(chunkId)!.add(symKey);
             }
           }
         }
@@ -375,7 +410,7 @@ export class CodeSearcher {
 
     if (searchFilePath && queryTokens.length > 0) {
       for (const chunk of this.index.chunks) {
-        const lowerPath = chunk.file.toLowerCase();
+        const lowerPath = this.lowerFilePaths.get(chunk.id) ?? '';
         for (const token of queryTokens) {
           const lowerToken = token.toLowerCase();
           if (lowerPath.includes(lowerToken)) {
@@ -424,14 +459,7 @@ export class CodeSearcher {
         continue;
       }
       if (kindFilter) {
-        const hasKind = this.index.symbols.some(
-          (s) =>
-            s.file === chunk.file &&
-            s.kind.toLowerCase() === kindFilter &&
-            s.line >= chunk.startLine &&
-            s.line <= chunk.endLine,
-        );
-        if (!hasKind) continue;
+        if (!this.chunkKinds.get(chunkId)?.has(kindFilter)) continue;
       }
 
       const normBm25 = (bm25Scores.get(chunkId) || 0) / maxBm25;
@@ -500,11 +528,112 @@ export class CodeSearcher {
   }
 }
 
+/** 用二元子串索引缩小模糊匹配候选集，避免每个查询词全量扫描词表。 */
+class SubstringKeyIndex {
+  private readonly keys: string[];
+  private readonly shortKeys: string[] = [];
+  private readonly grams = new Map<string, string[]>();
+
+  constructor(keys: string[]) {
+    this.keys = keys;
+    for (const key of keys) {
+      if (key.length < 2) this.shortKeys.push(key);
+      for (const gram of bigrams(key)) {
+        const bucket = this.grams.get(gram) ?? [];
+        bucket.push(key);
+        this.grams.set(gram, bucket);
+      }
+    }
+  }
+
+  findContaining(needle: string): string[] {
+    if (needle.length < 2) {
+      return this.keys.filter((key) => key.includes(needle));
+    }
+    const buckets = bigrams(needle).map((gram) => this.grams.get(gram));
+    if (buckets.some((bucket) => bucket === undefined)) return [];
+    let candidates = buckets[0]!;
+    for (const bucket of buckets.slice(1)) {
+      if (bucket!.length < candidates.length) candidates = bucket!;
+    }
+    return candidates.filter((key) => key.includes(needle));
+  }
+
+  findRelated(token: string): string[] {
+    if (token.length < 2) {
+      return this.keys.filter(
+        (key) => key.includes(token) || token.includes(key),
+      );
+    }
+    const candidates = new Set<string>(this.shortKeys);
+    for (const gram of bigrams(token)) {
+      for (const key of this.grams.get(gram) ?? []) candidates.add(key);
+    }
+    return [...candidates].filter(
+      (key) => key.includes(token) || token.includes(key),
+    );
+  }
+}
+
+function bigrams(value: string): string[] {
+  const result = new Set<string>();
+  for (let index = 0; index < value.length - 1; index++) {
+    result.add(value.slice(index, index + 2));
+  }
+  return [...result];
+}
+
+function normalizeInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): number {
+  const normalized = value ?? fallback;
+  if (
+    !Number.isSafeInteger(normalized) ||
+    normalized < minimum ||
+    normalized > maximum
+  ) {
+    throw new RangeError(`${label} 必须是 ${minimum}-${maximum} 的整数`);
+  }
+  return normalized;
+}
+
+function normalizeRatio(
+  value: number | undefined,
+  fallback: number,
+  label: string,
+): number {
+  const normalized = value ?? fallback;
+  if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+    throw new RangeError(`${label} 必须在 0-1 之间`);
+  }
+  return normalized;
+}
+
+function normalizeMode(
+  value?: SearchOptions['mode'],
+): NonNullable<SearchOptions['mode']> {
+  const normalized = value ?? 'hybrid';
+  if (!['hybrid', 'exact', 'semantic'].includes(normalized)) {
+    throw new RangeError('mode 必须是 hybrid、exact 或 semantic');
+  }
+  return normalized;
+}
+
+const searcherCache = new WeakMap<SearchIndex, CodeSearcher>();
+
 export function searchCode(
   index: SearchIndex,
   query: string,
   options?: SearchOptions,
 ): SearchResult[] {
-  const searcher = new CodeSearcher(index);
+  let searcher = searcherCache.get(index);
+  if (!searcher) {
+    searcher = new CodeSearcher(index);
+    searcherCache.set(index, searcher);
+  }
   return searcher.search(query, options);
 }

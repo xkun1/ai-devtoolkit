@@ -92,6 +92,30 @@ describe('MCP 工具处理模块', () => {
 
     await expect(
       handleToolCall(
+        'generate_skill',
+        {
+          sources: ['guide.md'],
+          apiKey: 'dummy',
+          lang: 'fr',
+        },
+        createContext(),
+      ),
+    ).rejects.toThrow('lang');
+
+    await expect(
+      handleToolCall(
+        'generate_skill',
+        {
+          sources: ['guide.md'],
+          apiKey: 'dummy',
+          sensitivePolicy: 'unsafe',
+        },
+        createContext(),
+      ),
+    ).rejects.toThrow('sensitivePolicy');
+
+    await expect(
+      handleToolCall(
         'eval_skill',
         {
           skillContent: '# Skill\n\n规则正文',

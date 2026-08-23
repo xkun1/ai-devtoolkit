@@ -7,6 +7,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve, basename } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { AgentType } from '../types/index.js';
+import { AGENT_TYPES } from '../agents.js';
 import type {
   DiscoveredRules,
   SyncOperation,
@@ -15,17 +16,9 @@ import type {
 } from './types.js';
 import { parseRule } from './parser.js';
 import { convertRule } from './converter.js';
-import { writeFileAtomic } from '../utils/atomic-write.js';
+import { writeFilesAtomic } from '../utils/atomic-write.js';
 
-const ALL_AGENTS: AgentType[] = [
-  'codex',
-  'cursor',
-  'claude',
-  'windsurf',
-  'copilot',
-  'gemini',
-  'aider',
-];
+const ALL_AGENTS: AgentType[] = [...AGENT_TYPES];
 
 /** 发现项目中存在的规则定义 */
 export async function discoverProjectRules(
@@ -249,6 +242,8 @@ export async function syncProjectRules(
         outputDir: root,
       });
 
+      const convertedOperations: SyncOperation[] = [];
+      const pendingWrites: Array<{ path: string; content: string }> = [];
       for (const art of converted.artifacts) {
         let action: 'created' | 'updated' | 'skipped' = 'created';
         if (existsSync(art.path)) {
@@ -265,20 +260,23 @@ export async function syncProjectRules(
         }
 
         if (!dryRun && action !== 'skipped') {
-          await writeFileAtomic(art.path, art.content);
+          pendingWrites.push({ path: art.path, content: art.content });
         }
 
-        if (action !== 'skipped') {
-          byAgent[targetAgent] = (byAgent[targetAgent] || 0) + 1;
-        }
-
-        operations.push({
+        convertedOperations.push({
           targetAgent,
           sourceFile: file.path,
           targetPath: art.path,
           action,
           contentLength: art.content.length,
         });
+      }
+      if (pendingWrites.length > 0) await writeFilesAtomic(pendingWrites);
+      for (const operation of convertedOperations) {
+        if (operation.action !== 'skipped') {
+          byAgent[targetAgent] = (byAgent[targetAgent] || 0) + 1;
+        }
+        operations.push(operation);
       }
     }
   }

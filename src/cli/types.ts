@@ -1,6 +1,6 @@
 /** CLI 选项的统一类型，供各功能域模块共享。 */
 export interface CliOptions {
-  type?: string;
+  type?: import('../agents.js').AgentType;
   out?: string;
   model?: string;
   name?: string;
@@ -48,7 +48,8 @@ export interface CliOptions {
   doctor?: boolean;
   listSkills?: boolean;
   removeSkill?: string;
-  lang?: string;
+  lang?: 'zh' | 'en' | 'auto';
+  sensitivePolicy?: import('../types/index.js').SensitivePolicy;
   repoMap?: boolean;
   generateRefreshWorkflow?: boolean;
   cache?: boolean;

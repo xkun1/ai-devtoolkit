@@ -351,6 +351,22 @@ describe('searcher', () => {
     expect(r1.length).toBeGreaterThan(0);
     expect(r2.length).toBeGreaterThan(0);
   });
+
+  it('searchCode 缓存搜索器且重复查询结果稳定', () => {
+    const first = searchCode(index, 'login authenticate', { limit: 3 });
+    const second = searchCode(index, 'login authenticate', { limit: 3 });
+    expect(second).toEqual(first);
+  });
+
+  it('拒绝越界的搜索选项', () => {
+    expect(() => searchCode(index, 'login', { limit: 0 })).toThrow('limit');
+    expect(() => searchCode(index, 'login', { minScore: 2 })).toThrow(
+      'minScore',
+    );
+    expect(() => searchCode(index, 'login', { semanticWeight: -0.1 })).toThrow(
+      'semanticWeight',
+    );
+  });
 });
 
 // ── explainer 测试 ──

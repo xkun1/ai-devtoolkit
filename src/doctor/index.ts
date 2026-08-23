@@ -1,7 +1,7 @@
 /**
  * devtoolkit doctor — 一键诊断
  *
- * 检查 API Key 配置、网络连通性、索引状态、技能包健康度。
+ * 检查 API Key 配置、本地模型配置、索引状态、技能包健康度。
  */
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,8 +42,8 @@ export async function runDoctor(
   const ollamaUrl = process.env.OLLAMA_HOST || 'http://localhost:11434';
   checks.push({
     name: '本地模型 (Ollama)',
-    status: 'ok',
-    detail: `预设地址: ${ollamaUrl}（需自行确认服务是否运行）`,
+    status: 'skip',
+    detail: `预设地址: ${ollamaUrl}（未主动联网探测）`,
   });
 
   // 3. 代码搜索索引
@@ -111,11 +111,11 @@ export async function runDoctor(
 
   // 6. Node.js 版本
   const nodeVersion = process.version;
-  const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0], 10);
+  const supportedNode = isSupportedNodeVersion(nodeVersion);
   checks.push({
     name: 'Node.js 版本',
-    status: majorVersion >= 20 ? 'ok' : 'error',
-    detail: nodeVersion + (majorVersion >= 20 ? '' : '（需要 >= 20.19）'),
+    status: supportedNode ? 'ok' : 'error',
+    detail: nodeVersion + (supportedNode ? '' : '（需要 >= 20.19）'),
   });
 
   // 汇总
@@ -126,6 +126,14 @@ export async function runDoctor(
   };
 
   return { checks, summary };
+}
+
+export function isSupportedNodeVersion(version: string): boolean {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > 20 || (major === 20 && minor >= 19);
 }
 
 /** 打印诊断报告 */

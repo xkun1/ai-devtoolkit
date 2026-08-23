@@ -14,6 +14,7 @@ import type {
   GeneratedArtifact,
   GenerationStats,
   OutputMode,
+  SensitivePolicy,
   SkillResult,
 } from '../types/index.js';
 
@@ -32,6 +33,8 @@ export interface FingerprintInput {
   name?: string;
   outputMode?: OutputMode;
   promptVersion?: string;
+  lang?: 'zh' | 'en' | 'auto';
+  sensitivePolicy?: SensitivePolicy;
 }
 
 interface CachedArtifact {
@@ -78,7 +81,9 @@ export function buildGenerationFingerprint(input: FingerprintInput): string {
       name: input.name ?? null,
       outputMode: input.outputMode ?? 'modern',
       promptVersion: input.promptVersion ?? null,
-      generatorVersion: 'p1-v1',
+      lang: input.lang ?? 'auto',
+      sensitivePolicy: input.sensitivePolicy ?? 'redact',
+      generatorVersion: 'p1-v2',
     }),
   );
 }

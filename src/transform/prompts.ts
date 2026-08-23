@@ -1,7 +1,7 @@
 import type { LoadedDocument, AgentType } from '../types/index.js';
 import type { SkillTemplate } from '../templates/index.js';
 
-export const PROMPT_VERSION = 'p1-v1';
+export const PROMPT_VERSION = 'p1-v2';
 
 /** 根据目标 Agent 构建专属提炼 Prompt */
 export function buildPrompt(
@@ -94,6 +94,7 @@ export function buildSynthesisPrompt(
   agentType: AgentType,
   name?: string,
   template?: SkillTemplate,
+  lang?: 'zh' | 'en' | 'auto',
 ): string {
   const evidence = notes
     .map((note, i) => `\n### Evidence ${i + 1}\n${note}`)
@@ -102,7 +103,7 @@ export function buildSynthesisPrompt(
     ...doc,
     content: `<extracted-evidence>\n${evidence}\n</extracted-evidence>`,
   };
-  return `${buildPrompt(evidenceDoc, agentType, name, template)}
+  return `${buildPrompt(evidenceDoc, agentType, name, template, lang)}
 
 ## Long-document synthesis constraints
 - The evidence above was extracted from every source chunk; synthesize across all of it.

@@ -1,6 +1,10 @@
 /** MCP 工具执行与参数校验。 */
 import { readFile, stat } from 'node:fs/promises';
-import type { AgentType, SkillResult } from '../types/index.js';
+import type {
+  AgentType,
+  SensitivePolicy,
+  SkillResult,
+} from '../types/index.js';
 import { runPipeline } from '../pipeline.js';
 import {
   resolveModel,
@@ -25,8 +29,9 @@ import {
   syncProjectRules,
 } from '../convert/index.js';
 import { runSkillEval, formatEvalReportMarkdown } from '../eval/index.js';
-import { writeFileAtomic } from '../utils/atomic-write.js';
+import { writeFilesAtomic } from '../utils/atomic-write.js';
 import { isValidAgentType } from '../format/index.js';
+import { AGENT_TYPES } from '../agents.js';
 import { isValidTemplate } from '../templates/index.js';
 import {
   ResourceLimitError,
@@ -88,6 +93,8 @@ async function handleGenerateSkill(
   const force = args.force as boolean;
   const dryRun = args.dryRun as boolean;
   const outputPath = args.outputPath as string | undefined;
+  const lang = args.lang as 'zh' | 'en' | 'auto' | undefined;
+  const sensitivePolicy = args.sensitivePolicy as SensitivePolicy | undefined;
   if (!isValidAgentType(agentType)) {
     throw new Error(`无效的 Agent 类型: ${String(agentType)}`);
   }
@@ -102,7 +109,18 @@ async function handleGenerateSkill(
     'apiKey',
     'localModelName',
     'outputPath',
+    'lang',
+    'sensitivePolicy',
   ]);
+  if (lang !== undefined && !['zh', 'en', 'auto'].includes(lang)) {
+    throw new Error('lang 必须是 zh、en 或 auto');
+  }
+  if (
+    sensitivePolicy !== undefined &&
+    !['redact', 'error', 'off'].includes(sensitivePolicy)
+  ) {
+    throw new Error('sensitivePolicy 必须是 redact、error 或 off');
+  }
   validateOptionalBooleans(args, ['force', 'dryRun']);
 
   const model =
@@ -181,6 +199,8 @@ async function handleGenerateSkill(
     maxOutputChars: context.maxOutputChars,
     batchConcurrency,
     maxBatchFiles,
+    lang,
+    sensitivePolicy,
   });
 
   return {
@@ -375,9 +395,7 @@ async function handleConvertRule(
     const parsed = parseRule(ruleContent);
     const res = convertRule(parsed, { to: toAgent, name, outputDir });
     if (shouldWrite) {
-      for (const artifact of res.artifacts) {
-        await writeFileAtomic(artifact.path, artifact.content);
-      }
+      await writeFilesAtomic(res.artifacts);
     }
     return {
       success: true,
@@ -401,23 +419,15 @@ async function handleSyncRules(
   validateOptionalBooleans(args, ['dryRun']);
   if (
     fromAgent !== undefined &&
-    ![
-      'auto',
-      'codex',
-      'cursor',
-      'claude',
-      'windsurf',
-      'copilot',
-      'gemini',
-      'aider',
-    ].includes(String(fromAgent))
+    fromAgent !== 'auto' &&
+    !isValidAgentType(String(fromAgent))
   ) {
     throw new Error(`无效的同步源 Agent: ${String(fromAgent)}`);
   }
   if (
     toAgents !== undefined &&
     (!Array.isArray(toAgents) ||
-      toAgents.length > 3 ||
+      toAgents.length > AGENT_TYPES.length ||
       toAgents.some((agent) => !isValidAgentType(String(agent))))
   ) {
     throw new Error('无效的同步目标 Agent 列表');

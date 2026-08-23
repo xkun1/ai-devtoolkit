@@ -13,8 +13,8 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const PROJECT_FILE_COUNT = 25;
-const REPEATS = 5;
+const PROJECT_FILE_COUNT = Number(process.env.BENCH_FILES || 400);
+const REPEATS = 10;
 
 function formatMs(value) {
   return `${value.toFixed(2)} ms`;
@@ -24,9 +24,11 @@ function summarize(samples) {
   const sorted = [...samples].sort((a, b) => a - b);
   const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
   const p50 = sorted[Math.floor(sorted.length / 2)];
+  const p95 = sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)];
   return {
     average,
     p50,
+    p95,
     min: sorted[0],
     max: sorted[sorted.length - 1],
   };
@@ -56,7 +58,11 @@ async function createMockProject() {
 
   for (let index = 0; index < PROJECT_FILE_COUNT - 3; index += 1) {
     const dependency = index % 2 === 0 ? './shared/user.js' : './features/user-service.js';
-    const source = `import { UserService } from '${dependency}';\n\nexport function feature${index}(input: string): string {\n  const service = new UserService();\n  return service.findUser(input).name + ' feature-${index}';\n}\n`;
+    const vocabulary = Array.from(
+      { length: 10 },
+      (_, word) => `domain${index}Capability${word}`,
+    ).join(' ');
+    const source = `import { UserService } from '${dependency}';\n\n// ${vocabulary}\nexport function feature${index}(input: string): string {\n  const service = new UserService();\n  return service.findUser(input).name + ' feature-${index}';\n}\n`;
     await writeFile(join(root, 'src', `feature-${index}.ts`), source);
   }
 
@@ -74,11 +80,12 @@ async function main() {
     const distPath = join(
       fileURLToPath(new URL('..', import.meta.url)),
       'dist',
-      'lib.mjs',
+      'index.mjs',
     );
     const {
       buildIndex,
       CodeSearcher,
+      searchCode,
       buildDependencyGraph,
       generateRepoMap,
     } = await import(pathToFileURL(distPath).href);
@@ -86,12 +93,17 @@ async function main() {
     let index;
     const indexBuild = await measure(async () => {
       index = await buildIndex({ root: projectRoot, maxDepth: 5 });
-    });
+    }, 3);
 
+    const construction = await measure(() => new CodeSearcher(index));
     const searcher = new CodeSearcher(index);
-    const search = await measure(() => {
+    const hotSearch = await measure(() => {
       searcher.search('user service feature', { limit: 10 });
     });
+    searchCode(index, 'user service feature', { limit: 10 });
+    const cachedApiSearch = await measure(() =>
+      searchCode(index, 'user service feature', { limit: 10 }),
+    );
 
     let dependencyGraph;
     const graph = await measure(async () => {
@@ -109,7 +121,9 @@ async function main() {
 
     const rows = [
       ['索引构建（buildIndex）', indexBuild, `${index.stats.totalFiles} 文件 / ${index.stats.totalChunks} 分块`],
-      ['搜索延迟（CodeSearcher.search）', search, `${searcher.search('user service feature', { limit: 10 }).length} 条结果`],
+      ['搜索器构建（CodeSearcher）', construction, `${Object.keys(index.invertedIndex).length} 个关键词`],
+      ['热搜索（CodeSearcher.search）', hotSearch, `${searcher.search('user service feature', { limit: 10 }).length} 条结果`],
+      ['公共 API 缓存搜索（searchCode）', cachedApiSearch, '复用同一索引搜索器'],
       [
         '依赖分析（buildDependencyGraph）',
         graph,
@@ -118,13 +132,13 @@ async function main() {
       ['Repo Map 生成（generateRepoMap）', repoMapBuild, `${repoMap.length} 字符`],
     ];
 
-    console.log(`基准项目：${PROJECT_FILE_COUNT} 个核心代码文件，重复 ${REPEATS} 次（预热 1 次）`);
+    console.log(`基准项目：${PROJECT_FILE_COUNT} 个核心代码文件，搜索重复 ${REPEATS} 次（预热 1 次）`);
     console.log('');
-    console.log('| 模块 | 平均 | P50 | 最小 | 最大 | 工作量 |');
-    console.log('| --- | ---: | ---: | ---: | ---: | --- |');
+    console.log('| 模块 | 平均 | P50 | P95 | 最小 | 最大 | 工作量 |');
+    console.log('| --- | ---: | ---: | ---: | ---: | ---: | --- |');
     for (const [name, result, workload] of rows) {
       console.log(
-        `| ${name} | ${formatMs(result.average)} | ${formatMs(result.p50)} | ${formatMs(result.min)} | ${formatMs(result.max)} | ${workload} |`,
+        `| ${name} | ${formatMs(result.average)} | ${formatMs(result.p50)} | ${formatMs(result.p95)} | ${formatMs(result.min)} | ${formatMs(result.max)} | ${workload} |`,
       );
     }
   } finally {

@@ -18,6 +18,7 @@ vi.mock('../src/search/index.js', async (importOriginal) => ({
 }));
 
 import { createProgram } from '../src/cli.js';
+import { AGENT_TYPES } from '../src/agents.js';
 
 async function parse(args: string[]): Promise<void> {
   const program = createProgram();
@@ -44,6 +45,9 @@ describe('CLI 参数契约', () => {
     expect(help).toContain('--max-output-tokens');
     expect(help).toContain('--batch-concurrency');
     expect(help).toContain('--eval-max-cases');
+    expect(help).toContain('--search-mode');
+    expect(help).toContain('--sensitive-policy');
+    for (const agent of AGENT_TYPES) expect(help).toContain(agent);
   });
 
   it('拒绝非法端口', async () => {
@@ -144,6 +148,41 @@ describe('CLI 参数契约', () => {
     );
   });
 
+  it('正确校验并映射语言与敏感信息策略', async () => {
+    await parse([
+      'examples/sample-doc.md',
+      '--api-key',
+      'test',
+      '--lang',
+      'zh',
+      '--sensitive-policy',
+      'error',
+    ]);
+    expect(mocks.runPipeline).toHaveBeenCalledWith(
+      ['examples/sample-doc.md'],
+      expect.objectContaining({ lang: 'zh', sensitivePolicy: 'error' }),
+    );
+
+    await expect(parse(['--lang', 'fr'])).rejects.toThrow('lang 必须是');
+    await expect(parse(['--sensitive-policy', 'unknown'])).rejects.toThrow(
+      'sensitive-policy 必须是',
+    );
+  });
+
+  it.each(AGENT_TYPES)('CLI 接受 Agent 类型 %s', async (agentType) => {
+    await parse([
+      'examples/sample-doc.md',
+      '--api-key',
+      'test',
+      '--type',
+      agentType,
+    ]);
+    expect(mocks.runPipeline).toHaveBeenCalledWith(
+      ['examples/sample-doc.md'],
+      expect.objectContaining({ agentType }),
+    );
+  });
+
   it('配置文件默认值会传入 Pipeline，CLI 参数保持最高优先级', async () => {
     mocks.loadConfig.mockResolvedValue({
       out: 'config-output',
@@ -198,7 +237,31 @@ describe('CLI 参数契约', () => {
       expect.any(Object),
       false,
       expect.any(String),
+      { mode: 'hybrid' },
+      expect.objectContaining({ signal: undefined }),
     );
+  });
+
+  it('--search-mode 传递检索模式并拒绝非法值', async () => {
+    await parse([
+      '.',
+      '--search',
+      'createProgram',
+      '--search-mode',
+      'exact',
+      '--no-explain',
+    ]);
+    expect(mocks.searchAndPrint).toHaveBeenCalledWith(
+      'createProgram',
+      undefined,
+      false,
+      expect.any(String),
+      { mode: 'exact' },
+      expect.any(Object),
+    );
+    await expect(
+      parse(['--search', 'x', '--search-mode', 'fuzzy']),
+    ).rejects.toThrow('search-mode 必须是');
   });
 
   it('拒绝非法同步 Agent', async () => {
