@@ -15,7 +15,7 @@
 
 ### 改进
 
-- GitHub Actions 的 `checkout` 与 `setup-node` 升级至 v7，并同步自动刷新工作流生成器，消除旧版 Node 运行时弃用告警。
+- GitHub Actions 的 `checkout`、`setup-node` 与 `upload-artifact` 升级至 v7，并同步自动刷新工作流生成器，消除旧版 Node 运行时弃用告警。
 - 打通 `--lang` 与 `--search-mode` 的短文档、长文档及交互搜索链路，并为枚举参数增加 CLI 校验。
 - 统一 7 类 Agent 的类型源，补齐 CLI、Web UI、MCP、同步及端到端覆盖。
 - 代码搜索增加二元子串索引、符号类型预计算和搜索器缓存；基准扩展到 400 文件并报告 P95。

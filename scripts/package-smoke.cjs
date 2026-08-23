@@ -17,10 +17,16 @@ const consumerDir = join(tempDir, 'consumer');
 mkdirSync(packDir);
 mkdirSync(consumerDir);
 
+const npmCli = process.env.npm_execpath;
+assert(npmCli, '缺少 npm_execpath，请通过 npm run test:package 执行');
+
+function execNpmSync(args, options) {
+  return execFileSync(process.execPath, [npmCli, ...args], options);
+}
+
 try {
   const packed = JSON.parse(
-    execFileSync(
-      process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    execNpmSync(
       [
         'pack',
         '--json',
@@ -67,8 +73,7 @@ try {
     join(consumerDir, 'package.json'),
     JSON.stringify({ name: 'package-smoke-consumer', private: true }),
   );
-  execFileSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
+  execNpmSync(
     [
       'install',
       join(packDir, packed.filename),
