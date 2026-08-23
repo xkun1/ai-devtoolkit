@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { join } from 'node:path';
 import { buildArtifacts, resolvePrimaryPath } from '../src/format/artifacts.js';
 
 const doc = {
@@ -17,7 +18,7 @@ describe('modern artifacts', () => {
     });
 
     expect(result.suggestedPath).toBe(
-      '.agents/skills/react-hooks-guide/SKILL.md',
+      join('.agents', 'skills', 'react-hooks-guide', 'SKILL.md'),
     );
     expect(result.content).toContain('name: react-hooks-guide');
     expect(result.artifacts).toHaveLength(1);
@@ -30,7 +31,9 @@ describe('modern artifacts', () => {
       doc,
     });
 
-    expect(result.suggestedPath).toBe('.cursor/rules/react-hooks-guide.mdc');
+    expect(result.suggestedPath).toBe(
+      join('.cursor', 'rules', 'react-hooks-guide.mdc'),
+    );
     expect(result.content).toMatch(
       /^---\ndescription: ".+"\nglobs: "\*\*\/\*"\nalwaysApply: false\n---/,
     );
@@ -43,7 +46,7 @@ describe('modern artifacts', () => {
     expect(result.suggestedPath).toBe('CLAUDE.md');
     expect(result.artifacts).toHaveLength(2);
     expect(result.artifacts?.[1].path).toBe(
-      '.claude/rules/react-hooks-guide.md',
+      join('.claude', 'rules', 'react-hooks-guide.md'),
     );
     expect(result.content.split('\n').length).toBeLessThan(200);
     expect(result.artifacts?.[1].content).toContain('Rule 219');
@@ -56,7 +59,9 @@ describe('modern artifacts', () => {
     const result = buildArtifacts({ agentType: 'codex', content, doc });
 
     expect(result.artifacts).toHaveLength(2);
-    expect(result.artifacts?.[1].path).toContain('/references/details.md');
+    expect(result.artifacts?.[1].path).toContain(
+      join('references', 'details.md'),
+    );
     expect(result.content).toContain('详细参考');
     expect(result.artifacts?.map((item) => item.content).join('\n')).toContain(
       'Item 5-99',

@@ -425,7 +425,9 @@ describe('Pipeline E2E (mocked LLM)', () => {
         force: true,
         llm: { apiKey: 'mock-key', model: 'mock-model' },
       });
-      expect(result.suggestedPath).toBe('.agents/skills/modern-skill/SKILL.md');
+      expect(result.suggestedPath).toBe(
+        join('.agents', 'skills', 'modern-skill', 'SKILL.md'),
+      );
       expect(
         await readFile(join(dir, result.suggestedPath), 'utf-8'),
       ).toContain('name: modern-skill');

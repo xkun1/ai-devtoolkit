@@ -71,7 +71,7 @@ description: "测试技能"
 `;
     const res = convertRule(skill, { to: 'windsurf', outputDir: TMP_DIR });
     expect(res.to).toBe('windsurf');
-    expect(res.artifacts[0].path).toContain('.windsurf/rules');
+    expect(res.artifacts[0].path).toContain(join('.windsurf', 'rules'));
   });
 
   it('convertRule 从 Codex 转为 Copilot', () => {
@@ -85,7 +85,9 @@ description: "API 规范"
 使用 REST。
 `;
     const res = convertRule(skill, { to: 'copilot', outputDir: TMP_DIR });
-    expect(res.artifacts[0].path).toContain('.github/copilot-instructions.md');
+    expect(res.artifacts[0].path).toContain(
+      join('.github', 'copilot-instructions.md'),
+    );
   });
 
   it('convertRule 从 Codex 转为 Gemini', () => {
@@ -450,6 +452,8 @@ describe('v0.10 — 自动刷新工作流生成器', () => {
     expect(yaml).toContain('create-pull-request');
     expect(yaml).toContain('--force');
     expect(yaml).toContain('ai-devtoolkit@0.10.0');
+    expect(yaml).toContain('actions/checkout@v7');
+    expect(yaml).toContain('actions/setup-node@v7');
     expect(parseYaml(yaml)).toHaveProperty('jobs.refresh-skills');
   });
 

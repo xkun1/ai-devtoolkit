@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
-import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, symlink, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -17,6 +17,7 @@ import {
   resolveModel,
 } from '../src/models.js';
 import { startServer, createRequestHandler } from '../src/server.js';
+import { resolveProjectPath } from '../src/server/validation.js';
 
 interface MockResponse {
   status: number;
@@ -388,6 +389,28 @@ describe('Web UI — HTTP 安全边界', () => {
       },
     );
     expect(res.status).toBe(413);
+  });
+
+  it('项目根目录使用路径别名时仍允许访问内部文件', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'devtoolkit-real-root-'));
+    const aliasParent = await mkdtemp(join(tmpdir(), 'devtoolkit-root-alias-'));
+    const alias = join(aliasParent, 'project');
+    const file = join(root, 'inside.ts');
+    try {
+      await writeFile(file, 'export const safe = true;');
+      await symlink(
+        root,
+        alias,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+
+      await expect(resolveProjectPath(alias, 'inside.ts')).resolves.toBe(
+        await realpath(file),
+      );
+    } finally {
+      await rm(aliasParent, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('非法 JSON 请求体返回 400', async () => {

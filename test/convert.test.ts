@@ -85,7 +85,7 @@ alwaysApply: false
     const res = convertRule(mdc, { to: 'codex', outputDir: TMP_DIR });
     expect(res.to).toBe('codex');
     expect(res.artifacts.length).toBe(1);
-    expect(res.artifacts[0].path).toContain('.agents/skills');
+    expect(res.artifacts[0].path).toContain(join('.agents', 'skills'));
     expect(res.artifacts[0].content).toContain('name:');
     expect(res.artifacts[0].content).toContain(
       'description: "TypeScript 编码规范"',
@@ -106,7 +106,9 @@ description: "数据库操作规范"
     const res = convertRule(skill, { to: 'cursor', outputDir: TMP_DIR });
     expect(res.to).toBe('cursor');
     expect(res.artifacts.length).toBe(1);
-    expect(res.artifacts[0].path).toContain('.cursor/rules/database-rules.mdc');
+    expect(res.artifacts[0].path).toContain(
+      join('.cursor', 'rules', 'database-rules.mdc'),
+    );
     expect(res.artifacts[0].content).toContain('description: "数据库操作规范"');
     expect(res.artifacts[0].content).toContain('globs: "**/*"');
     expect(res.artifacts[0].content).toContain('alwaysApply: false');

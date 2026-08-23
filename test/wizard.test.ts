@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolve } from 'node:path';
 
 const prompts = vi.hoisted(() => ({
   input: vi.fn(),
@@ -62,7 +63,7 @@ describe('runWizard 交互式向导', () => {
     prompts.input.mockResolvedValue('/tmp/project');
     await expect(runWizard()).resolves.toEqual({
       mode: 'search',
-      projectRoot: '/tmp/project',
+      projectRoot: resolve('/tmp/project'),
       interactive: true,
     });
   });
@@ -119,7 +120,7 @@ describe('runWizard 交互式向导', () => {
     prompts.confirm.mockResolvedValue(false);
     await expect(runWizard()).resolves.toEqual({
       mode: 'sync',
-      projectRoot: '/tmp/project',
+      projectRoot: resolve('/tmp/project'),
       dryRun: false,
     });
 

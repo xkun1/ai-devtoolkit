@@ -59,6 +59,7 @@
     "start": "node bin/cli.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "pretest:e2e": "npm run build",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",

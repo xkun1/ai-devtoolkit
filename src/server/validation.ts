@@ -67,7 +67,10 @@ export async function resolveProjectPath(
   if (requested.length > 10_000 || requested.includes('\0')) {
     throw new HttpError(400, '项目路径无效');
   }
-  const candidate = resolve(projectRoot, requested);
+  // Windows 的临时目录可能同时存在 8.3 短路径与完整路径表示。
+  // 根目录和目标路径必须使用同一种 realpath 解析，避免把同一目录误判为越界。
+  const canonicalRoot = await realpath(projectRoot);
+  const candidate = resolve(canonicalRoot, requested);
   let canonicalPath: string;
   try {
     canonicalPath = await realpath(candidate);
@@ -82,7 +85,7 @@ export async function resolveProjectPath(
     throw err;
   }
 
-  const rel = relative(projectRoot, canonicalPath);
+  const rel = relative(canonicalRoot, canonicalPath);
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new HttpError(403, '禁止访问项目根目录之外的路径');
   }
