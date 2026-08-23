@@ -20,11 +20,12 @@ flowchart LR
     PIPE --> LOAD[loader\nURL/文件/目录/OpenAPI/Postman]
     PIPE --> TRANS[transform\n分块/提示词/LLM]
     TRANS --> LLM[OpenAI 兼容 API\n云端或本地模型]
-    PIPE --> FORMAT[format\nFrontmatter/Agent 产物]
+    PIPE --> IR[skill/ir\n统一 Skill 中间表示]
+    IR --> FORMAT[skill/compiler + format\n平台适配器/Agent 产物]
     PIPE --> QUALITY[quality\n质量校验]
     PIPE --> CACHE[utils/hash\n指纹与增量缓存]
     PIPE --> LIFE[lifecycle\n技能注册表]
-    FORMAT --> OUT[SKILL.md / .mdc / CLAUDE.md\n或 stdout]
+    FORMAT --> OUT[平台 Skills 目录 / .mdc / 规则文件\n或 stdout]
 
     CLI --> SEARCH[search\n代码索引与搜索]
     CLI --> GRAPH[graph\n依赖图与影响面]
@@ -32,6 +33,7 @@ flowchart LR
     CLI --> CONVERT[convert\n规则互转/同步]
     CLI --> EVAL[eval\n技能效果评测]
     CLI --> DOCTOR[doctor\n诊断]
+    CLI --> VALIDATE[skill/validate\nAgent Skills 规范校验]
 ```
 
 ### 组件边界
@@ -66,7 +68,7 @@ sequenceDiagram
     M-->>T: Markdown 技能正文
     T-->>P: TransformResult（正文 + 统计）
     P->>P: 模型输出默认脱敏
-    P->>F: buildArtifacts
+    P->>F: createSkillIR → buildArtifacts/compileSkill
     F-->>P: SkillResult（主文件及附属文件）
     P->>Q: assertValidSkillResult
     Q-->>P: QualityReport
@@ -86,7 +88,7 @@ sequenceDiagram
 1. 输入可以是 URL、Markdown/TXT/HTML/PDF/DOCX、OpenAPI/Swagger、Postman 或目录。
 2. `loader` 统一输出 `LoadedDocument`；目录会先扫描，再按批处理或 `--merge` 合并。
 3. `transform` 对短文档单次调用 LLM，对长文档执行“分块抽取 → 分层归并 → 最终合成”。
-4. `format` 覆盖 Codex、Cursor、Claude、Windsurf、Copilot、Gemini、Aider 七类 Agent 的当前推荐目录结构；通过 `--legacy` 可退回旧版单文件。
+4. `skill/ir` 先生成平台无关的统一中间表示，`skill/compiler` 再适配七类 Agent；Codex、Claude、Copilot、Gemini 默认输出原生 Agent Skill 目录，通过 `--legacy` 可退回旧版单文件。
 5. 源文档发送给 LLM 前与模型输出写盘前默认脱敏；可通过 `sensitivePolicy` 选择阻断或显式关闭。
 6. 生成前后都有资源、取消和质量校验；`--stdout` 与 `--dry-run` 均不会写入用户产物，多文件落盘会预检并在运行时失败时回滚。
 
@@ -138,8 +140,11 @@ sequenceDiagram
 | 路径 | 职责 |
 | --- | --- |
 | `src/format/index.ts` | 聚合输出格式 API。 |
-| `src/format/artifacts.ts` | 按 Agent 生成主文件、引用文件和规则文件。 |
+| `src/format/artifacts.ts` | 生成链路兼容入口，负责从文档建立 IR 并调用编译器。 |
 | `src/format/frontmatter.ts` | slug、描述提取、YAML frontmatter 注入/校验。 |
+| `src/skill/ir.ts` | 统一 Skill IR：元数据、指令、适用范围、资源和来源。 |
+| `src/skill/compiler.ts` | 将统一 IR 编译为各平台标准目录或兼容规则文件。 |
+| `src/skill/validate.ts` | 校验 Agent Skills 元数据、目录命名、渐进披露和本地引用安全。 |
 | `src/quality/validate.ts` | 产物结构、重复度、长度和质量评分检查。 |
 | `src/lifecycle/index.ts` | 技能包生命周期 API 聚合。 |
 | `src/lifecycle/registry.ts` | `.devtoolkit-skills.json` 注册表读写、注册、列出、移除。 |

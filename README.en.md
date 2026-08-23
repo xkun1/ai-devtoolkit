@@ -21,7 +21,7 @@ You have a pile of API docs, SDK guides, and technical specs — every time you 
 | 📄 Web URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF Document | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
 | ⚡️ Swagger / OpenAPI Spec | → | 🛠️ Structured API Skillpack (Saves 80%~90% Tokens, [Benchmark](https://github.com/xkun1/ai-devtoolkit/blob/main/docs/benchmark.md)) |
-| 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/` (when long) |
+| 📝 Markdown | → | 🧠 Claude `.claude/skills/<name>/SKILL.md` |
 | 📚 Multi-doc Merge | → | 🧩 Fused skill pack after chunked extraction |
 | 📂 Batch Directory | → | 🤖 One skill pack per file (or `--merge` to combine) |
 | 🔌 MCP Server | → | 🤖 Native tool call for AI Agents |
@@ -38,7 +38,7 @@ npx ai-devtoolkit https://docs.example.com/api --type codex
 # Generate Cursor rules from a local PDF
 npx ai-devtoolkit ./sdk-guide.pdf --type cursor
 
-# Generate Claude project memory from Markdown
+# Generate a Claude Agent Skill from Markdown
 npx ai-devtoolkit ./CONTRIBUTING.md --type claude
 
 # Merge multiple documents into one skill pack
@@ -62,8 +62,8 @@ Convert rules between Cursor, Codex, and Claude seamlessly in any project:
 # 1. Single file: Convert Cursor rule to Codex skill
 devtoolkit --convert .cursor/rules/api.mdc --type codex
 
-# 2. Convert Claude memory to Cursor rule
-devtoolkit --convert CLAUDE.md --type cursor
+# 2. Convert a Claude Skill to a Cursor rule
+devtoolkit --convert .claude/skills/project-guide/SKILL.md --type cursor
 
 # 3. One-click full-project sync (auto-discovers existing rules and syncs across agents)
 devtoolkit --sync
@@ -73,6 +73,32 @@ devtoolkit --sync --dry-run
 ```
 
 Supported targets: Codex, Cursor, Claude, Windsurf, GitHub Copilot, Gemini CLI, and Aider.
+
+### ✅ Agent Skills Standard and Validation
+
+Generation and rule conversion now share one canonical Skill IR. Platforms implementing the [Agent Skills specification](https://agentskills.io/specification) use native skill directories by default:
+
+| Platform | Default modern output |
+| --- | --- |
+| Codex | `.agents/skills/<name>/SKILL.md` |
+| Claude Code | `.claude/skills/<name>/SKILL.md` |
+| GitHub Copilot | `.github/skills/<name>/SKILL.md` |
+| Gemini CLI | `.gemini/skills/<name>/SKILL.md` |
+
+Validate one Skill or every Skill in a project:
+
+```bash
+# Validate a directory or SKILL.md
+devtoolkit validate .agents/skills/my-skill
+
+# Scan the project and fail on warnings too
+devtoolkit validate . --strict
+
+# Machine-readable CI output
+devtoolkit validate . --json
+```
+
+Validation covers name/description constraints, parent-directory naming, YAML types, the 500-line progressive-disclosure recommendation, local-reference existence, and path boundaries.
 
 ### 🌐 Web UI Mode
 
@@ -84,7 +110,7 @@ npx ai-devtoolkit --ui
 npx ai-devtoolkit --ui --port 8080
 ```
 
-Paste a URL, choose a template, preview results in real time, and download a complete ZIP skill pack with one click. Codex `references/` and Claude `.claude/rules/` multi-file directories are fully preserved.
+Paste a URL, choose a template, preview results in real time, and download a complete ZIP skill pack with one click. Native Agent Skill multi-file directories such as `references/` are fully preserved.
 
 The Web UI only listens on `127.0.0.1` and only accepts public HTTP(S) URLs or browser-uploaded content. Code search, graph, and source viewing are confined to the project root fixed at startup, including symlink checks. Upload requests default to 10 MiB, remote documents to 5 MiB, and source viewing to 2 MiB per file.
 
@@ -242,7 +268,7 @@ npx ai-devtoolkit --doctor
 npx ai-devtoolkit ./my-project --repo-map
 ```
 
-Inputs exceeding ~24K characters are semantically chunked by Markdown structure, then processed through "per-chunk extraction → hierarchical merge → final synthesis." No silent mid-document truncation. Codex overflow automatically sinks to `references/`; Claude overflow splits into `.claude/rules/`.
+Inputs exceeding ~24K characters are semantically chunked by Markdown structure, then processed through "per-chunk extraction → hierarchical merge → final synthesis." No silent mid-document truncation. Long native Agent Skills automatically move details into `references/` to keep `SKILL.md` progressively disclosed.
 
 ### Output Example
 
@@ -320,7 +346,7 @@ See `.env.example` for environment variable configuration.
 ## 📖 CLI Reference
 
 ```
-Usage: devtoolkit [options] <sources...>
+Usage: devtoolkit [options] [command] [sources...]
 
 Arguments:
   sources              Document sources: URLs or local file paths (multiple allowed, merged into one skill pack)
@@ -329,7 +355,7 @@ Options:
   -t, --type <type>    Target: codex | cursor | claude | windsurf | copilot | gemini | aider
   -o, --out <path>     Custom output file path (default: Agent-recommended directory)
   -m, --model <model>  LLM model name (default: deepseek-chat)
-  -n, --name <name>    Custom skill name (for Codex SKILL.md frontmatter)
+  -n, --name <name>    Custom skill name (for Agent Skills frontmatter)
   --stdout             Output to stdout instead of writing files (for pipe integration)
   --dry-run            Preview results without writing files
   --force              Force overwrite existing output files
@@ -375,6 +401,9 @@ Options:
   -v, --verbose        Show detailed logs
   -V, --version        Print version
   -h, --help           Show help
+
+Commands:
+  validate [path]      Validate a Skill directory, SKILL.md, or all project Skills
 ```
 
 Also supports project-level config file `.devtoolkit.json`. CLI args take precedence:

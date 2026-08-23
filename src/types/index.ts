@@ -43,7 +43,7 @@ export interface ModelPreset {
 export interface GeneratedArtifact {
   path: string;
   content: string;
-  kind: 'primary' | 'reference' | 'rule';
+  kind: 'primary' | 'reference' | 'rule' | 'script' | 'asset';
 }
 
 /** 长文档提炼与缓存统计。 */
@@ -93,7 +93,7 @@ export interface PipelineOptions {
   outputPath?: string;
   llm: LLMConfig;
   verbose?: boolean;
-  /** 自定义技能名（用于 Codex SKILL.md frontmatter），默认从文档标题生成 */
+  /** 自定义技能名（用于 Agent Skills frontmatter），默认从文档标题生成 */
   name?: string;
   /** 输出到 stdout 而不写文件 */
   stdout?: boolean;

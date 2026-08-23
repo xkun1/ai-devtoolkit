@@ -12,7 +12,7 @@ export function register(program: Command): void {
     )
     .option('-o, --out <path>', '输出文件路径')
     .option('-m, --model <model>', 'LLM 模型名')
-    .option('-n, --name <name>', '自定义技能名（Codex frontmatter）')
+    .option('-n, --name <name>', '自定义技能名（Agent Skills frontmatter）')
     .option('--stdout', '输出到标准输出而不写文件')
     .option('--dry-run', '预览生成结果，不写入文件')
     .option('--force', '强制覆盖已存在的输出文件')

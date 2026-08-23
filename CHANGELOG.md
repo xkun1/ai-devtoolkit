@@ -4,6 +4,11 @@
 
 ## [未发布]
 
+### 新功能
+
+- 新增统一 Agent Skill IR 与平台编译器，生成和规则互转共用同一格式链路；Claude、GitHub Copilot、Gemini 默认升级为原生 Skills 目录。
+- 新增 `devtoolkit validate [path]`，校验 Agent Skills frontmatter、目录命名、渐进披露、本地引用完整性与路径边界，支持 `--strict` 和 `--json`。
+
 ### 修复与安全加固
 
 - 修复 Chromium E2E 在全新 CI 环境中未先构建 `dist` 导致 CLI 无法加载，并修正 Windows 路径分隔符断言与真实路径别名误判。

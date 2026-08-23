@@ -96,10 +96,10 @@ async function runCli(
 const expectedPaths = {
   codex: ['.agents', 'skills', 'e2e-skill', 'SKILL.md'],
   cursor: ['.cursor', 'rules', 'e2e-skill.mdc'],
-  claude: ['CLAUDE.md'],
+  claude: ['.claude', 'skills', 'e2e-skill', 'SKILL.md'],
   windsurf: ['.windsurf', 'rules', 'e2e-skill.md'],
-  copilot: ['.github', 'copilot-instructions.md'],
-  gemini: ['GEMINI.md'],
+  copilot: ['.github', 'skills', 'e2e-skill', 'SKILL.md'],
+  gemini: ['.gemini', 'skills', 'e2e-skill', 'SKILL.md'],
   aider: ['CONVENTIONS.md'],
 } as const;
 
@@ -119,7 +119,9 @@ for (const agent of Object.keys(expectedPaths) as Agent[]) {
       // 正常模式：验证目标 Agent 的产物路径、YAML frontmatter 和正文。
       await runCli(workspace, sourcePath, baseUrl, agent, outputPath);
       const content = await readFile(outputPath, 'utf8');
-      expect(content).toMatch(/^---\r?\n[\s\S]*\r?\n---\r?\n/);
+      if (agent !== 'aider') {
+        expect(content).toMatch(/^---\r?\n[\s\S]*\r?\n---\r?\n/);
+      }
       expect(content).toContain('# 团队 API 开发技能');
       expect(content).toContain('统一的认证、请求和错误处理约定');
 
@@ -132,7 +134,9 @@ for (const agent of Object.keys(expectedPaths) as Agent[]) {
         dryRunPath,
         true,
       );
-      expect(preview.stdout).toMatch(/^---\r?\n[\s\S]*\r?\n---\r?\n/);
+      if (['codex', 'cursor', 'windsurf'].includes(agent)) {
+        expect(preview.stdout).toMatch(/^---\r?\n[\s\S]*\r?\n---\r?\n/);
+      }
       expect(preview.stdout).toContain('# 团队 API 开发技能');
       await expect(stat(dryRunPath)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {

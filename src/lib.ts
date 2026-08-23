@@ -78,6 +78,35 @@ export {
 
 export { runPipeline } from './pipeline.js';
 
+// ── 统一 Agent Skill IR、编译器与规范校验 ──
+export {
+  AGENT_SKILL_ROOTS,
+  SKILL_IR_VERSION,
+  compileSkill,
+  createSkillIR,
+  formatSkillValidationSummary,
+  isSkillFilePath,
+  isStandardSkillAgent,
+  renderSkillFrontmatter,
+  resolveAgentPrimaryPath,
+  validateSkillFile,
+  validateSkillTarget,
+} from './skill/index.js';
+export type {
+  CompileSkillOptions,
+  CreateSkillIRInput,
+  SkillApplicability,
+  SkillIR,
+  SkillMetadata,
+  SkillResource,
+  SkillResourceKind,
+  SkillSource,
+  SkillValidationIssue,
+  SkillValidationOptions,
+  SkillValidationReport,
+  SkillValidationSummary,
+} from './skill/index.js';
+
 /**
  * 一行调用快捷方法 — 等价于 runPipeline，语义更友好
  * ```ts

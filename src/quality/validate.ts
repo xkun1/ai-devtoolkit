@@ -7,7 +7,7 @@ import type {
   SkillResult,
 } from '../types/index.js';
 
-export const QUALITY_BASELINE_VERSION = 'p1-v1';
+export const QUALITY_BASELINE_VERSION = 'p1-v2';
 
 export function validateSkillResult(result: SkillResult): QualityReport {
   const artifacts = result.artifacts ?? [
@@ -122,40 +122,71 @@ function validateAgentArtifact(
   artifact: GeneratedArtifact,
   issues: QualityIssue[],
 ): void {
-  if (agentType === 'codex' && basename(artifact.path) === 'SKILL.md') {
+  if (
+    ['codex', 'claude', 'copilot', 'gemini'].includes(agentType) &&
+    basename(artifact.path) === 'SKILL.md'
+  ) {
     const metadata = readFrontmatter(artifact.content);
     const name = metadata?.name;
     const description = metadata?.description;
+    const codePrefix = agentType === 'codex' ? 'CODEX' : 'AGENT_SKILL';
     if (!metadata) {
       issues.push(
         issue(
           'error',
-          'CODEX_FRONTMATTER',
+          `${codePrefix}_FRONTMATTER`,
           'SKILL.md 缺少 YAML frontmatter',
           artifact.path,
         ),
       );
     } else {
-      if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+      if (
+        !name ||
+        name.length > 64 ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)
+      ) {
         issues.push(
           issue(
             'error',
-            'CODEX_NAME',
-            'Codex skill name 不合法',
+            `${codePrefix}_NAME`,
+            'Agent Skill name 不合法',
             artifact.path,
           ),
         );
       }
-      if (!description?.trim()) {
+      if (!description?.trim() || description.length > 1024) {
         issues.push(
           issue(
             'error',
-            'CODEX_DESCRIPTION',
-            'Codex skill 缺少 description',
+            `${codePrefix}_DESCRIPTION`,
+            'Agent Skill description 缺失或超过 1024 个字符',
             artifact.path,
           ),
         );
       }
+      const body = artifact.content.match(
+        /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)([\s\S]*)$/,
+      )?.[1];
+      if (!body?.trim()) {
+        issues.push(
+          issue(
+            'error',
+            `${codePrefix}_BODY`,
+            'SKILL.md 缺少指令正文',
+            artifact.path,
+          ),
+        );
+      }
+    }
+    if (lineCount(artifact.content) > 500) {
+      issues.push(
+        issue(
+          'warning',
+          'AGENT_SKILL_TOO_LONG',
+          'SKILL.md 超过 500 行，建议使用 references/ 渐进披露',
+          artifact.path,
+        ),
+      );
     }
   }
 

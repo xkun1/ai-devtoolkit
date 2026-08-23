@@ -54,19 +54,7 @@ export async function discoverProjectRules(
   const codexDir = join(projectRoot, '.agents', 'skills');
   if (existsSync(codexDir)) {
     try {
-      const entries = await readdir(codexDir, { withFileTypes: true });
-      const files: { path: string; name: string }[] = [];
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const skillFile = join(codexDir, entry.name, 'SKILL.md');
-          if (existsSync(skillFile)) {
-            files.push({
-              path: skillFile,
-              name: entry.name,
-            });
-          }
-        }
-      }
+      const files = await discoverSkillFiles(codexDir);
       if (files.length > 0) {
         discovered.push({
           agentType: 'codex',
@@ -80,11 +68,15 @@ export async function discoverProjectRules(
     }
   }
 
-  // 3. 检查 Claude: CLAUDE.md 或 .claude/rules/*.md
+  // 3. 检查 Claude: .claude/skills/*/SKILL.md，并兼容旧版 CLAUDE.md / rules
   const claudeFile = join(projectRoot, 'CLAUDE.md');
   const claudeRulesDir = join(projectRoot, '.claude', 'rules');
+  const claudeSkillsDir = join(projectRoot, '.claude', 'skills');
   const claudeFiles: { path: string; name: string }[] = [];
 
+  if (existsSync(claudeSkillsDir)) {
+    claudeFiles.push(...(await discoverSkillFiles(claudeSkillsDir)));
+  }
   if (existsSync(claudeFile)) {
     claudeFiles.push({ path: claudeFile, name: 'CLAUDE' });
   }
@@ -146,25 +138,39 @@ export async function discoverProjectRules(
     });
   }
 
-  // 5. 检查 Copilot: .github/copilot-instructions.md
+  // 5. 检查 Copilot: .github/skills/*/SKILL.md，并兼容旧版全局说明
+  const copilotSkillsDir = join(projectRoot, '.github', 'skills');
   const copilotFile = join(projectRoot, '.github', 'copilot-instructions.md');
+  const copilotFiles = existsSync(copilotSkillsDir)
+    ? await discoverSkillFiles(copilotSkillsDir)
+    : [];
   if (existsSync(copilotFile)) {
+    copilotFiles.push({ path: copilotFile, name: 'copilot-instructions' });
+  }
+  if (copilotFiles.length > 0) {
     discovered.push({
       agentType: 'copilot',
       format: 'copilot',
       baseDir: projectRoot,
-      files: [{ path: copilotFile, name: 'copilot-instructions' }],
+      files: copilotFiles,
     });
   }
 
-  // 6. 检查 Gemini: GEMINI.md
+  // 6. 检查 Gemini: .gemini/skills/*/SKILL.md，并兼容旧版 GEMINI.md
+  const geminiSkillsDir = join(projectRoot, '.gemini', 'skills');
   const geminiFile = join(projectRoot, 'GEMINI.md');
+  const geminiFiles = existsSync(geminiSkillsDir)
+    ? await discoverSkillFiles(geminiSkillsDir)
+    : [];
   if (existsSync(geminiFile)) {
+    geminiFiles.push({ path: geminiFile, name: 'GEMINI' });
+  }
+  if (geminiFiles.length > 0) {
     discovered.push({
       agentType: 'gemini',
       format: 'gemini',
       baseDir: projectRoot,
-      files: [{ path: geminiFile, name: 'GEMINI' }],
+      files: geminiFiles,
     });
   }
 
@@ -180,6 +186,24 @@ export async function discoverProjectRules(
   }
 
   return discovered;
+}
+
+async function discoverSkillFiles(
+  skillRoot: string,
+): Promise<{ path: string; name: string }[]> {
+  try {
+    const entries = await readdir(skillRoot, { withFileTypes: true });
+    const files: { path: string; name: string }[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillFile = join(skillRoot, entry.name, 'SKILL.md');
+      if (existsSync(skillFile))
+        files.push({ path: skillFile, name: entry.name });
+    }
+    return files;
+  } catch {
+    return [];
+  }
 }
 
 /** 同步项目全部规则到目标 Agent */

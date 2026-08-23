@@ -3,7 +3,7 @@ import { isAgentType } from '../agents.js';
 import { normalizeMarkdown } from './normalize.js';
 export { buildArtifacts, resolvePrimaryPath } from './artifacts.js';
 
-/** 默认输出路径 */
+/** `formatResult` 兼容单文件 API 的默认路径；modern 目录由 Skill 编译器计算。 */
 export const DEFAULT_OUTPUT_PATHS: Record<AgentType, string> = {
   codex: './SKILL.md',
   cursor: './.cursorrules',

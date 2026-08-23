@@ -564,12 +564,10 @@
               <select id="agentType">
                 <option value="codex">🤖 Codex (.agents/skills/)</option>
                 <option value="cursor">🎯 Cursor (.cursor/rules/)</option>
-                <option value="claude">🧠 Claude (CLAUDE.md)</option>
+                <option value="claude">🧠 Claude (.claude/skills)</option>
                 <option value="windsurf">🏄 Windsurf (.windsurf/rules/)</option>
-                <option value="copilot">
-                  🤝 Copilot (.github/copilot-instructions.md)
-                </option>
-                <option value="gemini">💎 Gemini (GEMINI.md)</option>
+                <option value="copilot">🤝 Copilot (.github/skills)</option>
+                <option value="gemini">💎 Gemini (.gemini/skills)</option>
                 <option value="aider">🔧 Aider (CONVENTIONS.md)</option>
               </select>
             </div>
@@ -725,7 +723,7 @@
             <label>粘贴规则 Markdown 或带有 YAML Frontmatter 的规则：</label>
             <textarea
               id="convertInput"
-              placeholder="例如粘贴 .cursor/rules/*.mdc、.agents/skills/*/SKILL.md 或 CLAUDE.md 内容..."
+              placeholder="例如粘贴 .cursor/rules/*.mdc 或任意平台 skills/*/SKILL.md 内容..."
             ></textarea>
           </div>
 
@@ -740,14 +738,14 @@
                   🎯 转换为 Cursor 官方规则 (.cursor/rules/*.mdc)
                 </option>
                 <option value="claude">
-                  🧠 转换为 Claude Code 规则 (CLAUDE.md)
+                  🧠 转换为 Claude Code Skill (.claude/skills)
                 </option>
                 <option value="windsurf">
                   🏄 转换为 Windsurf 规则 (.windsurf/rules/*.md)
                 </option>
                 <option value="copilot">🤝 转换为 GitHub Copilot 规则</option>
                 <option value="gemini">
-                  💎 转换为 Gemini 规则 (GEMINI.md)
+                  💎 转换为 Gemini Skill (.gemini/skills)
                 </option>
                 <option value="aider">
                   🔧 转换为 Aider 约定 (CONVENTIONS.md)

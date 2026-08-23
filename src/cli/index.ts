@@ -53,6 +53,7 @@ import { register as registerConvert } from './convert.js';
 import { register as registerEval } from './eval.js';
 import { register as registerServer } from './server.js';
 import { register as registerLifecycle } from './lifecycle.js';
+import { register as registerValidate } from './validate.js';
 
 let cliAbortSignal: AbortSignal | undefined;
 
@@ -78,6 +79,7 @@ export function createProgram(): Command {
   registerEval(program);
   registerServer(program);
   registerLifecycle(program);
+  registerValidate(program);
   program.action(runCommand);
 
   return program;

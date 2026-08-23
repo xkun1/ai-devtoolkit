@@ -26,6 +26,19 @@ describe('生成质量基线', () => {
     );
   });
 
+  it('拒绝缺少正文的 Agent Skill', () => {
+    const report = validateSkillResult({
+      agentType: 'gemini',
+      content:
+        '---\nname: empty-skill\ndescription: "空技能校验；适用于回归测试"\n---\n',
+      suggestedPath: '.gemini/skills/empty-skill/SKILL.md',
+    });
+    expect(report.passed).toBe(false);
+    expect(report.issues.map((item) => item.code)).toContain(
+      'AGENT_SKILL_BODY',
+    );
+  });
+
   it('拒绝整个文件被代码围栏包裹', () => {
     const report = validateSkillResult({
       agentType: 'claude',

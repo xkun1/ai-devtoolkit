@@ -80,7 +80,7 @@ export async function syncRules(
 
   if (result.discovered.length === 0) {
     warn(
-      '未在项目中检测到已有的规则文件（.cursor/rules/, .agents/skills/, CLAUDE.md）',
+      '未在项目中检测到已有规则（.cursor/rules/ 或各平台 skills/*/SKILL.md）',
     );
     return result;
   }

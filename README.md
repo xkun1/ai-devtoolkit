@@ -21,7 +21,7 @@
 | 📄 网页 URL | → | 🤖 Codex `.agents/skills/<name>/SKILL.md` |
 | 📕 PDF 文档 | → | 🎯 Cursor `.cursor/rules/<name>.mdc` |
 | ⚡️ Swagger / OpenAPI 规范 | → | 🛠️ 结构化 API 技能手册（节省 80%~90% Token，[Benchmark](https://github.com/xkun1/ai-devtoolkit/blob/main/docs/benchmark.md)） |
-| 📝 Markdown | → | 🧠 Claude `CLAUDE.md` + `.claude/rules/`（超长时） |
+| 📝 Markdown | → | 🧠 Claude `.claude/skills/<name>/SKILL.md` |
 | 📚 多文档合并 | → | 🧩 分块提炼后的融合技能包 |
 | 📂 批量目录处理 | → | 🤖 每个文件独立技能包（或 `--merge` 合并） |
 | 🔌 MCP Server | → | 🤖 AI Agent 原生工具调用 |
@@ -38,7 +38,7 @@ npx ai-devtoolkit https://docs.example.com/api --type codex
 # 从本地 PDF 生成 Cursor 规则
 npx ai-devtoolkit ./sdk-guide.pdf --type cursor
 
-# 从 Markdown 生成 Claude 项目记忆
+# 从 Markdown 生成 Claude Agent Skill
 npx ai-devtoolkit ./CONTRIBUTING.md --type claude
 
 # 多文档合并为一个技能包
@@ -62,8 +62,8 @@ npx ai-devtoolkit
 # 1. 单文件互转：把 Cursor 规则转为 Codex Skill
 devtoolkit --convert .cursor/rules/api.mdc --type codex
 
-# 2. 把 Claude 记忆转为 Cursor 规则
-devtoolkit --convert CLAUDE.md --type cursor
+# 2. 把 Claude Skill 转为 Cursor 规则
+devtoolkit --convert .claude/skills/project-guide/SKILL.md --type cursor
 
 # 3. 项目一键全量同步（自动检测项目已有规则，同步分发至其他 Agent）
 devtoolkit --sync
@@ -73,6 +73,32 @@ devtoolkit --sync --dry-run
 ```
 
 支持：Codex、Cursor、Claude、Windsurf、GitHub Copilot、Gemini CLI、Aider。
+
+### ✅ Agent Skills 标准与校验
+
+生成与规则互转现在共用统一 Skill IR；支持 [Agent Skills 规范](https://agentskills.io/specification) 的平台默认输出原生技能目录：
+
+| 平台 | 默认 modern 输出 |
+| --- | --- |
+| Codex | `.agents/skills/<name>/SKILL.md` |
+| Claude Code | `.claude/skills/<name>/SKILL.md` |
+| GitHub Copilot | `.github/skills/<name>/SKILL.md` |
+| Gemini CLI | `.gemini/skills/<name>/SKILL.md` |
+
+可校验单个 Skill 或项目中的全部 Skills：
+
+```bash
+# 校验目录或 SKILL.md
+devtoolkit validate .agents/skills/my-skill
+
+# 扫描当前项目，并把警告也视为失败
+devtoolkit validate . --strict
+
+# CI / 脚本使用 JSON
+devtoolkit validate . --json
+```
+
+校验覆盖 name/description、父目录命名、YAML 类型、500 行渐进披露建议、本地引用存在性及路径越界。
 
 ### 🔍 代码搜索模式（不用打开 IDEA 了！）
 
@@ -169,7 +195,7 @@ npx ai-devtoolkit --ui
 npx ai-devtoolkit --ui --port 8080
 ```
 
-在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；Codex `references/` 和 Claude `.claude/rules/` 等多文件目录会完整保留。
+在浏览器中粘贴 URL、选模板、实时预览生成结果，一键下载完整 ZIP 技能包；各平台 Agent Skill 的 `references/` 等多文件目录会完整保留。
 
 Web UI 仅监听 `127.0.0.1`，只接受 HTTP(S) 公网 URL 或浏览器上传内容；
 代码搜索、图谱和源码查看仅允许访问启动时固定的项目根目录，符号链接也不能越界。上传请求默认限制为 10 MiB，远程文档默认限制为 5 MiB，源码查看单文件默认限制为 2 MiB。
@@ -334,7 +360,7 @@ npx ai-devtoolkit ./api.md --dry-run
 npx ai-devtoolkit ./api.md --type cursor --legacy
 ```
 
-超过约 2.4 万字符的输入会按 Markdown 语义完整分块，并执行“逐块抽取 → 分层归并 → 最终合成”；不会再静默截掉文档中间内容。Codex 超长结果自动下沉到 `references/`，Claude 超长结果自动拆到 `.claude/rules/`。
+超过约 2.4 万字符的输入会按 Markdown 语义完整分块，并执行“逐块抽取 → 分层归并 → 最终合成”；不会再静默截掉文档中间内容。原生 Agent Skill 的超长结果会自动下沉到 `references/`，保持 `SKILL.md` 渐进披露。
 
 ### 输出示例
 
@@ -412,7 +438,7 @@ npx ai-devtoolkit ./api.md --model lmstudio-local
 ## 📖 CLI 完整参数
 
 ```
-Usage: devtoolkit [options] <sources...>
+Usage: devtoolkit [options] [command] [sources...]
 
 Arguments:
   sources              文档来源：URL 或本地文件路径（可多个，将合并为一个技能包）
@@ -421,7 +447,7 @@ Options:
   -t, --type <type>    目标 Agent: codex | cursor | claude | windsurf | copilot | gemini | aider
   -o, --out <path>     自定义主文件路径（默认按 Agent 推荐目录生成）
   -m, --model <model>  LLM 模型名 (默认: deepseek-chat)
-  -n, --name <name>    自定义技能名（用于 Codex SKILL.md frontmatter）
+  -n, --name <name>    自定义技能名（用于 Agent Skills frontmatter）
   --stdout             输出到标准输出而不写文件（便于管道集成）
   --dry-run            预览生成结果，不写入文件
   --force              强制覆盖已存在的输出文件
@@ -473,6 +499,9 @@ Options:
   -v, --verbose        显示详细日志
   -V, --version        版本号
   -h, --help           帮助
+
+Commands:
+  validate [path]      校验 Skill 目录、SKILL.md 或项目中的全部 Agent Skills
 ```
 
 长任务支持 `AbortSignal`、单次 LLM 超时、Token/字符上限、LLM 调用预算和受控批处理并发；MCP 客户端也可通过 `notifications/cancelled` 取消进行中的工具请求。

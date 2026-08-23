@@ -58,7 +58,7 @@ const AGENT_CHOICES = [
   { name: '🤖 Codex   → .agents/skills/  (Codex Agent 技能)', value: 'codex' },
   { name: '🎯 Cursor  → .cursor/rules/   (Cursor 项目规则)', value: 'cursor' },
   {
-    name: '🧠 Claude  → CLAUDE.md        (Claude Code 项目记忆)',
+    name: '🧠 Claude  → .claude/skills/  (Agent Skill)',
     value: 'claude',
   },
   {
@@ -66,11 +66,11 @@ const AGENT_CHOICES = [
     value: 'windsurf',
   },
   {
-    name: '🤝 Copilot → .github/copilot-instructions.md  (GitHub Copilot)',
+    name: '🤝 Copilot → .github/skills/  (Agent Skill)',
     value: 'copilot',
   },
   {
-    name: '✨ Gemini  → GEMINI.md        (Gemini CLI 项目记忆)',
+    name: '✨ Gemini  → .gemini/skills/  (Agent Skill)',
     value: 'gemini',
   },
   { name: '🔧 Aider   → CONVENTIONS.md   (Aider 项目约定)', value: 'aider' },
@@ -155,7 +155,7 @@ async function runConvertWizard(): Promise<WizardAction> {
         value: 'sync',
       },
       {
-        name: '📄 2. 转换单个规则文件 (例如 .mdc -> SKILL.md 或 CLAUDE.md)',
+        name: '📄 2. 转换单个规则文件 (例如 .mdc -> Agent Skill)',
         value: 'single',
       },
     ],

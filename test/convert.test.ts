@@ -114,7 +114,7 @@ description: "数据库操作规范"
     expect(res.artifacts[0].content).toContain('alwaysApply: false');
   });
 
-  it('从 Codex 转为 Claude Code 结构', () => {
+  it('从 Codex 转为 Claude Code Agent Skill 结构', () => {
     const skill = `---
 name: project-guidelines
 description: "项目通用规范"
@@ -126,7 +126,10 @@ description: "项目通用规范"
 `;
     const res = convertRule(skill, { to: 'claude', outputDir: TMP_DIR });
     expect(res.to).toBe('claude');
-    expect(res.artifacts[0].path).toContain('CLAUDE.md');
+    expect(res.artifacts[0].path).toContain(
+      join('.claude', 'skills', 'project-guidelines', 'SKILL.md'),
+    );
+    expect(res.artifacts[0].content).toContain('name: project-guidelines');
     expect(res.artifacts[0].content).toContain('全部提交遵循中文 Commit 规范');
   });
 });
@@ -173,8 +176,8 @@ JWT 必须设置有效期。
     expect(codexContent).toContain('name: auth');
     expect(codexContent).toContain('JWT 必须设置有效期');
 
-    // 5. 验证 Claude 产物已生成
-    const claudeFile = join(TMP_DIR, 'CLAUDE.md');
+    // 5. 验证 Claude Agent Skill 产物已生成
+    const claudeFile = join(TMP_DIR, '.claude', 'skills', 'auth', 'SKILL.md');
     const claudeContent = await readFile(claudeFile, 'utf-8');
     expect(claudeContent).toContain('JWT 必须设置有效期');
   });

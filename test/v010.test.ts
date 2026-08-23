@@ -55,6 +55,9 @@ describe('v0.10 — 多 Agent 类型支持', () => {
   it('detectRuleFormat 识别新 Agent 格式', () => {
     expect(detectRuleFormat('.windsurf/rules/api.md')).toBe('windsurf');
     expect(detectRuleFormat('.github/copilot-instructions.md')).toBe('copilot');
+    expect(detectRuleFormat('.github/skills/api/SKILL.md')).toBe('copilot');
+    expect(detectRuleFormat('.claude/skills/api/SKILL.md')).toBe('claude');
+    expect(detectRuleFormat('.gemini/skills/api/SKILL.md')).toBe('gemini');
     expect(detectRuleFormat('GEMINI.md')).toBe('gemini');
     expect(detectRuleFormat('CONVENTIONS.md')).toBe('aider');
   });
@@ -86,7 +89,7 @@ description: "API 规范"
 `;
     const res = convertRule(skill, { to: 'copilot', outputDir: TMP_DIR });
     expect(res.artifacts[0].path).toContain(
-      join('.github', 'copilot-instructions.md'),
+      join('.github', 'skills', 'api-rules', 'SKILL.md'),
     );
   });
 
@@ -101,7 +104,9 @@ description: "数据库规范"
 禁止裸 SQL。
 `;
     const res = convertRule(skill, { to: 'gemini', outputDir: TMP_DIR });
-    expect(res.artifacts[0].path).toContain('GEMINI.md');
+    expect(res.artifacts[0].path).toContain(
+      join('.gemini', 'skills', 'db-rules', 'SKILL.md'),
+    );
   });
 
   it('convertRule 从 Codex 转为 Aider', () => {

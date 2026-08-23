@@ -47,6 +47,7 @@ describe('CLI 参数契约', () => {
     expect(help).toContain('--eval-max-cases');
     expect(help).toContain('--search-mode');
     expect(help).toContain('--sensitive-policy');
+    expect(help).toContain('validate [options] [path]');
     for (const agent of AGENT_TYPES) expect(help).toContain(agent);
   });
 

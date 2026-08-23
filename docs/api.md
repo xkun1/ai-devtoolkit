@@ -18,13 +18,19 @@
 | `isValidAgentType` | `(value: string): value is AgentType`。校验 Agent 类型。 |
 | `validateSkillResult` | `(result: SkillResult): QualityReport`，返回质量评分、问题和指标。 |
 | `assertValidSkillResult` | `(result: SkillResult): QualityReport`，质量不满足基线时抛错，否则返回报告。 |
+| `createSkillIR` | `(input: CreateSkillIRInput): SkillIR`，将任意规则正文规范化为平台无关的 Skill 中间表示。 |
+| `compileSkill` | `(ir: SkillIR, options: CompileSkillOptions): SkillResult`，通过目标平台适配器生成最终产物。 |
+| `validateSkillTarget` | `(path?, options?): Promise<SkillValidationSummary>`，校验单个 Skill 或项目中的全部 Skills。 |
+| `validateSkillFile` | `(skillFile, options?): Promise<SkillValidationReport>`，校验一个 `SKILL.md`。 |
 
 ### 生成相关类型
 
 - `PipelineOptions`：`agentType`、`llm` 必填；常用可选项为 `outputPath`、`name`、`stdout`、`dryRun`、`force`、`crawl`、`crawlDepth`、`crawlPages`、`template`、`incremental`、`outputMode`、`preloaded`、`mergeDir`、`dirMaxDepth`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`、`batchConcurrency`、`maxBatchFiles`、`lang`、`sensitivePolicy`。
 - `LLMConfig`：`apiKey`、`model` 必填；`baseURL`、`temperature`、`maxOutputTokens` 可选。
 - `SkillResult`：`agentType`、`content`、`suggestedPath`，以及可选 `artifacts`、`stats`、`quality`。
-- `GeneratedArtifact`：`path`、`content`、`kind: 'primary' | 'reference' | 'rule'`。
+- `GeneratedArtifact`：`path`、`content`、`kind: 'primary' | 'reference' | 'rule' | 'script' | 'asset'`。
+- `SkillIR`：平台无关的 `metadata`、`instructions`、`applicability`、`resources` 与 `source`。
+- `SkillValidationSummary`：技能级报告、全局问题、错误/警告统计及严格模式结果。
 - `LoadedDocument`：`source`、`type`、`content`，以及可选 `title`、`url`、`meta`。
 - `TransformOptions`：`chunkChars`、`concurrency`、`signal`、`llmTimeoutMs`、`maxOutputChars`、`maxLLMCalls`、`lang`。
 - `TransformResult`：`content` 与 `stats`（源字符、处理字符、分块数、LLM 调用数、归并轮数）。

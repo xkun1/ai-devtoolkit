@@ -1,4 +1,4 @@
-/** Codex SKILL.md frontmatter 工具：slug 生成、描述提取、frontmatter 注入 */
+/** Agent Skills frontmatter 工具：slug 生成、描述提取、frontmatter 注入 */
 
 export interface FrontmatterInput {
   /** 用户指定的技能名（最高优先级） */

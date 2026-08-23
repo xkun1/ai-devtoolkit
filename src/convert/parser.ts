@@ -1,7 +1,7 @@
 /**
  * 规则解析器
  *
- * 识别并解析 Cursor (.mdc)、Codex (SKILL.md)、Claude (CLAUDE.md) 等规则格式。
+ * 识别并解析 Cursor (.mdc)、各平台 Agent Skill 与旧版项目规则格式。
  */
 import { basename, extname } from 'node:path';
 import type { ParsedRule, RuleFormat, RuleMetadata } from './types.js';
@@ -15,7 +15,14 @@ export function detectRuleFormat(
     const norm = filePath.replaceAll('\\', '/').toLowerCase();
     if (norm.endsWith('.mdc') || norm.includes('.cursor/rules/'))
       return 'cursor';
-    if (norm.includes('.agents/skills/') || norm.endsWith('skill.md'))
+    if (norm.includes('.claude/skills/')) return 'claude';
+    if (norm.includes('.github/skills/')) return 'copilot';
+    if (norm.includes('.gemini/skills/')) return 'gemini';
+    if (
+      norm.includes('.agents/skills/') ||
+      norm.endsWith('/skill.md') ||
+      norm === 'skill.md'
+    )
       return 'codex';
     if (norm.endsWith('claude.md') || norm.includes('.claude/rules/'))
       return 'claude';
