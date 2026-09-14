@@ -106,14 +106,14 @@
     "url": "https://github.com/xkun1/ai-devtoolkit/issues"
   },
   "dependencies": {
-    "@inquirer/prompts": "^7.0.0",
+    "@inquirer/prompts": "^8.7.2",
     "cheerio": "^1.0.0",
     "commander": "^15.0.0",
-    "jszip": "^3.10.1",
-    "mammoth": "^1.12.0",
-    "openai": "^6.49.0",
-    "ora": "^8.1.1",
-    "pdf-parse": "^1.1.1",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.12.2",
+    "openai": "^7.15.0",
+    "ora": "^9.4.1",
+    "pdf-parse": "^2.4.5",
     "turndown": "^7.2.0",
     "yaml": "^2.9.0"
   },
