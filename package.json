@@ -119,21 +119,21 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^26.2.0",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
     "@types/turndown": "^5.0.5",
-    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
     "@typescript-eslint/parser": "^8.67.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.8.0",
+    "@vitest/coverage-v8": "^5.0.5",
+    "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
-    "lint-staged": "^17.2.0",
-    "prettier": "^3.9.6",
-    "tsup": "^8.0.1",
-    "tsx": "^4.6.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "esbuild": "^0.28.2"
